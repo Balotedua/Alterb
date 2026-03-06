@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alter — Dashboard</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    :root {
+      --bg: #07070f;
+      --bg-card: rgba(255,255,255,0.04);
+      --border: rgba(255,255,255,0.07);
+      --text: #f1f5f9;
+      --muted: #475569;
+      --sidebar-w: 240px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      overflow-x: hidden;
+    }
+
+    /* Grid overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+      background-size: 60px 60px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      position: fixed;
+      top: 0; left: 0;
+      width: var(--sidebar-w);
+      height: 100vh;
+      background: rgba(255,255,255,0.025);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 28px 16px;
+      gap: 4px;
+      z-index: 10;
+      backdrop-filter: blur(20px);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 8px 24px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+    .logo-icon {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #7c3aed, #06b6d4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    .logo-text {
+      font-size: 18px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #f1f5f9, #7c3aed);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .nav-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 8px 8px 4px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--muted);
+      transition: all 0.15s ease;
+      text-decoration: none;
+      border: 1px solid transparent;
+    }
+    .nav-item:hover, .nav-item.active {
+      background: rgba(255,255,255,0.06);
+      border-color: var(--border);
+      color: var(--text);
+    }
+    .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
+    .nav-item.active .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #7c3aed;
+      margin-left: auto;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── MAIN ── */
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      padding: 40px 48px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Top bar */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 48px;
+    }
+    .greeting h2 {
+      font-size: 1.75rem;
+      font-weight: 700;
+    }
+    .greeting p {
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    .search-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 10px 20px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      color: var(--muted);
+      width: 280px;
+    }
+    .search-bar input {
+      background: none;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      width: 100%;
+    }
+    .search-bar input::placeholder { color: var(--muted); }
+
+    /* Section title */
+    .section-header {
+      margin-bottom: 24px;
+    }
+    .section-header h3 {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .section-header p {
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    /* ── CARDS GRID ── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 48px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--card-glow, transparent);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: var(--card-color, rgba(255,255,255,0.15));
+      box-shadow: 0 8px 32px var(--card-shadow, rgba(0,0,0,0.3));
+    }
+    .card:hover::before { opacity: 1; }
+
+    .card-icon {
+      width: 48px; height: 48px;
+      border-radius: 12px;
+      background: var(--card-bg, rgba(255,255,255,0.08));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      margin-bottom: 16px;
+      position: relative;
+    }
+    .card-tag {
+      position: absolute;
+      top: 16px; right: 16px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 100px;
+      background: var(--card-bg, rgba(255,255,255,0.08));
+      color: var(--card-color-text, var(--muted));
+    }
+    .card h4 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .card p {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .card-arrow {
+      position: absolute;
+      bottom: 20px; right: 20px;
+      font-size: 18px;
+      color: var(--muted);
+      opacity: 0;
+      transform: translate(-4px, 4px);
+      transition: all 0.2s ease;
+    }
+    .card:hover .card-arrow {
+      opacity: 1;
+      transform: translate(0, 0);
+    }
+
+    /* ── BOT INPUT ── */
+    .bot-section {
+      margin-top: 8px;
+    }
+    .bot-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px 20px;
+      transition: border-color 0.2s ease;
+    }
+    .bot-bar:focus-within {
+      border-color: rgba(124, 58, 237, 0.5);
+      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+    }
+    .bot-bar .bot-icon {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #7c3aed, #06b6d4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      flex-shrink: 0;
+    }
+    .bot-bar input {
+      flex: 1;
+      background: none;
+      border: none;
+      outline: none;
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      color: var(--text);
+    }
+    .bot-bar input::placeholder { color: var(--muted); }
+    .bot-send {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #7c3aed, #06b6d4);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .bot-send:hover {
+      transform: scale(1.05);
+      box-shadow: 0 4px 16px rgba(124,58,237,0.5);
+    }
+    .bot-send svg { stroke: white; }
+
+    /* Stats row */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 40px;
+    }
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .stat-icon {
+      font-size: 22px;
+      width: 42px; height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.05);
+      border-radius: 10px;
+    }
+    .stat-label { font-size: 12px; color: var(--muted); }
+    .stat-value { font-size: 20px; font-weight: 700; margin-top: 2px; }
+  </style>
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">🤖</div>
+      <span class="logo-text">Alter</span>
+    </div>
+
+    <div class="nav-label">Navigazione</div>
+    <a href="/dashboard" class="nav-item active">
+      <span class="icon">🏠</span> Dashboard
+      <span class="dot"></span>
+    </a>
+    <a href="/finance" class="nav-item"><span class="icon">💰</span> Finanza</a>
+    <a href="#" class="nav-item"><span class="icon">🧠</span> Psicologia</a>
+    <a href="#" class="nav-item"><span class="icon">💪</span> Salute & Fisico</a>
+    <a href="#" class="nav-item"><span class="icon">📓</span> Appunti Coscienza</a>
+    <a href="#" class="nav-item"><span class="icon">⏰</span> Routine</a>
+    <a href="#" class="nav-item"><span class="icon">📰</span> News & Interessi</a>
+    <a href="#" class="nav-item"><span class="icon">💼</span> Carriera & Lavoro</a>
+    <a href="#" class="nav-item"><span class="icon">🏆</span> Premi & Badge</a>
+
+    <div class="sidebar-footer">
+      <a href="/" class="nav-item"><span class="icon">←</span> Esci</a>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- Top bar -->
+    <div class="topbar">
+      <div class="greeting">
+        <h2 id="greeting-text">Ciao 👋</h2>
+        <p id="greeting-sub">Cosa vuoi migliorare oggi?</p>
+      </div>
+      <div class="search-bar">
+        <svg width="15" height="15" fill="none" stroke="#475569" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="text" placeholder="Cerca sezione...">
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-icon">🔥</div>
+        <div>
+          <div class="stat-label">Streak attuale</div>
+          <div class="stat-value">0 giorni</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">⚡</div>
+        <div>
+          <div class="stat-label">Attività completate</div>
+          <div class="stat-value">0</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🏆</div>
+        <div>
+          <div class="stat-label">Badge sbloccati</div>
+          <div class="stat-value">0 / 8</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section header -->
+    <div class="section-header">
+      <h3>Le tue aree di vita</h3>
+      <p>Scegli una sezione da esplorare</p>
+    </div>
+
+    <!-- Cards -->
+    <div class="grid">
+
+      <a href="#" class="card" style="
+        --card-color: rgba(245,158,11,0.4);
+        --card-shadow: rgba(245,158,11,0.2);
+        --card-glow: radial-gradient(ellipse at top left, rgba(245,158,11,0.06), transparent 60%);
+        --card-bg: rgba(245,158,11,0.12);
+        --card-color-text: #f59e0b;">
+        <div class="card-icon">💰</div>
+        <span class="card-tag">Finanza</span>
+        <h4>Finanza</h4>
+        <p>Budget, spese, investimenti e obiettivi finanziari.</p>
+        <span class="card-arrow">↗</span>
+      </a>
+
+      <a href="#" class="card" style="
+        --card-color: rgba(139,92,246,0.4);
+        --card-shadow: rgba(139,92,246,0.2);
+        --card-glow: radial-gradient(ellipse at top left, rgba(139,92,246,0.06), transparent 60%);
+        --card-bg: rgba(139,92,246,0.12);
+        --card-color-text: #8b5cf6;">
+        <div class="card-icon">🧠</div>
+        <span class="card-tag">Mente</span>
+        <h4>Psicologia</h4>
+        <p>Umore, emozioni, journaling e crescita mentale.</p>
+        <span class="card-arrow">↗</span>
+      </a>
+
+      <a href="#" class="card" style="
+        --card-color: rgba(16,185,129,0.4);
+        --card-shadow: rgba(16,185,129,0.2);
+        --card-glow: radial-gradient(ellipse at top left, rgba(16,185,129,0.06), transparent 60%);
+        --card-bg: rgba(16,185,129,0.12);
+        --card-color-text: #10b981;">
+        <div class="card-icon">💪</div>
+        <span class="card-tag">Corpo</span>
+        <h4>Salute & Fisico</h4>
+        <p>Allenamento, nutrizione, sonno e benessere fisico.</p>
+        <span class="card-arrow">↗</span>
+      </a>
+
+      <a href="#" class="card" style="
+        --card-color: rgba(59,130,246,0.4);
+        --card-shadow: rgba(59,130,246,0.2);
+        --card-glow: radial-gradient(ellipse at top left, rgba(59,130,246,0.06), transparent 60%);
+        --card-bg: rgba(59,130,246,0.12);
+        --card-color-text: #3b82f6;">
+        <div class="card-icon">📓</div>
+        <span class="card-tag">Coscienza</span>
+        <h4>Appunti Coscienza</h4>
+        <p>Riflessioni, idee, sogni e pensieri profondi.</p>
+        <span class="card-arrow">↗</span>
+      </a>
+
+      <a href="#" class="card" style="
+        --card-color: rgba(249,115,22,0.4);
+        --card-shadow: rgba(249,115,22,0.2);
+        --card-glow: radial-gradient(ellipse at top left, rgba(249,115,22,0.06), transparent 60%);
+        --card-bg: rgba(249,115,22,0.12);
+        --card-color-text: #f97316;">
+        <div class="card-icon">⏰</div>
+        <span class="card-tag">Tempo</span>
+        <h4>Routine & Tempo</h4>
+        <p>Abitudini quotidiane, orari e gestione del tempo.</p>
+        <span class="card-arrow">↗</span>
+      </a>
+
+      <a href="#" class="card" style="
+        --card-color: rgba(236,72,153,0.4);
+        --card-shadow: rgba(236,72,153,0.2);
+        --card-glow: radial-gradient(ellipse at top left, rgba(236,72,153,0.06), transparent 60%);
+        --card-bg: rgba(236,72,153,0.12);
+        --card-color-text: #ec4899;">
+        <div class="card-icon">📰</div>
+        <span class="card-tag">Interessi</span>
+        <h4>News & Interessi</h4>
+        <p>Aggiornamenti, letture e argomenti che ti appassionano.</p>
+        <span class="card-arrow">↗</span>
+      </a>
+
+      <a href="#" class="card" style="
+        --card-color: rgba(6,182,212,0.4);
+        --card-shadow: rgba(6,182,212,0.2);
+        --card-glow: radial-gradient(ellipse at top left, rgba(6,182,212,0.06), transparent 60%);
+        --card-bg: rgba(6,182,212,0.12);
+        --card-color-text: #06b6d4;">
+        <div class="card-icon">💼</div>
+        <span class="card-tag">Lavoro</span>
+        <h4>Carriera & Lavoro</h4>
+        <p>Obiettivi professionali, skill e crescita di carriera.</p>
+        <span class="card-arrow">↗</span>
+      </a>
+
+      <a href="#" class="card" style="
+        --card-color: rgba(234,179,8,0.4);
+        --card-shadow: rgba(234,179,8,0.2);
+        --card-glow: radial-gradient(ellipse at top left, rgba(234,179,8,0.06), transparent 60%);
+        --card-bg: rgba(234,179,8,0.12);
+        --card-color-text: #eab308;">
+        <div class="card-icon">🏆</div>
+        <span class="card-tag">Gamification</span>
+        <h4>Premi & Badge</h4>
+        <p>Traguardi raggiunti, sfide e ricompense personali.</p>
+        <span class="card-arrow">↗</span>
+      </a>
+
+    </div>
+
+    <!-- Bot input -->
+    <div class="bot-section">
+      <div class="section-header">
+        <h3>Assistente</h3>
+        <p>Chiedi qualcosa ad Alter</p>
+      </div>
+      <div class="bot-bar">
+        <div class="bot-icon">🤖</div>
+        <input type="text" placeholder="Es. &quot;Come posso migliorare la mia routine mattutina?&quot;">
+        <button class="bot-send">
+          <svg width="16" height="16" fill="none" stroke-width="2.5" viewBox="0 0 24 24">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // Dynamic greeting based on time
+    const hour = new Date().getHours();
+    const greet = hour < 12 ? 'Buongiorno' : hour < 18 ? 'Buon pomeriggio' : 'Buonasera';
+    document.getElementById('greeting-text').textContent = greet + ' 👋';
+
+    // Current date
+    const days = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
+    const months = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+    const d = new Date();
+    document.getElementById('greeting-sub').textContent =
+      days[d.getDay()] + ', ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+
+    // Search filter
+    document.querySelector('.search-bar input').addEventListener('input', function() {
+      const q = this.value.toLowerCase();
+      document.querySelectorAll('.card').forEach(card => {
+        card.style.display = card.textContent.toLowerCase().includes(q) ? 'block' : 'none';
+      });
+    });
+  </script>
+</body>
+</html>
