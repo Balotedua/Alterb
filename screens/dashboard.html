@@ -4,8 +4,94 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Alter — Dashboard</title>
-  <script>(function(){if(!localStorage.getItem('sb-cdhsdubmdawrjjupysqx-auth-token'))window.location.replace('/auth');})();</script>
-  <script>(function(){try{const s=localStorage.getItem('alter_theme');if(!s)return;const T={minimal:{'--bg':'#0c0b09','--bg-card':'rgba(255,255,255,0.026)','--border':'rgba(255,255,255,0.07)','--text':'#e8e4da','--muted':'#786e62','--accent':'#c87350','--accent-dim':'rgba(200,115,80,0.1)','--accent-border':'rgba(200,115,80,0.28)'},neon:{'--bg':'#030309','--bg-card':'rgba(0,228,200,0.045)','--border':'rgba(0,228,200,0.15)','--text':'#d8f0ff','--muted':'#445868','--accent':'#00e4c8','--accent-dim':'rgba(0,228,200,0.1)','--accent-border':'rgba(0,228,200,0.32)'},carbon:{'--bg':'#080808','--bg-card':'rgba(255,255,255,0.03)','--border':'rgba(255,255,255,0.06)','--text':'#d4d4d8','--muted':'#565660','--accent':'#a0a4b8','--accent-dim':'rgba(160,164,184,0.08)','--accent-border':'rgba(160,164,184,0.2)'},aurora:{'--bg':'#020c08','--bg-card':'rgba(30,220,130,0.04)','--border':'rgba(30,220,130,0.13)','--text':'#c8eeda','--muted':'#3a6050','--accent':'#1edc82','--accent-dim':'rgba(30,220,130,0.1)','--accent-border':'rgba(30,220,130,0.28)'},velvet:{'--bg':'#0a0610','--bg-card':'rgba(180,90,240,0.05)','--border':'rgba(180,90,240,0.15)','--text':'#e4d8f8','--muted':'#6e5882','--accent':'#b45af0','--accent-dim':'rgba(180,90,240,0.1)','--accent-border':'rgba(180,90,240,0.28)'},paper:{'--bg':'#f4f0e8','--bg-card':'rgba(0,0,0,0.03)','--border':'rgba(0,0,0,0.08)','--text':'#1c1814','--muted':'#8a8070','--accent':'#8c5c2e','--accent-dim':'rgba(140,92,46,0.08)','--accent-border':'rgba(140,92,46,0.22)'}};const v=T[s];if(!v)return;const r=document.documentElement.style;Object.entries(v).forEach(([k,val])=>r.setProperty(k,val));}catch(e){}})();</script>
+
+  <!-- Script di autenticazione e tema -->
+  <script>
+    (function(){
+      if(!localStorage.getItem('sb-cdhsdubmdawrjjupysqx-auth-token')) {
+        window.location.replace('/auth');
+      }
+    })();
+  </script>
+
+  <script>
+    (function(){
+      try {
+        const s = localStorage.getItem('alter_theme');
+        if(!s) return;
+        const T = {
+          minimal: {
+            '--bg': '#0c0b09',
+            '--bg-card': 'rgba(255,255,255,0.026)',
+            '--border': 'rgba(255,255,255,0.07)',
+            '--text': '#e8e4da',
+            '--muted': '#786e62',
+            '--accent': '#c87350',
+            '--accent-dim': 'rgba(200,115,80,0.1)',
+            '--accent-border': 'rgba(200,115,80,0.28)'
+          },
+          neon: {
+            '--bg': '#030309',
+            '--bg-card': 'rgba(0,228,200,0.045)',
+            '--border': 'rgba(0,228,200,0.15)',
+            '--text': '#d8f0ff',
+            '--muted': '#445868',
+            '--accent': '#00e4c8',
+            '--accent-dim': 'rgba(0,228,200,0.1)',
+            '--accent-border': 'rgba(0,228,200,0.32)'
+          },
+          carbon: {
+            '--bg': '#080808',
+            '--bg-card': 'rgba(255,255,255,0.03)',
+            '--border': 'rgba(255,255,255,0.06)',
+            '--text': '#d4d4d8',
+            '--muted': '#565660',
+            '--accent': '#a0a4b8',
+            '--accent-dim': 'rgba(160,164,184,0.08)',
+            '--accent-border': 'rgba(160,164,184,0.2)'
+          },
+          aurora: {
+            '--bg': '#020c08',
+            '--bg-card': 'rgba(30,220,130,0.04)',
+            '--border': 'rgba(30,220,130,0.13)',
+            '--text': '#c8eeda',
+            '--muted': '#3a6050',
+            '--accent': '#1edc82',
+            '--accent-dim': 'rgba(30,220,130,0.1)',
+            '--accent-border': 'rgba(30,220,130,0.28)'
+          },
+          velvet: {
+            '--bg': '#0a0610',
+            '--bg-card': 'rgba(180,90,240,0.05)',
+            '--border': 'rgba(180,90,240,0.15)',
+            '--text': '#e4d8f8',
+            '--muted': '#6e5882',
+            '--accent': '#b45af0',
+            '--accent-dim': 'rgba(180,90,240,0.1)',
+            '--accent-border': 'rgba(180,90,240,0.28)'
+          },
+          paper: {
+            '--bg': '#f4f0e8',
+            '--bg-card': 'rgba(0,0,0,0.03)',
+            '--border': 'rgba(0,0,0,0.08)',
+            '--text': '#1c1814',
+            '--muted': '#8a8070',
+            '--accent': '#8c5c2e',
+            '--accent-dim': 'rgba(140,92,46,0.08)',
+            '--accent-border': 'rgba(140,92,46,0.22)'
+          }
+        };
+        const v = T[s];
+        if(!v) return;
+        const r = document.documentElement.style;
+        Object.entries(v).forEach(([k,val]) => r.setProperty(k, val));
+      } catch(e){}
+    })();
+  </script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
@@ -266,7 +352,7 @@
     .chat-send svg { stroke: var(--bg); }
     .chat-disclaimer { font-size: 11px; color: var(--muted); text-align: center; margin-top: 8px; opacity: 0.55; }
 
-    /* ══ DASHBOARD VIEW ══════════════════════════════════════ */
+    /* ══ DASHBOARD VIEW (NUOVA VERSIONE CON GRAFICI) ═════════ */
     .dash-wrap {
       flex: 1; overflow-y: auto;
       padding: 28px 48px 32px;
@@ -274,39 +360,87 @@
     .dash-wrap::-webkit-scrollbar { width: 4px; }
     .dash-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-    .stats-grid {
-      display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 32px;
+    /* KPI row */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 28px;
     }
-    .stat-card {
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 13px; padding: 18px 20px;
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
       transition: border-color 0.15s;
     }
-    .stat-card:hover { border-color: var(--accent-border); }
-    .stat-label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
-    .stat-value { font-size: 22px; font-weight: 600; letter-spacing: -0.5px; }
-    .stat-sub { font-size: 11px; color: var(--muted); margin-top: 5px; }
-
-    .dash-section-title {
-      font-size: 10px; font-weight: 700; letter-spacing: 2px;
-      text-transform: uppercase; color: var(--muted); margin-bottom: 14px; opacity: 0.6;
+    .kpi-card:hover { border-color: var(--accent-border); }
+    .kpi-icon {
+      font-size: 28px;
+      opacity: 0.7;
+    }
+    .kpi-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+    .kpi-value {
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.2;
     }
 
-    .qnav-grid {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    /* Charts grid */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
     }
-    .qnav-item {
-      display: flex; align-items: center; gap: 11px;
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 11px; padding: 14px 18px;
-      text-decoration: none; color: var(--muted);
-      font-size: 13.5px; font-weight: 500; transition: all 0.15s;
+    .chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px 18px;
     }
-    .qnav-item:hover {
-      border-color: var(--accent-border); color: var(--accent);
-      background: var(--accent-dim); transform: translateY(-1px);
+    .chart-card h4 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 15px;
+      letter-spacing: 0.2px;
     }
-    .qnav-icon { font-size: 13px; flex-shrink: 0; }
+    .chart-card canvas {
+      width: 100% !important;
+      height: auto !important;
+      max-height: 200px;
+    }
+
+    /* Badge mini grid */
+    .badge-mini-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      min-height: 100px;
+    }
+    .badge-mini {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      transition: transform 0.1s;
+    }
+    .badge-mini:hover { transform: scale(1.05); }
 
     /* ══ MOBILE TOPBAR ══════════════════════════════════════ */
     .mobile-topbar {
@@ -342,16 +476,16 @@
       .view-toggle { align-self: flex-start; }
       .chat-wrap { padding: 0 12px; }
       .dash-wrap { padding: 20px 16px 40px; }
-      .stats-grid { grid-template-columns: repeat(2, 1fr); }
-      .qnav-grid { grid-template-columns: repeat(2, 1fr); }
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+      .charts-grid { grid-template-columns: 1fr; }
       .dash-greeting h2 { font-size: 1.25rem; }
     }
     @media (max-width: 480px) {
       .dash-header { padding: 64px 12px 12px; }
       .chat-wrap { padding: 0 8px; }
       .dash-wrap { padding: 16px 12px 32px; }
-      .stats-grid { gap: 8px; }
-      .qnav-grid { gap: 8px; }
+      .kpi-row { gap: 8px; }
+      .charts-grid { gap: 12px; }
     }
   </style>
 </head>
@@ -448,50 +582,82 @@
       </div>
     </div>
 
-    <!-- DASHBOARD VIEW -->
+    <!-- DASHBOARD VIEW CON GRAFICI -->
     <div class="dash-wrap" id="dash-wrap" style="display:none">
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-label">Bilancio</div>
-          <div class="stat-value" id="stat-balance">—</div>
-          <div class="stat-sub">da Finanza</div>
+
+      <!-- KPI Cards -->
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <span class="kpi-icon">💰</span>
+          <div>
+            <div class="kpi-label">Bilancio</div>
+            <div class="kpi-value" id="kpi-balance">-- €</div>
+          </div>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">Streak</div>
-          <div class="stat-value">0 gg</div>
-          <div class="stat-sub">consecutivi</div>
+        <div class="kpi-card">
+          <span class="kpi-icon">😊</span>
+          <div>
+            <div class="kpi-label">Umore medio</div>
+            <div class="kpi-value" id="kpi-mood">--</div>
+          </div>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">Umore medio</div>
-          <div class="stat-value" id="stat-mood">—</div>
-          <div class="stat-sub">ultima settimana</div>
+        <div class="kpi-card">
+          <span class="kpi-icon">💪</span>
+          <div>
+            <div class="kpi-label">Attività mese</div>
+            <div class="kpi-value" id="kpi-activities">0</div>
+          </div>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">Attività salute</div>
-          <div class="stat-value" id="stat-health">0</div>
-          <div class="stat-sub">questo mese</div>
+        <div class="kpi-card">
+          <span class="kpi-icon">🏆</span>
+          <div>
+            <div class="kpi-label">Badge</div>
+            <div class="kpi-value" id="kpi-badges">0</div>
+          </div>
         </div>
       </div>
 
-      <div class="dash-section-title">Sezioni</div>
-      <div class="qnav-grid">
-        <a href="/finance"       class="qnav-item"><span class="qnav-icon">◈</span>Finanza</a>
-        <a href="/psychology"    class="qnav-item"><span class="qnav-icon">◎</span>Psicologia</a>
-        <a href="/health"        class="qnav-item"><span class="qnav-icon">◉</span>Salute</a>
-        <a href="/consciousness" class="qnav-item"><span class="qnav-icon">✦</span>Coscienza</a>
-        <a href="/badges"        class="qnav-item"><span class="qnav-icon">◆</span>Badge</a>
-        <a href="/settings"      class="qnav-item"><span class="qnav-icon">◎</span>Impostazioni</a>
+      <!-- Charts Grid -->
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h4>Andamento finanziario (7 giorni)</h4>
+          <canvas id="financeChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h4>Umore giornaliero</h4>
+          <canvas id="moodChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h4>Distribuzione attività</h4>
+          <canvas id="activitiesChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h4>Badge recenti</h4>
+          <div class="badge-mini-grid" id="badgeMiniGrid">
+            <!-- Popolato via JS -->
+          </div>
+        </div>
       </div>
     </div>
-
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    const _sb = supabase.createClient('https://cdhsdubmdawrjjupysqx.supabase.co','YOUR_SUPABASE_ANON_KEY');
-    async function doLogout(){ await _sb.auth.signOut(); window.location.replace('/auth'); }
+    // Configurazione Supabase
+    const SUPABASE_URL = 'https://cdhsdubmdawrjjupysqx.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkaHNkdWJtZGF3cmpqdXB5c3F4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3MDcwMTAsImV4cCI6MjA4MzI4MzAxMH0.t90xeUV6VIHHV8iAa7uV3ZNQdtbh8CSXXTnrwXC72mI';
+    const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    function toggleSidebar(){
+    // Variabili globali per i grafici
+    let financeChart, moodChart, activitiesChart;
+
+    // Funzioni di utilità
+    async function doLogout() {
+      await _sb.auth.signOut();
+      window.location.replace('/auth');
+    }
+
+    function toggleSidebar() {
       document.getElementById('sidebar').classList.toggle('open');
       document.getElementById('sidebar-overlay').classList.toggle('open');
     }
@@ -499,11 +665,13 @@
     // ── View toggle ───────────────────────────────────────────
     function setView(v) {
       const isChat = v === 'chat';
-      document.getElementById('chat-wrap').style.display  = isChat ? 'flex' : 'none';
-      document.getElementById('dash-wrap').style.display  = isChat ? 'none' : 'flex';
+      document.getElementById('chat-wrap').style.display = isChat ? 'flex' : 'none';
+      document.getElementById('dash-wrap').style.display = isChat ? 'none' : 'block';
       document.getElementById('vt-chat').classList.toggle('active', isChat);
       document.getElementById('vt-dash').classList.toggle('active', !isChat);
-      if (!isChat) loadDashStats();
+      if (!isChat) {
+        loadDashStats();
+      }
     }
 
     // ── Greeting ──────────────────────────────────────────────
@@ -523,9 +691,11 @@
       }
       // Sidebar user avatar
       const avInit = document.getElementById('sb-av-init');
-      const avImg  = document.getElementById('sb-av-img');
+      const avImg = document.getElementById('sb-av-img');
       if (prefs.avatarUrl) {
-        avImg.src = prefs.avatarUrl; avImg.style.display = 'block'; avInit.style.display = 'none';
+        avImg.src = prefs.avatarUrl;
+        avImg.style.display = 'block';
+        avInit.style.display = 'none';
       } else if (prefs.name) {
         avInit.textContent = prefs.name.trim().split(/\s+/).map(w => w[0]).slice(0,2).join('').toUpperCase();
       }
@@ -546,7 +716,7 @@
 
     function appendMsg(text, isUser) {
       const msgs = document.getElementById('chat-messages');
-      const div  = document.createElement('div');
+      const div = document.createElement('div');
       div.className = 'chat-msg' + (isUser ? ' user' : '');
       const t = new Date().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
       div.innerHTML = `
@@ -561,8 +731,9 @@
 
     function showTyping() {
       const msgs = document.getElementById('chat-messages');
-      const div  = document.createElement('div');
-      div.className = 'chat-msg'; div.id = 'typing';
+      const div = document.createElement('div');
+      div.className = 'chat-msg';
+      div.id = 'typing';
       div.innerHTML = `
         <div class="chat-msg-av">A</div>
         <div class="chat-msg-body">
@@ -570,20 +741,27 @@
             <div class="typing-dots"><span></span><span></span><span></span></div>
           </div>
         </div>`;
-      msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight;
+      msgs.appendChild(div);
+      msgs.scrollTop = msgs.scrollHeight;
     }
 
     function sendMessage() {
       const input = document.getElementById('chat-input');
-      const text  = input.value.trim();
+      const text = input.value.trim();
       if (!text) return;
-      input.value = ''; input.style.height = 'auto';
+      input.value = '';
+      input.style.height = 'auto';
       const sugg = document.getElementById('chat-suggestions');
-      if (sugg) { sugg.style.opacity = '0'; sugg.style.pointerEvents = 'none'; setTimeout(() => sugg.remove(), 300); }
+      if (sugg) {
+        sugg.style.opacity = '0';
+        sugg.style.pointerEvents = 'none';
+        setTimeout(() => sugg.remove(), 300);
+      }
       appendMsg(text, true);
       showTyping();
       setTimeout(() => {
-        const t = document.getElementById('typing'); if (t) t.remove();
+        const t = document.getElementById('typing');
+        if (t) t.remove();
         appendMsg(RESPONSES[rIdx++ % RESPONSES.length], false);
       }, 1200 + Math.random() * 600);
     }
@@ -599,10 +777,13 @@
       this.style.height = Math.min(this.scrollHeight, 120) + 'px';
     });
     chatInput.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
     });
 
-    // ── Dashboard stats ───────────────────────────────────────
+    // ── Dashboard stats con grafici ───────────────────────────
     async function loadDashStats() {
       try {
         const [txRes, psyRes, hlRes] = await Promise.all([
@@ -610,24 +791,188 @@
           fetch('/api/psychology/entries'),
           fetch('/api/health/activities'),
         ]);
-        const [txs, entries, acts] = await Promise.all([txRes.json(), psyRes.json(), hlRes.json()]);
+        const txs = await txRes.json();
+        const entries = await psyRes.json();
+        const acts = await hlRes.json();
 
+        // --- KPI ---
+        // Bilancio totale
         if (Array.isArray(txs) && txs.length) {
           const bal = txs.reduce((s, t) => s + (t.type === 'entrata' ? t.amount : -t.amount), 0);
-          document.getElementById('stat-balance').textContent = (bal >= 0 ? '+' : '') + bal.toFixed(0) + ' €';
+          document.getElementById('kpi-balance').textContent = (bal >= 0 ? '+' : '') + bal.toFixed(0) + ' €';
+        } else {
+          document.getElementById('kpi-balance').textContent = '0 €';
         }
+
+        // Umore medio ultimi 7 giorni
         if (Array.isArray(entries) && entries.length) {
           const recent = entries.slice(0, 7);
           const avg = recent.reduce((s, e) => s + e.mood, 0) / recent.length;
           const emoji = avg >= 4.5 ? '🌟' : avg >= 3.5 ? '😊' : avg >= 2.5 ? '😐' : '😔';
-          document.getElementById('stat-mood').textContent = avg.toFixed(1) + ' ' + emoji;
+          document.getElementById('kpi-mood').textContent = avg.toFixed(1) + ' ' + emoji;
+        } else {
+          document.getElementById('kpi-mood').textContent = '—';
         }
+
+        // Attività del mese corrente
         if (Array.isArray(acts)) {
-          const m = now.getMonth(), y = now.getFullYear();
-          const c = acts.filter(a => { const d = new Date(a.date); return d.getMonth() === m && d.getFullYear() === y; });
-          document.getElementById('stat-health').textContent = c.length;
+          const m = new Date().getMonth();
+          const y = new Date().getFullYear();
+          const c = acts.filter(a => {
+            const d = new Date(a.date);
+            return d.getMonth() === m && d.getFullYear() === y;
+          });
+          document.getElementById('kpi-activities').textContent = c.length;
         }
-      } catch(e) { console.warn('loadDashStats:', e); }
+
+        // Badge ottenuti (da localStorage come in badges.html)
+        let badgesCount = 0;
+        let earnedBadges = [];
+        try {
+          earnedBadges = JSON.parse(localStorage.getItem('alter_badges') || '[]');
+          badgesCount = earnedBadges.length;
+        } catch (e) {}
+        document.getElementById('kpi-badges').textContent = badgesCount;
+
+        // --- GRAFICI ---
+        // Distruggi grafici precedenti se esistono
+        if (financeChart) financeChart.destroy();
+        if (moodChart) moodChart.destroy();
+        if (activitiesChart) activitiesChart.destroy();
+
+        // 1. Grafico finanziario (entrate/uscite ultimi 7 giorni)
+        const last7Days = [...Array(7)].map((_, i) => {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          return d.toISOString().split('T')[0];
+        }).reverse();
+
+        const incomeData = last7Days.map(day => {
+          return Array.isArray(txs) ? txs.filter(t => t.type === 'entrata' && t.date.startsWith(day)).reduce((s, t) => s + t.amount, 0) : 0;
+        });
+        const expenseData = last7Days.map(day => {
+          return Array.isArray(txs) ? txs.filter(t => t.type === 'uscita' && t.date.startsWith(day)).reduce((s, t) => s + t.amount, 0) : 0;
+        });
+
+        const ctxFinance = document.getElementById('financeChart').getContext('2d');
+        financeChart = new Chart(ctxFinance, {
+          type: 'bar',
+          data: {
+            labels: last7Days.map(d => d.slice(5)), // "MM-GG"
+            datasets: [
+              { label: 'Entrate', data: incomeData, backgroundColor: 'rgba(90, 170, 138, 0.7)' },
+              { label: 'Uscite', data: expenseData, backgroundColor: 'rgba(196, 104, 104, 0.7)' }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: { color: '#786e62' }
+              }
+            },
+            scales: {
+              y: {
+                ticks: { color: '#786e62' }
+              }
+            }
+          }
+        });
+
+        // 2. Grafico umore (ultimi 7 giorni)
+        const moodByDay = last7Days.map(day => {
+          if (!Array.isArray(entries)) return null;
+          const dayEntries = entries.filter(e => e.date.startsWith(day));
+          if (dayEntries.length === 0) return null;
+          return dayEntries.reduce((s, e) => s + e.mood, 0) / dayEntries.length;
+        });
+
+        const ctxMood = document.getElementById('moodChart').getContext('2d');
+        moodChart = new Chart(ctxMood, {
+          type: 'line',
+          data: {
+            labels: last7Days.map(d => d.slice(5)),
+            datasets: [{
+              label: 'Umore medio',
+              data: moodByDay,
+              borderColor: '#c87350',
+              backgroundColor: 'rgba(200, 115, 80, 0.1)',
+              tension: 0.2,
+              spanGaps: true
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: { color: '#786e62' }
+              }
+            },
+            scales: {
+              y: {
+                min: 1,
+                max: 5,
+                ticks: { stepSize: 1, color: '#786e62' }
+              }
+            }
+          }
+        });
+
+        // 3. Grafico a torta per le attività (categorie)
+        let pieLabels = ['Nessuna attività'];
+        let pieData = [1];
+
+        if (Array.isArray(acts) && acts.length > 0) {
+          const workoutTypes = acts.filter(a => a.kind === 'workout').map(a => a.type);
+          const typeCount = {};
+          workoutTypes.forEach(t => typeCount[t] = (typeCount[t] || 0) + 1);
+          pieLabels = Object.keys(typeCount);
+          pieData = Object.values(typeCount);
+
+          if (pieLabels.length === 0) {
+            pieLabels = ['Nessuna attività'];
+            pieData = [1];
+          }
+        }
+
+        const ctxActivities = document.getElementById('activitiesChart').getContext('2d');
+        activitiesChart = new Chart(ctxActivities, {
+          type: 'doughnut',
+          data: {
+            labels: pieLabels,
+            datasets: [{
+              data: pieData,
+              backgroundColor: ['#c87350', '#5aaa8a', '#b45af0', '#00e4c8', '#a0a4b8'],
+              borderWidth: 0
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: { color: '#786e62' }
+              }
+            }
+          }
+        });
+
+        // 4. Badge mini (icone dei badge guadagnati)
+        const badgeGrid = document.getElementById('badgeMiniGrid');
+        if (badgesCount > 0) {
+          const badgeIcons = ['◎', '◈', '◉', '✦', '◆', '▲', '◇'];
+          badgeGrid.innerHTML = earnedBadges.slice(0, 6).map((id, i) =>
+            `<div class="badge-mini" title="Badge sbloccato">${badgeIcons[i % badgeIcons.length]}</div>`
+          ).join('');
+        } else {
+          badgeGrid.innerHTML = '<div style="color:var(--muted);">Nessun badge ancora</div>';
+        }
+
+      } catch(e) {
+        console.warn('loadDashStats:', e);
+      }
     }
   </script>
 </body>
