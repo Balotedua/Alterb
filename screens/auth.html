@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alter — Accedi</title>
+  <script>
+    // Se l'utente ha già una sessione valida, redirect diretto alla dashboard
+    (function(){
+      const k = 'sb-cdhsdubmdawrjjupysqx-auth-token';
+      if (localStorage.getItem(k)) window.location.replace('/dashboard');
+    })();
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    :root {
+      --bg: #0c0b09;
+      --text: #ece8de;
+      --muted: #7a7068;
+      --accent: #cf6a47;
+      --accent-dim: rgba(207,106,71,0.1);
+      --accent-border: rgba(207,106,71,0.28);
+      --border: rgba(255,255,255,0.07);
+      --bg-card: rgba(255,255,255,0.035);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Grid overlay */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.008) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.008) 1px, transparent 1px);
+      background-size: 64px 64px;
+      pointer-events: none;
+    }
+
+    /* Orbs */
+    .orb {
+      position: absolute; border-radius: 50%;
+      filter: blur(100px); opacity: 0.1; pointer-events: none;
+    }
+    .orb-1 { width: 500px; height: 500px; background: radial-gradient(circle, #cf6a47, transparent 70%); top: -180px; left: -160px; }
+    .orb-2 { width: 350px; height: 350px; background: radial-gradient(circle, #5aaa8a, transparent 70%); bottom: -100px; right: -80px; }
+
+    /* Card */
+    .card {
+      position: relative; z-index: 1;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 40px;
+      width: 100%; max-width: 400px;
+      margin: 20px;
+      animation: fadeUp 0.6s ease forwards;
+      opacity: 0;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Header */
+    .card-header {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 12px; margin-bottom: 32px; text-align: center;
+    }
+    .logo-icon {
+      width: 48px; height: 48px; border-radius: 12px;
+      background: var(--accent-dim); border: 1px solid var(--accent-border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+    }
+    .card-title { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.4px; }
+    .card-sub { font-size: 13px; color: var(--muted); }
+
+    /* Tabs */
+    .tabs {
+      display: flex; gap: 4px;
+      background: rgba(255,255,255,0.04);
+      border-radius: 10px; padding: 4px;
+      margin-bottom: 28px;
+    }
+    .tab {
+      flex: 1; padding: 9px; border-radius: 7px;
+      border: none; background: none;
+      font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500;
+      color: var(--muted); cursor: pointer; transition: all 0.18s;
+    }
+    .tab.active {
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-border);
+      color: var(--accent);
+    }
+
+    /* Form */
+    .form { display: flex; flex-direction: column; gap: 14px; }
+
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label { font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: 0.2px; }
+    .field input {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 10px; padding: 11px 14px;
+      color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px;
+      outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .field input:focus {
+      border-color: var(--accent-border);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+    .field input::placeholder { color: var(--muted); }
+
+    /* Error */
+    .error-msg {
+      font-size: 12.5px; color: #e07070;
+      background: rgba(224,112,112,0.08);
+      border: 1px solid rgba(224,112,112,0.2);
+      border-radius: 8px; padding: 10px 14px;
+      display: none;
+    }
+    .error-msg.show { display: block; }
+
+    /* Submit button */
+    .btn-submit {
+      width: 100%; padding: 13px;
+      background: var(--accent); border: none; border-radius: 10px;
+      color: #0c0b09; font-family: 'Inter', sans-serif;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: opacity 0.2s, transform 0.2s;
+      margin-top: 4px;
+    }
+    .btn-submit:hover { opacity: 0.88; transform: translateY(-1px); }
+    .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* Panel toggle */
+    .panel { display: none; }
+    .panel.active { display: flex; flex-direction: column; gap: 14px; }
+
+    /* Success */
+    .success-msg {
+      font-size: 12.5px; color: #6fa882;
+      background: rgba(111,168,130,0.08);
+      border: 1px solid rgba(111,168,130,0.2);
+      border-radius: 8px; padding: 10px 14px;
+      display: none;
+    }
+    .success-msg.show { display: block; }
+  </style>
+</head>
+<body>
+
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="logo-icon">🤖</div>
+      <div class="card-title">Alter</div>
+      <div class="card-sub">Il tuo assistente di vita personale</div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('login')">Accedi</button>
+      <button class="tab" onclick="switchTab('signup')">Registrati</button>
+    </div>
+
+    <!-- Error / success -->
+    <div class="error-msg" id="error-msg"></div>
+    <div class="success-msg" id="success-msg"></div>
+
+    <!-- LOGIN panel -->
+    <div class="panel active" id="panel-login">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="login-email" placeholder="la-tua@email.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn-submit" id="btn-login" onclick="doLogin()">Accedi</button>
+    </div>
+
+    <!-- SIGNUP panel -->
+    <div class="panel" id="panel-signup">
+      <div class="field">
+        <label>Nome</label>
+        <input type="text" id="signup-name" placeholder="Il tuo nome" autocomplete="name">
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="signup-email" placeholder="la-tua@email.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="signup-password" placeholder="Minimo 6 caratteri" autocomplete="new-password">
+      </div>
+      <button class="btn-submit" id="btn-signup" onclick="doSignup()">Crea account</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = 'https://cdhsdubmdawrjjupysqx.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkaHNkdWJtZGF3cmpqdXB5c3F4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3MDcwMTAsImV4cCI6MjA4MzI4MzAxMH0.t90xeUV6VIHHV8iAa7uV3ZNQdtbh8CSXXTnrwXC72mI'; // sostituisci con la tua anon key
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach((t, i) => {
+        t.classList.toggle('active', (i === 0 && tab === 'login') || (i === 1 && tab === 'signup'));
+      });
+      document.getElementById('panel-login').classList.toggle('active', tab === 'login');
+      document.getElementById('panel-signup').classList.toggle('active', tab === 'signup');
+      clearMessages();
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('error-msg');
+      el.textContent = msg;
+      el.classList.add('show');
+      document.getElementById('success-msg').classList.remove('show');
+    }
+
+    function showSuccess(msg) {
+      const el = document.getElementById('success-msg');
+      el.textContent = msg;
+      el.classList.add('show');
+      document.getElementById('error-msg').classList.remove('show');
+    }
+
+    function clearMessages() {
+      document.getElementById('error-msg').classList.remove('show');
+      document.getElementById('success-msg').classList.remove('show');
+    }
+
+    async function doLogin() {
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+      const btn = document.getElementById('btn-login');
+
+      if (!email || !password) { showError('Compila tutti i campi.'); return; }
+
+      btn.disabled = true;
+      btn.textContent = 'Accesso in corso...';
+      clearMessages();
+
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+
+      if (error) {
+        showError(error.message === 'Invalid login credentials'
+          ? 'Email o password errati.'
+          : error.message);
+        btn.disabled = false;
+        btn.textContent = 'Accedi';
+      } else {
+        window.location.href = '/dashboard';
+      }
+    }
+
+    async function doSignup() {
+      const name = document.getElementById('signup-name').value.trim();
+      const email = document.getElementById('signup-email').value.trim();
+      const password = document.getElementById('signup-password').value;
+      const btn = document.getElementById('btn-signup');
+
+      if (!name || !email || !password) { showError('Compila tutti i campi.'); return; }
+      if (password.length < 6) { showError('La password deve essere di almeno 6 caratteri.'); return; }
+
+      btn.disabled = true;
+      btn.textContent = 'Creazione account...';
+      clearMessages();
+
+      const { error } = await sb.auth.signUp({
+        email,
+        password,
+        options: { data: { name } }
+      });
+
+      if (error) {
+        showError(error.message);
+        btn.disabled = false;
+        btn.textContent = 'Crea account';
+      } else {
+        showSuccess('Account creato! Controlla la tua email per confermare, poi accedi.');
+        btn.disabled = false;
+        btn.textContent = 'Crea account';
+      }
+    }
+
+    // Submit on Enter
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      if (document.getElementById('panel-login').classList.contains('active')) doLogin();
+      else doSignup();
+    });
+  </script>
+</body>
+</html>
