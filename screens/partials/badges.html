@@ -68,8 +68,6 @@
   .badge-card.epic.earned .badge-earned-mark { background:var(--epic); }
   .badge-card.legendary.earned .badge-earned-mark { background:var(--legendary); }
   .badge-earned-mark svg { stroke:var(--bg); }
-  .badge-toast { position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(14px); background:rgba(18,16,14,0.94); backdrop-filter:blur(16px); border:1px solid var(--border); border-radius:10px; padding:10px 20px; font-size:13px; font-weight:500; opacity:0; transition:all 0.22s; pointer-events:none; z-index:200; white-space:nowrap; }
-  .badge-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
   @media (max-width: 768px) { .hero { padding:20px; gap:16px; flex-wrap:wrap; } .hero-stats { flex-direction:row; } .stats-row { grid-template-columns:repeat(2,1fr); } .badge-grid { grid-template-columns:repeat(2,1fr); gap:10px; } }
   @media (max-width: 480px) { .badge-grid { gap:8px; } .badge-card { padding:16px 10px 12px; } .badge-icon { width:44px; height:44px; font-size:20px; } }
 </style>
@@ -104,79 +102,11 @@
 
 </div>
 
-<div class="badge-toast" id="badge-toast"></div>
 
 <script>
-  function showBadgeToast(msg) {
-    const t = document.getElementById('badge-toast');
-    t.textContent = msg; t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 2200);
-  }
-
-  function loadPrefs() { try { return JSON.parse(localStorage.getItem('alter_prefs') || '{}'); } catch(e) { return {}; } }
-
-  const CAT_LABELS = { generale:'Generale', streak:'Costanza', finanza:'Finanza', salute:'Salute', psicologia:'Psicologia', coscienza:'Coscienza', leggendario:'Leggendari' };
-  const CAT_ORDER = ['generale','streak','finanza','salute','psicologia','coscienza','leggendario'];
-  const XP_TABLE = { common:10, rare:25, epic:50, legendary:100 };
-  const LEVEL_RANKS = [
-    { min:0,   label:'Principiante',   sub:'Inizia a guadagnare badge' },
-    { min:50,  label:'Osservatore',    sub:'Stai prendendo confidenza con Alter' },
-    { min:150, label:'Esploratore',    sub:'Stai esplorando tutte le sezioni' },
-    { min:300, label:'Analista',       sub:'Stai costruendo buone abitudini' },
-    { min:500, label:'Stratega',       sub:'Approccio sistematico alla vita' },
-    { min:750, label:'Maestro',        sub:'Padronanza degli strumenti' },
-    { min:1100,label:'Alter Completo', sub:'Hai raggiunto la padronanza totale' },
-  ];
-  const BADGES = [
-    { id:'first_login',   cat:'generale',   rarity:'common',    icon:'◎', title:'Primo Passo',      desc:'Hai aperto Alter per la prima volta' },
-    { id:'profile_done',  cat:'generale',   rarity:'common',    icon:'◈', title:'Identità',          desc:'Nome e foto profilo impostati' },
-    { id:'theme_set',     cat:'generale',   rarity:'common',    icon:'◉', title:'Stilista',          desc:'Tema personalizzato scelto' },
-    { id:'explorer',      cat:'generale',   rarity:'rare',      icon:'◎', title:'Esploratore',       desc:'Visitate tutte le sezioni principali' },
-    { id:'early_bird',    cat:'generale',   rarity:'rare',      icon:'✦', title:'Early Adopter',     desc:'Tra i primi utenti di Alter' },
-    { id:'streak_3',      cat:'streak',     rarity:'common',    icon:'▲', title:'3 Giorni',          desc:'3 giorni consecutivi di utilizzo', prog:3 },
-    { id:'streak_7',      cat:'streak',     rarity:'rare',      icon:'▲', title:'Una Settimana',     desc:'7 giorni consecutivi', prog:7 },
-    { id:'streak_14',     cat:'streak',     rarity:'epic',      icon:'▲', title:'Due Settimane',     desc:'14 giorni consecutivi', prog:14 },
-    { id:'streak_30',     cat:'streak',     rarity:'legendary', icon:'▲', title:'Un Mese Pieno',     desc:'30 giorni consecutivi di accesso', prog:30 },
-    { id:'first_tx',      cat:'finanza',    rarity:'common',    icon:'◇', title:'Prima Spesa',       desc:'Prima transazione registrata' },
-    { id:'tx_10',         cat:'finanza',    rarity:'common',    icon:'◇', title:'Contabile',         desc:'10 transazioni registrate', prog:10 },
-    { id:'tx_50',         cat:'finanza',    rarity:'rare',      icon:'◆', title:'Analista',          desc:'50 transazioni registrate', prog:50 },
-    { id:'tx_100',        cat:'finanza',    rarity:'epic',      icon:'◆', title:'CFO',               desc:'100 transazioni registrate', prog:100 },
-    { id:'budget_pos',    cat:'finanza',    rarity:'rare',      icon:'◈', title:'Risparmiatore',     desc:'Saldo mensile in positivo' },
-    { id:'investment',    cat:'finanza',    rarity:'epic',      icon:'◈', title:'Investitore',       desc:'Prima transazione di investimento' },
-    { id:'first_workout', cat:'salute',     rarity:'common',    icon:'◉', title:'Prima Sfida',       desc:'Prima attività fisica registrata' },
-    { id:'workouts_7',    cat:'salute',     rarity:'common',    icon:'◉', title:'Costanza',          desc:'7 allenamenti totali', prog:7 },
-    { id:'workouts_30',   cat:'salute',     rarity:'rare',      icon:'◉', title:'Atleta',            desc:'30 allenamenti totali', prog:30 },
-    { id:'workouts_100',  cat:'salute',     rarity:'epic',      icon:'◉', title:'Campione',          desc:'100 allenamenti totali', prog:100 },
-    { id:'sleep_7',       cat:'salute',     rarity:'rare',      icon:'◑', title:'Dormitore',         desc:'7 notti di sonno tracciate', prog:7 },
-    { id:'health_balance',cat:'salute',     rarity:'epic',      icon:'◈', title:'Equilibrio',        desc:'Sonno + attività nella stessa settimana' },
-    { id:'first_entry',   cat:'psicologia', rarity:'common',    icon:'◎', title:'Prima Riflessione', desc:'Prima voce del diario psicologico' },
-    { id:'entries_7',     cat:'psicologia', rarity:'common',    icon:'◎', title:'Diario',            desc:'7 voci del diario registrate', prog:7 },
-    { id:'entries_30',    cat:'psicologia', rarity:'rare',      icon:'◎', title:'Introspezione',     desc:'30 voci del diario', prog:30 },
-    { id:'entries_100',   cat:'psicologia', rarity:'epic',      icon:'◎', title:'Psiconauta',        desc:'100 voci del diario', prog:100 },
-    { id:'mood_5',        cat:'psicologia', rarity:'rare',      icon:'◐', title:'Spettro Emotivo',   desc:"5 stati d'umore diversi registrati", prog:5 },
-    { id:'crisis_ok',     cat:'psicologia', rarity:'epic',      icon:'◈', title:'Resilienza',        desc:'Superata una fase difficile' },
-    { id:'first_note',    cat:'coscienza',  rarity:'common',    icon:'✦', title:'Primo Pensiero',    desc:'Prima nota di coscienza salvata' },
-    { id:'notes_10',      cat:'coscienza',  rarity:'common',    icon:'✦', title:'Osservatore',       desc:'10 note di coscienza salvate', prog:10 },
-    { id:'notes_50',      cat:'coscienza',  rarity:'rare',      icon:'✦', title:'Filosofo',          desc:'50 note salvate', prog:50 },
-    { id:'notes_100',     cat:'coscienza',  rarity:'epic',      icon:'✦', title:'Saggio',            desc:'100 note salvate', prog:100 },
-    { id:'deep_thought',  cat:'coscienza',  rarity:'rare',      icon:'◈', title:'Profondo',          desc:'Nota con più di 500 caratteri scritta' },
-    { id:'all_sections',  cat:'leggendario',rarity:'legendary', icon:'◈', title:'Poliedrico',        desc:'Dati inseriti in tutte e 4 le sezioni' },
-    { id:'complete_set',  cat:'leggendario',rarity:'legendary', icon:'◆', title:'Alter Completo',    desc:'Almeno 5 badge per ogni categoria' },
-    { id:'centurion',     cat:'leggendario',rarity:'legendary', icon:'◎', title:'Centurione',        desc:'100 badge totali guadagnati' },
-  ];
-
-  const EARNED_KEY = 'alter_badges';
-  function getEarned() { try { return new Set(JSON.parse(localStorage.getItem(EARNED_KEY) || '[]')); } catch(e) { return new Set(); } }
-  function saveEarned(set) { localStorage.setItem(EARNED_KEY, JSON.stringify([...set])); }
-
-  function awardBadge(id) {
-    const earned = getEarned();
-    if (earned.has(id)) return false;
-    earned.add(id); saveEarned(earned);
-    const b = BADGES.find(x => x.id === id);
-    if (b) showBadgeToast('Badge sbloccato: ' + b.title + ' +' + XP_TABLE[b.rarity] + ' XP');
-    return true;
-  }
+  // Usa: BADGES, XP_TABLE, LEVEL_RANKS, CAT_LABELS, CAT_ORDER da core/constants.js
+  // Usa: getEarned, saveEarned, awardBadge, updateStreak, getStreak, loadPrefs, getVisits da core/store.js
+  // Usa: showToast da core/utils.js
 
   function autoCheck() {
     const prefs = loadPrefs();
@@ -184,30 +114,18 @@
     awardBadge('early_bird');
     if (prefs.name && prefs.avatarUrl) awardBadge('profile_done');
     if (prefs.themeChanged) awardBadge('theme_set');
-    const visits = JSON.parse(localStorage.getItem('alter_visits') || '{}');
+    const visits = getVisits();
     const sections = ['dashboard','finance','psychology','health','consciousness'];
     if (sections.every(s => visits[s])) awardBadge('explorer');
-    const streak = parseInt(localStorage.getItem('alter_streak') || '0', 10);
+    const streak = getStreak();
     if (streak >= 3)  awardBadge('streak_3');
     if (streak >= 7)  awardBadge('streak_7');
     if (streak >= 14) awardBadge('streak_14');
     if (streak >= 30) awardBadge('streak_30');
   }
 
-  function updateStreak() {
-    const today = new Date().toDateString();
-    const last = localStorage.getItem('alter_streak_date');
-    let streak = parseInt(localStorage.getItem('alter_streak') || '0', 10);
-    if (last === today) return;
-    const yesterday = new Date(Date.now() - 86400000).toDateString();
-    if (last === yesterday) streak++;
-    else streak = 1;
-    localStorage.setItem('alter_streak', streak);
-    localStorage.setItem('alter_streak_date', today);
-  }
-
   function getProgress(id) {
-    const streak = parseInt(localStorage.getItem('alter_streak') || '0', 10);
+    const streak = getStreak();
     const map = { streak_3:streak, streak_7:streak, streak_14:streak, streak_30:streak };
     return map[id] ?? 0;
   }
@@ -226,6 +144,9 @@
     const pct = Math.min(100, ((xp - rank.min) / (nextMin - rank.min)) * 100);
     return { level: idx + 1, label: rank.label, sub: rank.sub, xp, nextMin, pct };
   }
+
+  // alias per compatibilità con il toast del badge
+  function showBadgeToast(msg) { showToast(msg); }
 
   let activeFilter = 'all';
 
@@ -291,7 +212,7 @@
     });
   }
 
-  updateStreak();
   autoCheck();
   render();
+  markVisit('badges');
 </script>

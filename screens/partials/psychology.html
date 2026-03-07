@@ -214,22 +214,10 @@
 </div>
 
 <script>
+  // Usa: moodConfig, catConfig da core/constants.js
+  // Usa: calcStreak, formatDate da core/utils.js
   let entries = [];
   let selectedMood = null;
-
-  const moodConfig = {
-    1: { emoji: '😔', label: 'Difficile' },
-    2: { emoji: '😐', label: 'Così così' },
-    3: { emoji: '🙂', label: 'Bene' },
-    4: { emoji: '😊', label: 'Molto bene' },
-    5: { emoji: '🌟', label: 'Eccellente' },
-  };
-
-  const catConfig = {
-    riflessione: '💭', gratitudine: '🙏', ansia: '😰',
-    obiettivi: '🎯', relazioni: '❤️', lavoro: '💼',
-    sogni: '🌙', altro: '📦',
-  };
 
   const tips = [
     'Prenditi un momento per osservare come ti senti senza giudicarti. La consapevolezza emotiva è il primo passo verso il benessere.',
@@ -246,10 +234,6 @@
       const d = new Date(e.date);
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     });
-  }
-
-  function formatDate(dateStr) {
-    return new Date(dateStr).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
   async function loadEntries() {
@@ -288,22 +272,8 @@
       document.getElementById('last-mood-emoji').textContent = moodConfig[last.mood]?.emoji || '—';
       document.getElementById('last-mood-date').textContent = formatDate(last.date);
     }
-    document.getElementById('streak').textContent = calcStreak();
+    document.getElementById('streak').textContent = calcStreak(entries);
     document.getElementById('entry-count').textContent = entries.length + ' voci';
-  }
-
-  function calcStreak() {
-    if (!entries.length) return 0;
-    const dates = [...new Set(entries.map(e => e.date.split('T')[0]))].sort().reverse();
-    let streak = 0;
-    let today = new Date(); today.setHours(0,0,0,0);
-    for (const dateStr of dates) {
-      const d = new Date(dateStr); d.setHours(0,0,0,0);
-      const diff = Math.round((today - d) / 86400000);
-      if (diff === streak) streak++;
-      else break;
-    }
-    return streak;
   }
 
   function renderList() {
@@ -432,4 +402,5 @@
 
   document.getElementById('daily-tip').textContent = tips[new Date().getDay() % tips.length];
   loadEntries();
+  markVisit('psychology');
 </script>

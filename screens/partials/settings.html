@@ -60,8 +60,6 @@
   .info-value { font-size:13.5px; font-weight:500; }
   .btn-danger { padding:7px 14px; border-radius:8px; background:rgba(196,100,100,0.08); border:1px solid rgba(196,100,100,0.2); color:#c46464; font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
   .btn-danger:hover { background:rgba(196,100,100,0.15); border-color:rgba(196,100,100,0.35); }
-  .settings-toast { position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(14px); background:rgba(18,16,14,0.94); backdrop-filter:blur(16px); border:1px solid var(--border); border-radius:10px; padding:10px 20px; font-size:13px; font-weight:500; opacity:0; transition:all 0.22s ease; pointer-events:none; z-index:200; white-space:nowrap; }
-  .settings-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
   @media (max-width: 768px) { .theme-grid { gap:8px; } .info-grid { grid-template-columns:1fr 1fr; } .avatar-row { gap:14px; } .s-input { width:100%; max-width:100%; } .s-row { flex-wrap:wrap; gap:10px; } .s-row.nowrap { flex-wrap:nowrap; } .s-row.nowrap .s-row-ctrl { width:auto; } .s-row-ctrl { width:100%; } .s-card-body { padding:16px; } .s-card-head { padding:14px 16px 12px; } }
   @media (max-width: 480px) { .theme-grid { gap:6px; } .info-grid { grid-template-columns:1fr; } }
 </style>
@@ -172,16 +170,10 @@
 
 </div>
 
-<div class="settings-toast" id="settings-toast"></div>
 
 <script>
-  function showToast(msg, type) {
-    const t = document.getElementById('settings-toast');
-    t.textContent = msg;
-    t.style.borderColor = type === 'error' ? 'rgba(196,100,100,0.3)' : '';
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 2400);
-  }
+  // Usa: showToast da core/utils.js
+  // Usa: loadPrefs, savePref da core/store.js
 
   function getUserId() {
     try {
@@ -193,9 +185,10 @@
     } catch(e) { return null; }
   }
 
-  const PREFS_KEY = 'alter_prefs';
-  function loadPrefs() { try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); } catch(e) { return {}; } }
-  function savePref(k, v) { const p = loadPrefs(); p[k] = v; localStorage.setItem(PREFS_KEY, JSON.stringify(p)); scheduleSaveToDB(); }
+  // loadPrefs e savePref vengono da core/store.js
+  // override locale per agganciare scheduleSaveToDB dopo il salvataggio
+  const _origSavePref = savePref;
+  function savePrefAndSync(k, v) { _origSavePref(k, v); scheduleSaveToDB(); }
 
   async function loadPrefsFromDB() {
     const uid = getUserId();
@@ -290,14 +283,14 @@
     const file = input.files[0]; if (!file) return;
     if (file.size > 2 * 1024 * 1024) { showToast('File troppo grande (max 2 MB)', 'error'); return; }
     const reader = new FileReader();
-    reader.onload = e => { savePref('avatarUrl', e.target.result); refreshAvatarUI(); showToast('Foto profilo aggiornata'); };
+    reader.onload = e => { savePrefAndSync('avatarUrl', e.target.result); refreshAvatarUI(); showToast('Foto profilo aggiornata'); };
     reader.readAsDataURL(file);
     input.value = '';
   }
 
   function removeAvatar() {
     const p = loadPrefs(); delete p.avatarUrl;
-    localStorage.setItem(PREFS_KEY, JSON.stringify(p));
+    localStorage.setItem('alter_prefs', JSON.stringify(p));
     scheduleSaveToDB(); refreshAvatarUI(); showToast('Foto rimossa');
   }
 
@@ -305,10 +298,10 @@
     const prefs = loadPrefs();
     const nameEl = document.getElementById('pref-name');
     nameEl.value = prefs.name || '';
-    nameEl.addEventListener('input', () => { savePref('name', nameEl.value.trim()); if (!loadPrefs().avatarUrl) refreshAvatarUI(); });
+    nameEl.addEventListener('input', () => { savePrefAndSync('name', nameEl.value.trim()); if (!loadPrefs().avatarUrl) refreshAvatarUI(); });
     const langEl = document.getElementById('pref-lang');
     langEl.value = prefs.lang || 'it';
-    langEl.addEventListener('change', () => { savePref('lang', langEl.value); showToast('Lingua aggiornata'); });
+    langEl.addEventListener('change', () => { savePrefAndSync('lang', langEl.value); showToast('Lingua aggiornata'); });
     [
       { id:'pref-greeting', key:'greeting', def:true },
       { id:'pref-grid',     key:'grid',     def:true },
@@ -316,7 +309,7 @@
     ].forEach(({id, key, def}) => {
       const el = document.getElementById(id);
       el.checked = prefs[key] !== undefined ? prefs[key] : def;
-      el.addEventListener('change', () => { savePref(key, el.checked); showToast(el.checked ? 'Attivato' : 'Disattivato'); });
+      el.addEventListener('change', () => { savePrefAndSync(key, el.checked); showToast(el.checked ? 'Attivato' : 'Disattivato'); });
     });
   }
 

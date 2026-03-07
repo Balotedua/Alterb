@@ -239,21 +239,13 @@
 </div>
 
 <script>
+  // Usa: actConfig, qualEmoji da core/constants.js
+  // Usa: calcStreak, formatDate da core/utils.js
   let activities = [];
   let currentTab = 'workout';
   let selectedIntensity = 3;
   let selectedQuality = null;
 
-  const actConfig = {
-    corsa:{icon:'🏃'}, palestra:{icon:'💪'}, ciclismo:{icon:'🚴'},
-    yoga:{icon:'🧘'}, nuoto:{icon:'🏊'}, camminata:{icon:'🚶'},
-    calcio:{icon:'⚽'}, boxe:{icon:'🥊'}, altro:{icon:'⚡'}, sonno:{icon:'😴'},
-  };
-  const qualEmoji = { 1:'😫', 2:'😔', 3:'😐', 4:'😊', 5:'🌟' };
-
-  function fmt(dateStr) {
-    return new Date(dateStr).toLocaleDateString('it-IT', { day:'2-digit', month:'short' });
-  }
   function thisWeek() {
     const now = new Date(); now.setHours(0,0,0,0);
     const start = new Date(now); start.setDate(now.getDate() - now.getDay());
@@ -284,17 +276,8 @@
       const avg = (sleepWeek.reduce((s, a) => s + a.hours, 0) / sleepWeek.length).toFixed(1);
       document.getElementById('avg-sleep').textContent = avg + 'h';
     }
-    document.getElementById('act-streak').textContent = calcStreak();
+    document.getElementById('act-streak').textContent = calcStreak(activities.filter(a => a.kind === 'workout'));
     document.getElementById('act-count').textContent = activities.length + ' voci';
-  }
-
-  function calcStreak() {
-    const workouts = activities.filter(a => a.kind === 'workout');
-    if (!workouts.length) return 0;
-    const dates = [...new Set(workouts.map(a => a.date.split('T')[0]))].sort().reverse();
-    let streak = 0; let today = new Date(); today.setHours(0,0,0,0);
-    for (const ds of dates) { const d = new Date(ds); d.setHours(0,0,0,0); if (Math.round((today - d) / 86400000) === streak) streak++; else break; }
-    return streak;
   }
 
   function renderList() {
@@ -304,9 +287,9 @@
       if (a.kind === 'workout') {
         const cfg = actConfig[a.type] || actConfig.altro;
         const dots = [1,2,3,4].map(i => `<div class="${i <= a.intensity ? 'dot-filled' : 'dot-empty'}"></div>`).join('');
-        return `<div class="act-item"><div class="act-icon">${cfg.icon}</div><div class="act-info"><div class="act-title">${a.type.charAt(0).toUpperCase() + a.type.slice(1)}</div><div class="act-meta">${fmt(a.date)}${a.note ? ' · ' + a.note : ''}</div></div><div class="act-right"><div class="intensity-dots">${dots}</div><div class="act-duration">${a.duration}m</div><button class="act-delete" onclick="deleteEntry(${a.id})">✕</button></div></div>`;
+        return `<div class="act-item"><div class="act-icon">${cfg.icon}</div><div class="act-info"><div class="act-title">${a.type.charAt(0).toUpperCase() + a.type.slice(1)}</div><div class="act-meta">${formatDate(a.date, 'short')}${a.note ? ' · ' + a.note : ''}</div></div><div class="act-right"><div class="intensity-dots">${dots}</div><div class="act-duration">${a.duration}m</div><button class="act-delete" onclick="deleteEntry(${a.id})">✕</button></div></div>`;
       } else {
-        return `<div class="act-item"><div class="act-icon">😴</div><div class="act-info"><div class="act-title">Sonno — ${a.hours}h</div><div class="act-meta">${fmt(a.date)} · qualità ${qualEmoji[a.quality] || '—'}${a.note ? ' · ' + a.note : ''}</div></div><div class="act-right"><button class="act-delete" onclick="deleteEntry(${a.id})">✕</button></div></div>`;
+        return `<div class="act-item"><div class="act-icon">😴</div><div class="act-info"><div class="act-title">Sonno — ${a.hours}h</div><div class="act-meta">${formatDate(a.date, 'short')} · qualità ${qualEmoji[a.quality] || '—'}${a.note ? ' · ' + a.note : ''}</div></div><div class="act-right"><button class="act-delete" onclick="deleteEntry(${a.id})">✕</button></div></div>`;
       }
     }).join('');
   }
@@ -422,4 +405,5 @@
   }
 
   loadActivities();
+  markVisit('health');
 </script>
