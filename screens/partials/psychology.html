@@ -1,0 +1,435 @@
+<!-- Psychology content -->
+<style>
+  :root { --positive: #5aaa8a; --negative: #c46868; }
+  .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:40px; }
+  .page-header-left { display:flex; align-items:center; gap:16px; }
+  .section-icon { width:48px; height:48px; border-radius:12px; background:var(--accent-dim); border:1px solid var(--accent-border); display:flex; align-items:center; justify-content:center; font-size:22px; }
+  .page-header h1 { font-size:1.65rem; font-weight:600; letter-spacing:-0.5px; }
+  .page-header p { font-size:14px; color:var(--muted); margin-top:2px; }
+  .btn-primary { display:inline-flex; align-items:center; gap:8px; padding:11px 20px; background:var(--accent); border:none; border-radius:10px; color:#0c0b09; font-family:'Inter',sans-serif; font-size:14px; font-weight:600; cursor:pointer; transition:opacity 0.15s, transform 0.15s; }
+  .btn-primary:hover { opacity:0.88; transform:translateY(-1px); }
+  .overview-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:32px; }
+  .ov-card { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:20px; position:relative; overflow:hidden; }
+  .ov-card.highlight { background:var(--accent-dim); border-color:var(--accent-border); }
+  .ov-card .ov-label { font-size:12px; color:var(--muted); font-weight:500; margin-bottom:8px; }
+  .ov-card .ov-value { font-size:1.6rem; font-weight:600; letter-spacing:-0.5px; }
+  .ov-card.highlight .ov-value { color:var(--accent); }
+  .ov-card .ov-sub { font-size:12px; margin-top:6px; color:var(--muted); }
+  .ov-icon { position:absolute; top:16px; right:16px; font-size:18px; opacity:0.3; }
+  .two-col { display:grid; grid-template-columns:1fr 340px; gap:16px; }
+  .panel { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+  .panel-header { padding:18px 22px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+  .panel-header h3 { font-size:14px; font-weight:600; letter-spacing:-0.2px; }
+  .panel-header span { font-size:12px; color:var(--muted); }
+  .entry-list { padding:6px 0; max-height:520px; overflow-y:auto; }
+  .entry-list::-webkit-scrollbar { width:3px; }
+  .entry-list::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.08); border-radius:4px; }
+  .entry-item { display:flex; align-items:flex-start; gap:14px; padding:14px 22px; transition:background 0.15s; border-bottom:1px solid rgba(255,255,255,0.03); }
+  .entry-item:last-child { border-bottom:none; }
+  .entry-item:hover { background:rgba(255,255,255,0.025); }
+  .entry-mood-badge { width:38px; height:38px; border-radius:9px; background:rgba(255,255,255,0.05); display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+  .entry-info { flex:1; min-width:0; }
+  .entry-title { font-size:14px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .entry-meta { font-size:12px; color:var(--muted); margin-top:3px; }
+  .entry-note { font-size:12px; color:var(--muted); margin-top:4px; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .entry-delete { background:none; border:none; color:var(--muted); cursor:pointer; font-size:13px; padding:4px; opacity:0; transition:opacity 0.15s, color 0.15s; flex-shrink:0; }
+  .entry-item:hover .entry-delete { opacity:1; }
+  .entry-delete:hover { color:rgba(201,126,126,0.9); }
+  .entry-empty { padding:48px 24px; text-align:center; color:var(--muted); font-size:14px; line-height:1.6; }
+  .entry-empty .empty-icon { font-size:32px; margin-bottom:12px; opacity:0.3; }
+  .mood-week { padding:18px 22px; display:flex; flex-direction:column; gap:14px; }
+  .mood-bars { display:flex; align-items:flex-end; gap:8px; height:80px; }
+  .mood-bar-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; height:100%; }
+  .mood-bar-wrap { flex:1; width:100%; display:flex; align-items:flex-end; }
+  .mood-bar-fill { width:100%; border-radius:4px 4px 0 0; background:var(--accent); opacity:0.6; transition:height 0.5s ease; min-height:2px; }
+  .mood-bar-fill.today { opacity:1; }
+  .mood-bar-fill.empty { background:rgba(255,255,255,0.06); opacity:1; }
+  .mood-bar-label { font-size:10px; color:var(--muted); }
+  .cat-list { padding:14px 22px; display:flex; flex-direction:column; gap:10px; }
+  .cat-row { display:flex; align-items:center; justify-content:space-between; font-size:13px; }
+  .cat-row-left { display:flex; align-items:center; gap:8px; }
+  .cat-dot { width:6px; height:6px; border-radius:50%; background:var(--accent); flex-shrink:0; }
+  .cat-count { color:var(--muted); font-size:12px; }
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.65); backdrop-filter:blur(8px); z-index:100; display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity 0.2s ease; }
+  .modal-overlay.open { opacity:1; pointer-events:all; }
+  .modal { background:#100e0c; border:1px solid var(--border); border-radius:18px; padding:30px; width:440px; max-width:90vw; transform:scale(0.96) translateY(8px); transition:transform 0.2s ease; }
+  .modal-overlay.open .modal { transform:scale(1) translateY(0); }
+  .modal h3 { font-size:17px; font-weight:600; margin-bottom:22px; letter-spacing:-0.3px; }
+  .mood-selector { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:16px; }
+  .mood-btn { display:flex; flex-direction:column; align-items:center; gap:5px; padding:10px 4px; border-radius:10px; border:1px solid var(--border); background:transparent; cursor:pointer; transition:all 0.15s; font-family:'Inter',sans-serif; }
+  .mood-btn .mood-emoji { font-size:22px; line-height:1; }
+  .mood-btn .mood-label { font-size:10px; color:var(--muted); font-weight:500; }
+  .mood-btn.selected { background:var(--accent-dim); border-color:var(--accent-border); }
+  .mood-btn.selected .mood-label { color:var(--accent); }
+  .form-group { margin-bottom:14px; }
+  .form-group label { display:block; font-size:11px; font-weight:600; color:var(--muted); margin-bottom:7px; letter-spacing:1px; text-transform:uppercase; }
+  .form-group input, .form-group select, .form-group textarea { width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:9px; padding:11px 14px; color:var(--text); font-family:'Inter',sans-serif; font-size:14px; outline:none; transition:border-color 0.15s; resize:none; }
+  .form-group textarea { min-height:90px; line-height:1.5; }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color:var(--accent-border); box-shadow:0 0 0 3px var(--accent-dim); }
+  .form-group select option { background:#100e0c; }
+  .form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .modal-actions { display:flex; gap:10px; margin-top:22px; }
+  .btn-cancel { flex:1; padding:11px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:9px; color:var(--muted); font-family:'Inter',sans-serif; font-size:14px; font-weight:500; cursor:pointer; transition:all 0.15s; }
+  .btn-cancel:hover { background:rgba(255,255,255,0.07); color:var(--text); }
+  .btn-save { flex:2; padding:11px; background:var(--accent); border:none; border-radius:9px; color:#0c0b09; font-family:'Inter',sans-serif; font-size:14px; font-weight:600; cursor:pointer; transition:opacity 0.15s; }
+  .btn-save:hover { opacity:0.88; }
+  .btn-save:disabled { opacity:0.4; cursor:not-allowed; }
+  @media (max-width: 768px) {
+    .overview-grid { grid-template-columns:1fr 1fr; }
+    .two-col { grid-template-columns:1fr; }
+    .page-header { flex-wrap:wrap; gap:12px; }
+    .btn-primary { width:100%; justify-content:center; }
+  }
+  @media (max-width: 480px) {
+    .form-row { grid-template-columns:1fr; }
+    .modal { padding:22px 18px; }
+    .mood-selector { gap:4px; }
+  }
+  @media (hover: none) { .entry-delete { opacity:0.6; } }
+</style>
+
+<div class="page-header">
+  <div class="page-header-left">
+    <div class="section-icon">🧠</div>
+    <div>
+      <h1>Psicologia</h1>
+      <p>Traccia umore, emozioni e crescita mentale</p>
+    </div>
+  </div>
+  <button class="btn-primary" onclick="openModal()">
+    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    Nuova voce
+  </button>
+</div>
+
+<div class="overview-grid">
+  <div class="ov-card highlight">
+    <span class="ov-icon">🌡️</span>
+    <div class="ov-label">Umore medio (mese)</div>
+    <div class="ov-value" id="avg-mood">—</div>
+    <div class="ov-sub" id="avg-mood-label">nessun dato</div>
+  </div>
+  <div class="ov-card">
+    <span class="ov-icon">🔥</span>
+    <div class="ov-label">Streak giornaliero</div>
+    <div class="ov-value" id="streak">0</div>
+    <div class="ov-sub">giorni consecutivi</div>
+  </div>
+  <div class="ov-card">
+    <span class="ov-icon">📝</span>
+    <div class="ov-label">Voci del mese</div>
+    <div class="ov-value" id="month-count">0</div>
+    <div class="ov-sub" id="month-sub">nessuna voce</div>
+  </div>
+  <div class="ov-card">
+    <span class="ov-icon">✨</span>
+    <div class="ov-label">Ultimo umore</div>
+    <div class="ov-value" id="last-mood-emoji" style="font-size:2rem">—</div>
+    <div class="ov-sub" id="last-mood-date">mai registrato</div>
+  </div>
+</div>
+
+<div class="two-col">
+  <div class="panel">
+    <div class="panel-header">
+      <h3>Diario mentale</h3>
+      <span id="entry-count">0 voci</span>
+    </div>
+    <div class="entry-list" id="entry-list">
+      <div class="entry-empty">
+        <div class="empty-icon">🧠</div>
+        Nessuna voce ancora.<br>Inizia a tracciare il tuo umore!
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:16px;">
+    <div class="panel">
+      <div class="panel-header"><h3>Umore — ultimi 7 giorni</h3></div>
+      <div class="mood-week">
+        <div class="mood-bars" id="mood-bars"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><h3>Per categoria</h3></div>
+      <div class="cat-list" id="cat-list">
+        <div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">—</div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><h3>Consiglio del giorno</h3></div>
+      <div style="padding:18px 22px;">
+        <p style="font-size:13px;color:var(--muted);line-height:1.65;" id="daily-tip">
+          Prenditi un momento per osservare come ti senti senza giudicarti. La consapevolezza emotiva è il primo passo verso il benessere.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-overlay" onclick="handleOverlayClick(event)">
+  <div class="modal">
+    <h3>Nuova voce nel diario</h3>
+    <div class="form-group">
+      <label>Come ti senti oggi?</label>
+      <div class="mood-selector" id="mood-selector">
+        <button class="mood-btn" data-mood="1" onclick="selectMood(1)"><span class="mood-emoji">😔</span><span class="mood-label">Difficile</span></button>
+        <button class="mood-btn" data-mood="2" onclick="selectMood(2)"><span class="mood-emoji">😐</span><span class="mood-label">Così così</span></button>
+        <button class="mood-btn" data-mood="3" onclick="selectMood(3)"><span class="mood-emoji">🙂</span><span class="mood-label">Bene</span></button>
+        <button class="mood-btn" data-mood="4" onclick="selectMood(4)"><span class="mood-emoji">😊</span><span class="mood-label">Molto bene</span></button>
+        <button class="mood-btn" data-mood="5" onclick="selectMood(5)"><span class="mood-emoji">🌟</span><span class="mood-label">Eccellente</span></button>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Titolo</label>
+        <input type="text" id="f-title" placeholder="Es. Giornata intensa...">
+      </div>
+      <div class="form-group">
+        <label>Data</label>
+        <input type="date" id="f-date">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Categoria</label>
+      <select id="f-category">
+        <option value="riflessione">💭 Riflessione</option>
+        <option value="gratitudine">🙏 Gratitudine</option>
+        <option value="ansia">😰 Ansia</option>
+        <option value="obiettivi">🎯 Obiettivi</option>
+        <option value="relazioni">❤️ Relazioni</option>
+        <option value="lavoro">💼 Lavoro</option>
+        <option value="sogni">🌙 Sogni</option>
+        <option value="altro">📦 Altro</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Note / Riflessione</label>
+      <textarea id="f-note" placeholder="Scrivi liberamente come ti senti, cosa hai vissuto oggi..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Annulla</button>
+      <button class="btn-save" id="btn-save" onclick="saveEntry()">Salva voce</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let entries = [];
+  let selectedMood = null;
+
+  const moodConfig = {
+    1: { emoji: '😔', label: 'Difficile' },
+    2: { emoji: '😐', label: 'Così così' },
+    3: { emoji: '🙂', label: 'Bene' },
+    4: { emoji: '😊', label: 'Molto bene' },
+    5: { emoji: '🌟', label: 'Eccellente' },
+  };
+
+  const catConfig = {
+    riflessione: '💭', gratitudine: '🙏', ansia: '😰',
+    obiettivi: '🎯', relazioni: '❤️', lavoro: '💼',
+    sogni: '🌙', altro: '📦',
+  };
+
+  const tips = [
+    'Prenditi un momento per osservare come ti senti senza giudicarti. La consapevolezza emotiva è il primo passo verso il benessere.',
+    'Scrivi tre cose per cui sei grato oggi. La gratitudine allena il cervello a notare il positivo.',
+    'Una respirazione profonda dura solo 30 secondi, ma può cambiare completamente il tuo stato emotivo.',
+    'Le emozioni difficili non vanno combattute — vanno attraversate. Osservale come fossero nuvole nel cielo.',
+    'Il journaling regolare è associato a riduzione dello stress e maggiore chiarezza mentale.',
+    'Ogni giorno che documenti il tuo umore stai costruendo una mappa di te stesso.',
+  ];
+
+  function thisMonthEntries() {
+    const now = new Date();
+    return entries.filter(e => {
+      const d = new Date(e.date);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+  }
+
+  function formatDate(dateStr) {
+    return new Date(dateStr).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  async function loadEntries() {
+    try {
+      const res = await fetch('/api/psychology/entries');
+      entries = await res.json();
+      render();
+    } catch(e) {
+      console.error(e);
+      render();
+    }
+  }
+
+  function render() {
+    renderOverview();
+    renderList();
+    renderWeekChart();
+    renderCatBreakdown();
+  }
+
+  function renderOverview() {
+    const month = thisMonthEntries();
+    if (month.length) {
+      const avg = (month.reduce((s, e) => s + e.mood, 0) / month.length).toFixed(1);
+      const avgRound = Math.round(avg);
+      document.getElementById('avg-mood').textContent = moodConfig[avgRound]?.emoji || avg;
+      document.getElementById('avg-mood-label').textContent = moodConfig[avgRound]?.label || '';
+    } else {
+      document.getElementById('avg-mood').textContent = '—';
+      document.getElementById('avg-mood-label').textContent = 'nessun dato';
+    }
+    document.getElementById('month-count').textContent = month.length;
+    document.getElementById('month-sub').textContent = month.length === 1 ? 'voce questo mese' : 'voci questo mese';
+    if (entries.length) {
+      const last = entries[0];
+      document.getElementById('last-mood-emoji').textContent = moodConfig[last.mood]?.emoji || '—';
+      document.getElementById('last-mood-date').textContent = formatDate(last.date);
+    }
+    document.getElementById('streak').textContent = calcStreak();
+    document.getElementById('entry-count').textContent = entries.length + ' voci';
+  }
+
+  function calcStreak() {
+    if (!entries.length) return 0;
+    const dates = [...new Set(entries.map(e => e.date.split('T')[0]))].sort().reverse();
+    let streak = 0;
+    let today = new Date(); today.setHours(0,0,0,0);
+    for (const dateStr of dates) {
+      const d = new Date(dateStr); d.setHours(0,0,0,0);
+      const diff = Math.round((today - d) / 86400000);
+      if (diff === streak) streak++;
+      else break;
+    }
+    return streak;
+  }
+
+  function renderList() {
+    const el = document.getElementById('entry-list');
+    if (!entries.length) {
+      el.innerHTML = `<div class="entry-empty"><div class="empty-icon">🧠</div>Nessuna voce ancora.<br>Inizia a tracciare il tuo umore!</div>`;
+      return;
+    }
+    el.innerHTML = entries.slice(0, 40).map(e => {
+      const mood = moodConfig[e.mood] || moodConfig[3];
+      const cat = catConfig[e.category] || '📦';
+      return `
+        <div class="entry-item">
+          <div class="entry-mood-badge">${mood.emoji}</div>
+          <div class="entry-info">
+            <div class="entry-title">${e.title || mood.label}</div>
+            <div class="entry-meta">${formatDate(e.date)} · ${cat} ${e.category}</div>
+            ${e.note ? `<div class="entry-note">${e.note}</div>` : ''}
+          </div>
+          <button class="entry-delete" onclick="deleteEntry(${e.id})" title="Elimina">✕</button>
+        </div>`;
+    }).join('');
+  }
+
+  function renderWeekChart() {
+    const el = document.getElementById('mood-bars');
+    const days = ['D','L','M','M','G','V','S'];
+    const today = new Date(); today.setHours(0,0,0,0);
+    const cols = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const dayEntries = entries.filter(e => e.date.split('T')[0] === dateStr);
+      const avgMood = dayEntries.length ? dayEntries.reduce((s, e) => s + e.mood, 0) / dayEntries.length : 0;
+      const pct = avgMood > 0 ? (avgMood / 5) * 100 : 0;
+      cols.push({ pct, isToday: i === 0, dayLabel: days[d.getDay()], hasData: dayEntries.length > 0 });
+    }
+    el.innerHTML = cols.map(c => `
+      <div class="mood-bar-col">
+        <div class="mood-bar-wrap">
+          <div class="mood-bar-fill ${c.isToday ? 'today' : ''} ${!c.hasData ? 'empty' : ''}" style="height:${c.hasData ? c.pct : 8}%"></div>
+        </div>
+        <div class="mood-bar-label" style="${c.isToday ? 'color:var(--accent)' : ''}">${c.dayLabel}</div>
+      </div>`).join('');
+  }
+
+  function renderCatBreakdown() {
+    const el = document.getElementById('cat-list');
+    if (!entries.length) {
+      el.innerHTML = `<div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">—</div>`;
+      return;
+    }
+    const byCat = {};
+    entries.forEach(e => { byCat[e.category] = (byCat[e.category] || 0) + 1; });
+    const sorted = Object.entries(byCat).sort((a,b) => b[1]-a[1]).slice(0, 5);
+    el.innerHTML = sorted.map(([cat, count]) => `
+      <div class="cat-row">
+        <div class="cat-row-left"><div class="cat-dot"></div><span>${catConfig[cat] || '📦'} ${cat}</span></div>
+        <span class="cat-count">${count} ${count === 1 ? 'voce' : 'voci'}</span>
+      </div>`).join('');
+  }
+
+  async function deleteEntry(id) {
+    try {
+      await fetch(`/api/psychology/entries/${id}`, { method: 'DELETE' });
+      await loadEntries();
+    } catch(e) {
+      entries = entries.filter(e => e.id !== id);
+      render();
+    }
+  }
+
+  function selectMood(mood) {
+    selectedMood = mood;
+    document.querySelectorAll('.mood-btn').forEach(btn => {
+      btn.classList.toggle('selected', parseInt(btn.dataset.mood) === mood);
+    });
+  }
+
+  function openModal() {
+    document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
+    selectedMood = null;
+    document.querySelectorAll('.mood-btn').forEach(btn => btn.classList.remove('selected'));
+    document.getElementById('modal-overlay').classList.add('open');
+  }
+
+  function closeModal() {
+    document.getElementById('modal-overlay').classList.remove('open');
+    document.getElementById('f-title').value = '';
+    document.getElementById('f-note').value = '';
+    selectedMood = null;
+    document.querySelectorAll('.mood-btn').forEach(btn => btn.classList.remove('selected'));
+  }
+
+  function handleOverlayClick(e) {
+    if (e.target === document.getElementById('modal-overlay')) closeModal();
+  }
+
+  async function saveEntry() {
+    if (!selectedMood) {
+      document.getElementById('mood-selector').style.outline = '1px solid var(--accent-border)';
+      document.getElementById('mood-selector').style.borderRadius = '10px';
+      setTimeout(() => { document.getElementById('mood-selector').style.outline = ''; }, 1200);
+      return;
+    }
+    const title = document.getElementById('f-title').value.trim();
+    const date = document.getElementById('f-date').value;
+    const category = document.getElementById('f-category').value;
+    const note = document.getElementById('f-note').value.trim();
+    if (!date) return;
+    const btn = document.getElementById('btn-save');
+    btn.disabled = true; btn.textContent = 'Salvataggio...';
+    try {
+      await fetch('/api/psychology/entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mood: selectedMood, title: title || moodConfig[selectedMood].label, date, category, note: note || null })
+      });
+    } catch(e) {
+      entries.unshift({ id: Date.now(), mood: selectedMood, title: title || moodConfig[selectedMood].label, date, category, note: note || null });
+    }
+    btn.disabled = false; btn.textContent = 'Salva voce';
+    closeModal();
+    await loadEntries();
+  }
+
+  document.getElementById('daily-tip').textContent = tips[new Date().getDay() % tips.length];
+  loadEntries();
+</script>

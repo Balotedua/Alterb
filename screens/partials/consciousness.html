@@ -1,0 +1,278 @@
+<!-- Consciousness content -->
+<style>
+  :root { --rec: #c46868; }
+  .consciousness-wrap { display:flex; flex-direction:column; gap:28px; }
+  .capture-zone { background:var(--bg-card); border:1px solid var(--border); border-radius:16px; overflow:hidden; transition:border-color 0.2s; }
+  .capture-zone:focus-within { border-color:var(--accent-border); box-shadow:0 0 0 3px var(--accent-dim); }
+  .capture-zone.recording { border-color:rgba(201,126,126,0.4); box-shadow:0 0 0 3px rgba(201,126,126,0.08); }
+  .capture-header { display:flex; align-items:center; justify-content:space-between; padding:16px 20px 0; }
+  .capture-meta { font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); font-weight:600; opacity:0.7; }
+  .capture-tools { display:flex; align-items:center; gap:8px; }
+  .btn-voice { display:flex; align-items:center; gap:7px; padding:7px 14px; border-radius:8px; background:transparent; border:1px solid var(--border); color:var(--muted); font-family:'Inter',sans-serif; font-size:13px; font-weight:500; cursor:pointer; transition:all 0.15s; }
+  .btn-voice:hover { background:rgba(255,255,255,0.04); color:var(--text); }
+  .btn-voice.active { background:rgba(201,126,126,0.1); border-color:rgba(201,126,126,0.35); color:var(--rec); }
+  .btn-voice .mic-dot { width:7px; height:7px; border-radius:50%; background:var(--muted); flex-shrink:0; transition:background 0.2s; }
+  .btn-voice.active .mic-dot { background:var(--rec); animation:pulse-dot 1s ease-in-out infinite; }
+  @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.3)} }
+  .btn-voice.unavailable { opacity:0.35; cursor:not-allowed; }
+  .btn-voice.unavailable:hover { background:transparent; color:var(--muted); }
+  .interim-badge { font-size:11px; color:var(--rec); opacity:0.7; display:none; align-items:center; gap:4px; }
+  .interim-badge.visible { display:flex; }
+  .capture-textarea { width:100%; min-height:200px; background:transparent; border:none; outline:none; resize:none; padding:16px 20px 8px; font-family:'Inter',sans-serif; font-size:16px; font-weight:400; color:var(--text); line-height:1.7; caret-color:var(--accent); }
+  .capture-textarea::placeholder { color:var(--muted); font-weight:300; }
+  .capture-footer { display:flex; align-items:center; justify-content:space-between; padding:12px 20px 16px; border-top:1px solid var(--border); }
+  .char-count { font-size:12px; color:var(--muted); }
+  .btn-save-note { display:inline-flex; align-items:center; gap:8px; padding:10px 20px; background:var(--accent); border:none; border-radius:9px; color:#0c0b09; font-family:'Inter',sans-serif; font-size:14px; font-weight:600; cursor:pointer; transition:opacity 0.15s; }
+  .btn-save-note:hover { opacity:0.88; }
+  .btn-save-note:disabled { opacity:0.35; cursor:not-allowed; }
+  .notes-section { flex:1; }
+  .notes-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .notes-header h2 { font-size:14px; font-weight:600; letter-spacing:-0.2px; }
+  .notes-controls { display:flex; align-items:center; gap:10px; }
+  .search-bar { display:flex; align-items:center; gap:8px; background:var(--bg-card); border:1px solid var(--border); border-radius:100px; padding:8px 16px; font-size:13px; color:var(--muted); width:220px; }
+  .search-bar input { background:none; border:none; outline:none; color:var(--text); font-family:'Inter',sans-serif; font-size:13px; width:100%; }
+  .search-bar input::placeholder { color:var(--muted); }
+  .filter-btns { display:flex; gap:6px; }
+  .filter-btn { padding:7px 14px; border-radius:100px; border:1px solid var(--border); background:transparent; color:var(--muted); font-family:'Inter',sans-serif; font-size:12px; font-weight:500; cursor:pointer; transition:all 0.15s; }
+  .filter-btn.active { background:var(--accent-dim); border-color:var(--accent-border); color:var(--accent); }
+  .notes-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px,1fr)); gap:12px; }
+  .note-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:18px 20px; cursor:pointer; transition:all 0.18s; position:relative; }
+  .note-card:hover { border-color:var(--accent-border); background:rgba(255,255,255,0.035); }
+  .note-card.expanded { grid-column:1 / -1; }
+  .note-card-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .note-card-meta { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .note-date { font-size:11px; color:var(--muted); }
+  .note-source { font-size:10px; font-weight:600; letter-spacing:0.5px; padding:2px 8px; border-radius:100px; border:1px solid var(--border); color:var(--muted); }
+  .note-source.voice { border-color:rgba(201,126,126,0.25); color:rgba(201,126,126,0.8); }
+  .note-card-actions { display:flex; gap:6px; opacity:0; transition:opacity 0.15s; flex-shrink:0; }
+  .note-card:hover .note-card-actions { opacity:1; }
+  .btn-icon { width:28px; height:28px; border-radius:7px; border:1px solid var(--border); background:transparent; color:var(--muted); cursor:pointer; transition:all 0.15s; display:flex; align-items:center; justify-content:center; font-size:13px; }
+  .btn-icon:hover { background:rgba(255,255,255,0.05); color:var(--text); }
+  .btn-icon.danger:hover { border-color:rgba(201,126,126,0.3); color:var(--rec); }
+  .note-text { font-size:14px; color:var(--muted); line-height:1.65; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; }
+  .note-text.collapsed { -webkit-line-clamp:4; }
+  .note-text.expanded-text { -webkit-line-clamp:unset; color:var(--text); }
+  .note-chars { font-size:11px; color:var(--muted); opacity:0.5; margin-top:8px; }
+  .notes-empty { grid-column:1 / -1; padding:60px 24px; text-align:center; color:var(--muted); font-size:14px; line-height:1.7; }
+  .notes-empty .empty-icon { font-size:36px; margin-bottom:14px; opacity:0.25; display:block; }
+  .stats-bar { display:flex; gap:24px; padding:0 2px; margin-bottom:4px; }
+  .stat-pill { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); }
+  .stat-pill strong { color:var(--text); font-weight:600; }
+  @media (max-width: 768px) { .notes-controls { flex-wrap:wrap; gap:8px; } .search-bar { width:100%; } .filter-btns { width:100%; } }
+  @media (max-width: 480px) { .notes-grid { grid-template-columns:1fr; } .capture-header { flex-direction:column; align-items:flex-start; gap:10px; } }
+</style>
+
+<div class="consciousness-wrap">
+
+  <div class="capture-zone" id="capture-zone">
+    <div class="capture-header">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span class="capture-meta">Nuova nota</span>
+        <div class="interim-badge" id="interim-badge">
+          <span>🎤</span> <span id="interim-text">in ascolto...</span>
+        </div>
+      </div>
+      <div class="capture-tools">
+        <button class="btn-voice" id="btn-voice" onclick="toggleVoice()" title="Trascrizione vocale">
+          <div class="mic-dot"></div>
+          <span id="voice-label">Registra</span>
+        </button>
+      </div>
+    </div>
+    <textarea class="capture-textarea" id="capture-input"
+      placeholder="Scrivi qualsiasi pensiero, idea, intuizione... Riordinerai dopo."
+      oninput="onTextInput()" onkeydown="handleKeydown(event)"></textarea>
+    <div class="capture-footer">
+      <span class="char-count" id="char-count">0 caratteri</span>
+      <button class="btn-save-note" id="btn-save-note" onclick="saveNote()" disabled>
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        Salva
+      </button>
+    </div>
+  </div>
+
+  <div class="notes-section">
+    <div class="notes-header">
+      <div>
+        <h2>Archivio pensieri</h2>
+        <div class="stats-bar" id="stats-bar" style="margin-top:6px;"></div>
+      </div>
+      <div class="notes-controls">
+        <div class="search-bar">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="search-input" placeholder="Cerca nei pensieri..." oninput="filterNotes()">
+        </div>
+        <div class="filter-btns">
+          <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">Tutti</button>
+          <button class="filter-btn" data-filter="text" onclick="setFilter('text')">✍️ Scritti</button>
+          <button class="filter-btn" data-filter="voice" onclick="setFilter('voice')">🎤 Voce</button>
+        </div>
+      </div>
+    </div>
+    <div class="notes-grid" id="notes-grid">
+      <div class="notes-empty">
+        <span class="empty-icon">📓</span>
+        Il tuo stream di coscienza è vuoto.<br>
+        Inizia a scrivere o parla liberamente — nessun giudizio, nessuna struttura.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let notes = [];
+  let currentFilter = 'all';
+  let isRecording = false;
+  let recognition = null;
+  let finalTranscript = '';
+  let voiceSource = false;
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const hasVoice = !!SpeechRecognition;
+
+  if (!hasVoice) {
+    const btn = document.getElementById('btn-voice');
+    btn.classList.add('unavailable');
+    btn.title = 'Trascrizione vocale non supportata (usa Chrome o Edge)';
+    btn.onclick = () => {};
+  } else {
+    recognition = new SpeechRecognition();
+    recognition.lang = 'it-IT';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      let interim = '', newFinal = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) newFinal += event.results[i][0].transcript + ' ';
+        else interim += event.results[i][0].transcript;
+      }
+      if (newFinal) {
+        finalTranscript += newFinal;
+        const textarea = document.getElementById('capture-input');
+        textarea.value = finalTranscript;
+        onTextInput();
+      }
+      const badge = document.getElementById('interim-badge');
+      const interimEl = document.getElementById('interim-text');
+      if (interim) { badge.classList.add('visible'); interimEl.textContent = interim; }
+      else badge.classList.remove('visible');
+    };
+    recognition.onerror = (e) => { if (e.error !== 'no-speech') stopVoice(); };
+    recognition.onend = () => { if (isRecording) recognition.start(); };
+  }
+
+  function toggleVoice() { if (!hasVoice) return; if (isRecording) stopVoice(); else startVoice(); }
+  function startVoice() {
+    isRecording = true; voiceSource = true;
+    finalTranscript = document.getElementById('capture-input').value;
+    recognition.start();
+    document.getElementById('btn-voice').classList.add('active');
+    document.getElementById('voice-label').textContent = 'Stop';
+    document.getElementById('capture-zone').classList.add('recording');
+  }
+  function stopVoice() {
+    isRecording = false; recognition.stop();
+    document.getElementById('btn-voice').classList.remove('active');
+    document.getElementById('voice-label').textContent = 'Registra';
+    document.getElementById('capture-zone').classList.remove('recording');
+    document.getElementById('interim-badge').classList.remove('visible');
+  }
+  function onTextInput() {
+    const val = document.getElementById('capture-input').value;
+    document.getElementById('char-count').textContent = val.length + ' caratteri';
+    document.getElementById('btn-save-note').disabled = val.trim().length === 0;
+  }
+  function handleKeydown(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); saveNote(); }
+  }
+
+  async function loadNotes() {
+    try { const res = await fetch('/api/consciousness/notes'); notes = await res.json(); } catch(e) {}
+    renderNotes();
+    renderStats();
+  }
+
+  function renderStats() {
+    const el = document.getElementById('stats-bar');
+    if (!notes.length) { el.innerHTML = ''; return; }
+    const voiceCount = notes.filter(n => n.source === 'voice').length;
+    const totalChars = notes.reduce((s, n) => s + (n.text || '').length, 0);
+    el.innerHTML = `<div class="stat-pill"><strong>${notes.length}</strong> pensieri</div><div class="stat-pill"><strong>${voiceCount}</strong> vocali</div><div class="stat-pill"><strong>${(totalChars / 1000).toFixed(1)}k</strong> caratteri totali</div>`;
+  }
+
+  function renderNotes() {
+    const grid = document.getElementById('notes-grid');
+    const query = document.getElementById('search-input').value.toLowerCase();
+    let filtered = notes;
+    if (currentFilter === 'text') filtered = notes.filter(n => n.source !== 'voice');
+    if (currentFilter === 'voice') filtered = notes.filter(n => n.source === 'voice');
+    if (query) filtered = filtered.filter(n => (n.text || '').toLowerCase().includes(query));
+    if (!filtered.length) {
+      grid.innerHTML = `<div class="notes-empty"><span class="empty-icon">${query ? '🔍' : '📓'}</span>${query ? 'Nessun risultato per "' + query + '"' : 'Nessun pensiero ancora.<br>Inizia a scrivere o parla liberamente.'}</div>`;
+      return;
+    }
+    grid.innerHTML = filtered.map(n => {
+      const date = new Date(n.date).toLocaleDateString('it-IT', { day:'2-digit', month:'short', year:'numeric' });
+      const time = new Date(n.date).toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
+      const isVoice = n.source === 'voice';
+      const preview = (n.text || '').trim();
+      return `<div class="note-card" id="card-${n.id}">
+        <div class="note-card-header">
+          <div class="note-card-meta"><span class="note-date">${date} · ${time}</span><span class="note-source ${isVoice ? 'voice' : ''}">${isVoice ? '🎤 Voce' : '✍️ Scritto'}</span></div>
+          <div class="note-card-actions">
+            <button class="btn-icon" onclick="toggleExpand(${n.id}, event)" title="Espandi">⤢</button>
+            <button class="btn-icon danger" onclick="deleteNote(${n.id}, event)" title="Elimina">✕</button>
+          </div>
+        </div>
+        <div class="note-text collapsed" id="text-${n.id}">${escapeHtml(preview)}</div>
+        <div class="note-chars">${preview.length} caratteri</div>
+      </div>`;
+    }).join('');
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  }
+  function toggleExpand(id, e) {
+    e.stopPropagation();
+    const card = document.getElementById('card-' + id);
+    const text = document.getElementById('text-' + id);
+    const isExp = card.classList.contains('expanded');
+    card.classList.toggle('expanded', !isExp);
+    text.classList.toggle('collapsed', isExp);
+    text.classList.toggle('expanded-text', !isExp);
+  }
+  function setFilter(f) {
+    currentFilter = f;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === f));
+    renderNotes();
+  }
+  function filterNotes() { renderNotes(); }
+
+  async function saveNote() {
+    const text = document.getElementById('capture-input').value.trim();
+    if (!text) return;
+    if (isRecording) stopVoice();
+    const btn = document.getElementById('btn-save-note');
+    btn.disabled = true;
+    const payload = { text, source: voiceSource ? 'voice' : 'text', date: new Date().toISOString() };
+    try {
+      await fetch('/api/consciousness/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      await loadNotes();
+    } catch(e) { notes.unshift({ id: Date.now(), ...payload }); renderNotes(); renderStats(); }
+    document.getElementById('capture-input').value = '';
+    document.getElementById('char-count').textContent = '0 caratteri';
+    document.getElementById('btn-save-note').disabled = true;
+    finalTranscript = ''; voiceSource = false;
+  }
+
+  async function deleteNote(id, e) {
+    e.stopPropagation();
+    try { await fetch(`/api/consciousness/notes/${id}`, { method: 'DELETE' }); } catch(err) {}
+    notes = notes.filter(n => n.id !== id);
+    renderNotes(); renderStats();
+  }
+
+  loadNotes();
+</script>

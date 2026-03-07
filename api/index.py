@@ -61,6 +61,15 @@ def badges():
     return FileResponse(os.path.join(BASE_DIR, "screens", "index.html"))
 
 
+@app.get("/partials/{page_name}")
+def serve_partial(page_name: str):
+    safe_name = os.path.basename(page_name)
+    path = os.path.join(BASE_DIR, "screens", "partials", safe_name)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Partial not found")
+    return FileResponse(path, media_type="text/html")
+
+
 # ── USER PREFERENCES ─────────────────────────────────────
 
 class UserPreferences(BaseModel):

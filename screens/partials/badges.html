@@ -1,0 +1,297 @@
+<!-- Badges content -->
+<style>
+  :root {
+    --rare: #7c86f0; --rare-dim: rgba(124,134,240,0.12);
+    --epic: #a87ee0; --epic-dim: rgba(168,126,224,0.12);
+    --legendary: #e8a83a; --legendary-dim: rgba(232,168,58,0.12);
+  }
+  .badges-wrap { max-width:900px; }
+  .hero { background:var(--bg-card); border:1px solid var(--border); border-radius:20px; padding:28px 32px; display:flex; align-items:center; gap:32px; margin-bottom:28px; }
+  .hero-level { width:72px; height:72px; border-radius:50%; flex-shrink:0; border:2px solid var(--accent-border); background:var(--accent-dim); display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .hero-level-num { font-size:22px; font-weight:700; color:var(--accent); line-height:1; }
+  .hero-level-lbl { font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin-top:2px; }
+  .hero-info { flex:1; }
+  .hero-title { font-size:1.1rem; font-weight:600; letter-spacing:-0.3px; margin-bottom:4px; }
+  .hero-sub { font-size:13px; color:var(--muted); margin-bottom:14px; }
+  .xp-bar-top { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+  .xp-bar-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .xp-bar-val { font-size:12px; font-weight:500; color:var(--accent); }
+  .xp-bar { height:6px; border-radius:100px; background:rgba(255,255,255,0.07); overflow:hidden; }
+  .xp-fill { height:100%; border-radius:100px; background:linear-gradient(90deg,var(--accent),color-mix(in srgb,var(--accent) 60%,#fff)); transition:width 0.6s cubic-bezier(.34,1.56,.64,1); }
+  .hero-stats { display:flex; flex-direction:column; gap:8px; align-items:flex-end; flex-shrink:0; }
+  .hero-stat { text-align:right; }
+  .hero-stat-val { font-size:20px; font-weight:700; color:var(--text); line-height:1; }
+  .hero-stat-lbl { font-size:10px; color:var(--muted); margin-top:2px; }
+  .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:28px; }
+  .stat-tile { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
+  .stat-tile-val { font-size:22px; font-weight:700; color:var(--text); }
+  .stat-tile-lbl { font-size:11px; color:var(--muted); margin-top:3px; }
+  .filter-tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:24px; }
+  .filter-tab { padding:6px 14px; border-radius:100px; border:1px solid var(--border); background:transparent; font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500; color:var(--muted); cursor:pointer; transition:all 0.15s; }
+  .filter-tab:hover { border-color:rgba(255,255,255,0.14); color:var(--text); }
+  .filter-tab.active { background:var(--accent-dim); border-color:var(--accent-border); color:var(--accent); }
+  .badge-group { margin-bottom:32px; }
+  .badge-group-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .badge-group-title { font-size:11px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:var(--muted); opacity:0.7; }
+  .badge-group-prog { font-size:11.5px; color:var(--muted); }
+  .badge-group-prog span { color:var(--accent); font-weight:600; }
+  .badge-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .badge-card { background:var(--bg-card); border:1px solid var(--border); border-radius:16px; padding:20px 14px 16px; display:flex; flex-direction:column; align-items:center; gap:10px; position:relative; transition:all 0.2s; }
+  .badge-card.earned { border-color:var(--accent-border); background:var(--accent-dim); }
+  .badge-card.locked { opacity:0.42; }
+  .badge-card.rare.earned { border-color:rgba(124,134,240,0.35); background:rgba(124,134,240,0.08); }
+  .badge-card.epic.earned { border-color:rgba(168,126,224,0.35); background:rgba(168,126,224,0.08); }
+  .badge-card.legendary.earned { border-color:rgba(232,168,58,0.4); background:rgba(232,168,58,0.07); box-shadow:0 0 20px rgba(232,168,58,0.06); }
+  .rarity-pill { position:absolute; top:10px; right:10px; font-size:8.5px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; padding:3px 7px; border-radius:100px; }
+  .rarity-common { background:rgba(255,255,255,0.06); color:var(--muted); }
+  .rarity-rare { background:rgba(124,134,240,0.14); color:var(--rare); }
+  .rarity-epic { background:rgba(168,126,224,0.14); color:var(--epic); }
+  .rarity-legendary { background:rgba(232,168,58,0.16); color:var(--legendary); }
+  .badge-icon { width:52px; height:52px; border-radius:14px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07); font-size:22px; line-height:1; flex-shrink:0; }
+  .badge-card.earned .badge-icon { background:var(--accent-dim); border-color:var(--accent-border); }
+  .badge-card.rare.earned .badge-icon { background:rgba(124,134,240,0.12); border-color:rgba(124,134,240,0.3); }
+  .badge-card.epic.earned .badge-icon { background:rgba(168,126,224,0.12); border-color:rgba(168,126,224,0.3); }
+  .badge-card.legendary.earned .badge-icon { background:rgba(232,168,58,0.14); border-color:rgba(232,168,58,0.35); }
+  .badge-title { font-size:12.5px; font-weight:600; text-align:center; line-height:1.3; }
+  .badge-desc { font-size:11px; color:var(--muted); text-align:center; line-height:1.5; }
+  .badge-card.earned .badge-title { color:var(--accent); }
+  .badge-card.rare.earned .badge-title { color:var(--rare); }
+  .badge-card.epic.earned .badge-title { color:var(--epic); }
+  .badge-card.legendary.earned .badge-title { color:var(--legendary); }
+  .badge-prog { width:100%; }
+  .badge-prog-bar { height:3px; border-radius:100px; background:rgba(255,255,255,0.07); overflow:hidden; }
+  .badge-prog-fill { height:100%; border-radius:100px; background:var(--accent); }
+  .badge-prog-lbl { font-size:10px; color:var(--muted); text-align:center; margin-top:4px; }
+  .badge-earned-mark { position:absolute; top:10px; left:10px; width:18px; height:18px; border-radius:50%; background:var(--accent); display:none; align-items:center; justify-content:center; }
+  .badge-card.earned .badge-earned-mark { display:flex; }
+  .badge-card.rare.earned .badge-earned-mark { background:var(--rare); }
+  .badge-card.epic.earned .badge-earned-mark { background:var(--epic); }
+  .badge-card.legendary.earned .badge-earned-mark { background:var(--legendary); }
+  .badge-earned-mark svg { stroke:var(--bg); }
+  .badge-toast { position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(14px); background:rgba(18,16,14,0.94); backdrop-filter:blur(16px); border:1px solid var(--border); border-radius:10px; padding:10px 20px; font-size:13px; font-weight:500; opacity:0; transition:all 0.22s; pointer-events:none; z-index:200; white-space:nowrap; }
+  .badge-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+  @media (max-width: 768px) { .hero { padding:20px; gap:16px; flex-wrap:wrap; } .hero-stats { flex-direction:row; } .stats-row { grid-template-columns:repeat(2,1fr); } .badge-grid { grid-template-columns:repeat(2,1fr); gap:10px; } }
+  @media (max-width: 480px) { .badge-grid { gap:8px; } .badge-card { padding:16px 10px 12px; } .badge-icon { width:44px; height:44px; font-size:20px; } }
+</style>
+
+<div class="badges-wrap">
+
+  <div class="hero" id="hero">
+    <div class="hero-level">
+      <div class="hero-level-num" id="hero-level">1</div>
+      <div class="hero-level-lbl">Livello</div>
+    </div>
+    <div class="hero-info">
+      <div class="hero-title" id="hero-rank">Principiante</div>
+      <div class="hero-sub" id="hero-sub">Inizia a guadagnare badge per salire di livello</div>
+      <div>
+        <div class="xp-bar-top">
+          <span class="xp-bar-label">XP</span>
+          <span class="xp-bar-val" id="xp-val">0 / 50 XP</span>
+        </div>
+        <div class="xp-bar"><div class="xp-fill" id="xp-fill" style="width:0%"></div></div>
+      </div>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="hero-stat-val" id="stat-earned">0</div><div class="hero-stat-lbl">Guadagnati</div></div>
+      <div class="hero-stat"><div class="hero-stat-val" id="stat-total">0</div><div class="hero-stat-lbl">Totali</div></div>
+    </div>
+  </div>
+
+  <div class="stats-row" id="stats-row"></div>
+  <div class="filter-tabs" id="filter-tabs"></div>
+  <div id="badge-container"></div>
+
+</div>
+
+<div class="badge-toast" id="badge-toast"></div>
+
+<script>
+  function showBadgeToast(msg) {
+    const t = document.getElementById('badge-toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  function loadPrefs() { try { return JSON.parse(localStorage.getItem('alter_prefs') || '{}'); } catch(e) { return {}; } }
+
+  const CAT_LABELS = { generale:'Generale', streak:'Costanza', finanza:'Finanza', salute:'Salute', psicologia:'Psicologia', coscienza:'Coscienza', leggendario:'Leggendari' };
+  const CAT_ORDER = ['generale','streak','finanza','salute','psicologia','coscienza','leggendario'];
+  const XP_TABLE = { common:10, rare:25, epic:50, legendary:100 };
+  const LEVEL_RANKS = [
+    { min:0,   label:'Principiante',   sub:'Inizia a guadagnare badge' },
+    { min:50,  label:'Osservatore',    sub:'Stai prendendo confidenza con Alter' },
+    { min:150, label:'Esploratore',    sub:'Stai esplorando tutte le sezioni' },
+    { min:300, label:'Analista',       sub:'Stai costruendo buone abitudini' },
+    { min:500, label:'Stratega',       sub:'Approccio sistematico alla vita' },
+    { min:750, label:'Maestro',        sub:'Padronanza degli strumenti' },
+    { min:1100,label:'Alter Completo', sub:'Hai raggiunto la padronanza totale' },
+  ];
+  const BADGES = [
+    { id:'first_login',   cat:'generale',   rarity:'common',    icon:'◎', title:'Primo Passo',      desc:'Hai aperto Alter per la prima volta' },
+    { id:'profile_done',  cat:'generale',   rarity:'common',    icon:'◈', title:'Identità',          desc:'Nome e foto profilo impostati' },
+    { id:'theme_set',     cat:'generale',   rarity:'common',    icon:'◉', title:'Stilista',          desc:'Tema personalizzato scelto' },
+    { id:'explorer',      cat:'generale',   rarity:'rare',      icon:'◎', title:'Esploratore',       desc:'Visitate tutte le sezioni principali' },
+    { id:'early_bird',    cat:'generale',   rarity:'rare',      icon:'✦', title:'Early Adopter',     desc:'Tra i primi utenti di Alter' },
+    { id:'streak_3',      cat:'streak',     rarity:'common',    icon:'▲', title:'3 Giorni',          desc:'3 giorni consecutivi di utilizzo', prog:3 },
+    { id:'streak_7',      cat:'streak',     rarity:'rare',      icon:'▲', title:'Una Settimana',     desc:'7 giorni consecutivi', prog:7 },
+    { id:'streak_14',     cat:'streak',     rarity:'epic',      icon:'▲', title:'Due Settimane',     desc:'14 giorni consecutivi', prog:14 },
+    { id:'streak_30',     cat:'streak',     rarity:'legendary', icon:'▲', title:'Un Mese Pieno',     desc:'30 giorni consecutivi di accesso', prog:30 },
+    { id:'first_tx',      cat:'finanza',    rarity:'common',    icon:'◇', title:'Prima Spesa',       desc:'Prima transazione registrata' },
+    { id:'tx_10',         cat:'finanza',    rarity:'common',    icon:'◇', title:'Contabile',         desc:'10 transazioni registrate', prog:10 },
+    { id:'tx_50',         cat:'finanza',    rarity:'rare',      icon:'◆', title:'Analista',          desc:'50 transazioni registrate', prog:50 },
+    { id:'tx_100',        cat:'finanza',    rarity:'epic',      icon:'◆', title:'CFO',               desc:'100 transazioni registrate', prog:100 },
+    { id:'budget_pos',    cat:'finanza',    rarity:'rare',      icon:'◈', title:'Risparmiatore',     desc:'Saldo mensile in positivo' },
+    { id:'investment',    cat:'finanza',    rarity:'epic',      icon:'◈', title:'Investitore',       desc:'Prima transazione di investimento' },
+    { id:'first_workout', cat:'salute',     rarity:'common',    icon:'◉', title:'Prima Sfida',       desc:'Prima attività fisica registrata' },
+    { id:'workouts_7',    cat:'salute',     rarity:'common',    icon:'◉', title:'Costanza',          desc:'7 allenamenti totali', prog:7 },
+    { id:'workouts_30',   cat:'salute',     rarity:'rare',      icon:'◉', title:'Atleta',            desc:'30 allenamenti totali', prog:30 },
+    { id:'workouts_100',  cat:'salute',     rarity:'epic',      icon:'◉', title:'Campione',          desc:'100 allenamenti totali', prog:100 },
+    { id:'sleep_7',       cat:'salute',     rarity:'rare',      icon:'◑', title:'Dormitore',         desc:'7 notti di sonno tracciate', prog:7 },
+    { id:'health_balance',cat:'salute',     rarity:'epic',      icon:'◈', title:'Equilibrio',        desc:'Sonno + attività nella stessa settimana' },
+    { id:'first_entry',   cat:'psicologia', rarity:'common',    icon:'◎', title:'Prima Riflessione', desc:'Prima voce del diario psicologico' },
+    { id:'entries_7',     cat:'psicologia', rarity:'common',    icon:'◎', title:'Diario',            desc:'7 voci del diario registrate', prog:7 },
+    { id:'entries_30',    cat:'psicologia', rarity:'rare',      icon:'◎', title:'Introspezione',     desc:'30 voci del diario', prog:30 },
+    { id:'entries_100',   cat:'psicologia', rarity:'epic',      icon:'◎', title:'Psiconauta',        desc:'100 voci del diario', prog:100 },
+    { id:'mood_5',        cat:'psicologia', rarity:'rare',      icon:'◐', title:'Spettro Emotivo',   desc:"5 stati d'umore diversi registrati", prog:5 },
+    { id:'crisis_ok',     cat:'psicologia', rarity:'epic',      icon:'◈', title:'Resilienza',        desc:'Superata una fase difficile' },
+    { id:'first_note',    cat:'coscienza',  rarity:'common',    icon:'✦', title:'Primo Pensiero',    desc:'Prima nota di coscienza salvata' },
+    { id:'notes_10',      cat:'coscienza',  rarity:'common',    icon:'✦', title:'Osservatore',       desc:'10 note di coscienza salvate', prog:10 },
+    { id:'notes_50',      cat:'coscienza',  rarity:'rare',      icon:'✦', title:'Filosofo',          desc:'50 note salvate', prog:50 },
+    { id:'notes_100',     cat:'coscienza',  rarity:'epic',      icon:'✦', title:'Saggio',            desc:'100 note salvate', prog:100 },
+    { id:'deep_thought',  cat:'coscienza',  rarity:'rare',      icon:'◈', title:'Profondo',          desc:'Nota con più di 500 caratteri scritta' },
+    { id:'all_sections',  cat:'leggendario',rarity:'legendary', icon:'◈', title:'Poliedrico',        desc:'Dati inseriti in tutte e 4 le sezioni' },
+    { id:'complete_set',  cat:'leggendario',rarity:'legendary', icon:'◆', title:'Alter Completo',    desc:'Almeno 5 badge per ogni categoria' },
+    { id:'centurion',     cat:'leggendario',rarity:'legendary', icon:'◎', title:'Centurione',        desc:'100 badge totali guadagnati' },
+  ];
+
+  const EARNED_KEY = 'alter_badges';
+  function getEarned() { try { return new Set(JSON.parse(localStorage.getItem(EARNED_KEY) || '[]')); } catch(e) { return new Set(); } }
+  function saveEarned(set) { localStorage.setItem(EARNED_KEY, JSON.stringify([...set])); }
+
+  function awardBadge(id) {
+    const earned = getEarned();
+    if (earned.has(id)) return false;
+    earned.add(id); saveEarned(earned);
+    const b = BADGES.find(x => x.id === id);
+    if (b) showBadgeToast('Badge sbloccato: ' + b.title + ' +' + XP_TABLE[b.rarity] + ' XP');
+    return true;
+  }
+
+  function autoCheck() {
+    const prefs = loadPrefs();
+    awardBadge('first_login');
+    awardBadge('early_bird');
+    if (prefs.name && prefs.avatarUrl) awardBadge('profile_done');
+    if (prefs.themeChanged) awardBadge('theme_set');
+    const visits = JSON.parse(localStorage.getItem('alter_visits') || '{}');
+    const sections = ['dashboard','finance','psychology','health','consciousness'];
+    if (sections.every(s => visits[s])) awardBadge('explorer');
+    const streak = parseInt(localStorage.getItem('alter_streak') || '0', 10);
+    if (streak >= 3)  awardBadge('streak_3');
+    if (streak >= 7)  awardBadge('streak_7');
+    if (streak >= 14) awardBadge('streak_14');
+    if (streak >= 30) awardBadge('streak_30');
+  }
+
+  function updateStreak() {
+    const today = new Date().toDateString();
+    const last = localStorage.getItem('alter_streak_date');
+    let streak = parseInt(localStorage.getItem('alter_streak') || '0', 10);
+    if (last === today) return;
+    const yesterday = new Date(Date.now() - 86400000).toDateString();
+    if (last === yesterday) streak++;
+    else streak = 1;
+    localStorage.setItem('alter_streak', streak);
+    localStorage.setItem('alter_streak_date', today);
+  }
+
+  function getProgress(id) {
+    const streak = parseInt(localStorage.getItem('alter_streak') || '0', 10);
+    const map = { streak_3:streak, streak_7:streak, streak_14:streak, streak_30:streak };
+    return map[id] ?? 0;
+  }
+
+  function calcXP(earnedSet) {
+    let xp = 0;
+    for (const id of earnedSet) { const b = BADGES.find(x => x.id === id); if (b) xp += XP_TABLE[b.rarity]; }
+    return xp;
+  }
+
+  function getLevel(xp) {
+    let rank = LEVEL_RANKS[0];
+    for (const r of LEVEL_RANKS) { if (xp >= r.min) rank = r; }
+    const idx = LEVEL_RANKS.indexOf(rank);
+    const nextMin = LEVEL_RANKS[idx + 1]?.min ?? rank.min + 500;
+    const pct = Math.min(100, ((xp - rank.min) / (nextMin - rank.min)) * 100);
+    return { level: idx + 1, label: rank.label, sub: rank.sub, xp, nextMin, pct };
+  }
+
+  let activeFilter = 'all';
+
+  function render() {
+    const earned = getEarned();
+    const xp = calcXP(earned);
+    const lvl = getLevel(xp);
+
+    document.getElementById('hero-level').textContent = lvl.level;
+    document.getElementById('hero-rank').textContent = lvl.label;
+    document.getElementById('hero-sub').textContent = lvl.sub;
+    document.getElementById('xp-val').textContent = xp + ' / ' + lvl.nextMin + ' XP';
+    document.getElementById('xp-fill').style.width = lvl.pct + '%';
+    document.getElementById('stat-earned').textContent = earned.size;
+    document.getElementById('stat-total').textContent = BADGES.length;
+
+    const streak = parseInt(localStorage.getItem('alter_streak') || '0', 10);
+    const pct = Math.round((earned.size / BADGES.length) * 100);
+    document.getElementById('stats-row').innerHTML = `
+      <div class="stat-tile"><div class="stat-tile-val">${earned.size}</div><div class="stat-tile-lbl">Badge guadagnati</div></div>
+      <div class="stat-tile"><div class="stat-tile-val">${BADGES.length - earned.size}</div><div class="stat-tile-lbl">Da sbloccare</div></div>
+      <div class="stat-tile"><div class="stat-tile-val">${pct}%</div><div class="stat-tile-lbl">Completamento</div></div>
+      <div class="stat-tile"><div class="stat-tile-val">${streak}</div><div class="stat-tile-lbl">Giorni streak</div></div>`;
+
+    const tabs = document.getElementById('filter-tabs');
+    tabs.innerHTML = '';
+    ['all', ...CAT_ORDER].forEach(cat => {
+      const btn = document.createElement('button');
+      btn.className = 'filter-tab' + (activeFilter === cat ? ' active' : '');
+      btn.textContent = cat === 'all' ? 'Tutti' : CAT_LABELS[cat];
+      btn.onclick = () => { activeFilter = cat; render(); };
+      tabs.appendChild(btn);
+    });
+
+    const container = document.getElementById('badge-container');
+    container.innerHTML = '';
+    const catsToShow = activeFilter === 'all' ? CAT_ORDER : [activeFilter];
+    catsToShow.forEach(cat => {
+      const catBadges = BADGES.filter(b => b.cat === cat);
+      if (!catBadges.length) return;
+      const catEarned = catBadges.filter(b => earned.has(b.id)).length;
+      const group = document.createElement('div');
+      group.className = 'badge-group';
+      group.innerHTML = `<div class="badge-group-header"><div class="badge-group-title">${CAT_LABELS[cat]}</div><div class="badge-group-prog"><span>${catEarned}</span> / ${catBadges.length}</div></div><div class="badge-grid" id="grid-${cat}"></div>`;
+      container.appendChild(group);
+      const grid = document.getElementById('grid-' + cat);
+      catBadges.forEach(b => {
+        const isEarned = earned.has(b.id);
+        const progMax = b.prog ?? 0;
+        const progNow = progMax ? Math.min(progMax, getProgress(b.id)) : 0;
+        const progPct = progMax ? Math.round((progNow / progMax) * 100) : 0;
+        const card = document.createElement('div');
+        card.className = `badge-card ${b.rarity}` + (isEarned ? ' earned' : ' locked');
+        card.innerHTML = `
+          <div class="badge-earned-mark"><svg width="8" height="6" viewBox="0 0 9 7" fill="none" stroke-width="2.5" stroke-linecap="round"><path d="M1 3.5L3.5 6L8 1"/></svg></div>
+          <div class="rarity-pill rarity-${b.rarity}">${b.rarity}</div>
+          <div class="badge-icon">${b.icon}</div>
+          <div class="badge-title">${b.title}</div>
+          <div class="badge-desc">${b.desc}</div>
+          ${progMax && !isEarned ? `<div class="badge-prog"><div class="badge-prog-bar"><div class="badge-prog-fill" style="width:${progPct}%"></div></div><div class="badge-prog-lbl">${progNow} / ${progMax}</div></div>` : ''}`;
+        grid.appendChild(card);
+      });
+    });
+  }
+
+  updateStreak();
+  autoCheck();
+  render();
+</script>

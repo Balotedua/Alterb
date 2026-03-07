@@ -1,0 +1,425 @@
+<!-- Health content -->
+<style>
+  :root { --positive: #5aaa8a; --negative: #c46868; }
+  .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:40px; }
+  .page-header-left { display:flex; align-items:center; gap:16px; }
+  .section-icon { width:48px; height:48px; border-radius:12px; background:var(--accent-dim); border:1px solid var(--accent-border); display:flex; align-items:center; justify-content:center; font-size:22px; }
+  .page-header h1 { font-size:1.65rem; font-weight:600; letter-spacing:-0.5px; }
+  .page-header p { font-size:14px; color:var(--muted); margin-top:2px; }
+  .header-actions { display:flex; gap:10px; }
+  .btn-primary { display:inline-flex; align-items:center; gap:8px; padding:11px 20px; background:var(--accent); border:none; border-radius:10px; color:#0c0b09; font-family:'Inter',sans-serif; font-size:14px; font-weight:600; cursor:pointer; transition:opacity 0.15s, transform 0.15s; }
+  .btn-primary:hover { opacity:0.88; transform:translateY(-1px); }
+  .btn-secondary { display:inline-flex; align-items:center; gap:8px; padding:11px 20px; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; color:var(--muted); font-family:'Inter',sans-serif; font-size:14px; font-weight:500; cursor:pointer; transition:all 0.15s; }
+  .btn-secondary:hover { background:rgba(255,255,255,0.05); color:var(--text); }
+  .overview-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:32px; }
+  .ov-card { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:20px; position:relative; overflow:hidden; }
+  .ov-card.highlight { background:var(--accent-dim); border-color:var(--accent-border); }
+  .ov-label { font-size:12px; color:var(--muted); font-weight:500; margin-bottom:8px; }
+  .ov-value { font-size:1.6rem; font-weight:600; letter-spacing:-0.5px; }
+  .ov-card.highlight .ov-value { color:var(--accent); }
+  .ov-sub { font-size:12px; margin-top:6px; color:var(--muted); }
+  .ov-icon { position:absolute; top:16px; right:16px; font-size:18px; opacity:0.3; }
+  .two-col { display:grid; grid-template-columns:1fr 340px; gap:16px; }
+  .panel { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+  .panel-header { padding:18px 22px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+  .panel-header h3 { font-size:14px; font-weight:600; letter-spacing:-0.2px; }
+  .panel-header span { font-size:12px; color:var(--muted); }
+  .act-list { padding:6px 0; max-height:480px; overflow-y:auto; }
+  .act-list::-webkit-scrollbar { width:3px; }
+  .act-list::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.08); border-radius:4px; }
+  .act-item { display:flex; align-items:center; gap:14px; padding:13px 22px; transition:background 0.15s; border-bottom:1px solid rgba(255,255,255,0.03); }
+  .act-item:last-child { border-bottom:none; }
+  .act-item:hover { background:rgba(255,255,255,0.025); }
+  .act-icon { width:38px; height:38px; border-radius:9px; background:rgba(255,255,255,0.05); display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+  .act-info { flex:1; min-width:0; }
+  .act-title { font-size:14px; font-weight:500; }
+  .act-meta { font-size:12px; color:var(--muted); margin-top:2px; }
+  .act-right { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+  .act-duration { font-size:14px; font-weight:600; color:var(--accent); }
+  .act-delete { background:none; border:none; color:var(--muted); cursor:pointer; font-size:13px; padding:4px; opacity:0; transition:opacity 0.15s, color 0.15s; }
+  .act-item:hover .act-delete { opacity:1; }
+  .act-delete:hover { color:var(--negative); }
+  .act-empty { padding:48px 24px; text-align:center; color:var(--muted); font-size:14px; line-height:1.6; }
+  .act-empty .empty-icon { font-size:32px; margin-bottom:12px; opacity:0.3; }
+  .intensity-dots { display:flex; gap:3px; }
+  .dot-filled { width:6px; height:6px; border-radius:50%; background:var(--accent); }
+  .dot-empty { width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.1); }
+  .week-chart { padding:18px 22px; }
+  .week-bars { display:flex; align-items:flex-end; gap:6px; height:80px; }
+  .wbar-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; height:100%; }
+  .wbar-wrap { flex:1; width:100%; display:flex; align-items:flex-end; }
+  .wbar-fill { width:100%; border-radius:4px 4px 0 0; background:var(--accent); opacity:0.5; transition:height 0.5s ease; min-height:2px; }
+  .wbar-fill.active { opacity:1; }
+  .wbar-fill.rest { background:rgba(255,255,255,0.06); opacity:1; }
+  .wbar-label { font-size:10px; color:var(--muted); }
+  .sleep-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:18px 22px; }
+  .sleep-card { background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:10px; padding:14px; }
+  .sleep-val { font-size:1.4rem; font-weight:600; letter-spacing:-0.3px; color:var(--accent); }
+  .sleep-label { font-size:11px; color:var(--muted); margin-top:3px; }
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.65); backdrop-filter:blur(8px); z-index:100; display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity 0.2s ease; }
+  .modal-overlay.open { opacity:1; pointer-events:all; }
+  .modal { background:#100e0c; border:1px solid var(--border); border-radius:18px; padding:30px; width:440px; max-width:90vw; transform:scale(0.96) translateY(8px); transition:transform 0.2s ease; }
+  .modal-overlay.open .modal { transform:scale(1) translateY(0); }
+  .modal h3 { font-size:17px; font-weight:600; margin-bottom:22px; letter-spacing:-0.3px; }
+  .modal-tabs { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:20px; }
+  .modal-tab { padding:9px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--muted); font-family:'Inter',sans-serif; font-size:13px; font-weight:500; cursor:pointer; transition:all 0.15s; }
+  .modal-tab.active { background:var(--accent-dim); border-color:var(--accent-border); color:var(--accent); }
+  .tab-panel { display:none; }
+  .tab-panel.active { display:block; }
+  .form-group { margin-bottom:14px; }
+  .form-group label { display:block; font-size:11px; font-weight:600; color:var(--muted); margin-bottom:7px; letter-spacing:1px; text-transform:uppercase; }
+  .form-group input, .form-group select { width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:9px; padding:11px 14px; color:var(--text); font-family:'Inter',sans-serif; font-size:14px; outline:none; transition:border-color 0.15s; }
+  .form-group input:focus, .form-group select:focus { border-color:var(--accent-border); box-shadow:0 0 0 3px var(--accent-dim); }
+  .form-group select option { background:#100e0c; }
+  .intensity-sel { display:flex; gap:8px; }
+  .int-btn { flex:1; padding:9px 4px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--muted); font-family:'Inter',sans-serif; font-size:12px; font-weight:500; cursor:pointer; transition:all 0.15s; text-align:center; }
+  .int-btn.selected { background:var(--accent-dim); border-color:var(--accent-border); color:var(--accent); }
+  .quality-sel { display:flex; gap:8px; }
+  .qual-btn { flex:1; padding:9px 4px; border-radius:8px; border:1px solid var(--border); background:transparent; cursor:pointer; font-family:'Inter',sans-serif; font-size:18px; transition:all 0.15s; text-align:center; }
+  .qual-btn.selected { background:var(--accent-dim); border-color:var(--accent-border); }
+  .form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .modal-actions { display:flex; gap:10px; margin-top:22px; }
+  .btn-cancel { flex:1; padding:11px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:9px; color:var(--muted); font-family:'Inter',sans-serif; font-size:14px; font-weight:500; cursor:pointer; transition:all 0.15s; }
+  .btn-cancel:hover { background:rgba(255,255,255,0.07); color:var(--text); }
+  .btn-save { flex:2; padding:11px; background:var(--accent); border:none; border-radius:9px; color:#0c0b09; font-family:'Inter',sans-serif; font-size:14px; font-weight:600; cursor:pointer; transition:opacity 0.15s; }
+  .btn-save:hover { opacity:0.88; }
+  .btn-save:disabled { opacity:0.4; cursor:not-allowed; }
+  @media (max-width: 768px) {
+    .overview-grid { grid-template-columns:1fr 1fr; }
+    .two-col { grid-template-columns:1fr; }
+    .page-header { flex-wrap:wrap; gap:12px; }
+    .btn-primary, .btn-secondary { width:100%; justify-content:center; }
+    .header-actions { width:100%; }
+  }
+  @media (max-width: 480px) { .form-row { grid-template-columns:1fr; } .modal { padding:22px 18px; } }
+  @media (hover: none) { .act-delete { opacity:0.6; } }
+</style>
+
+<div class="page-header">
+  <div class="page-header-left">
+    <div class="section-icon">💪</div>
+    <div>
+      <h1>Salute &amp; Fisico</h1>
+      <p>Allenamenti, sonno e benessere quotidiano</p>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button class="btn-secondary" onclick="openModal('sleep')">😴 Sonno</button>
+    <button class="btn-primary" onclick="openModal('workout')">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      Allenamento
+    </button>
+  </div>
+</div>
+
+<div class="overview-grid">
+  <div class="ov-card highlight">
+    <span class="ov-icon">🏃</span>
+    <div class="ov-label">Attività questa settimana</div>
+    <div class="ov-value" id="week-count">0</div>
+    <div class="ov-sub" id="week-sub">sessioni</div>
+  </div>
+  <div class="ov-card">
+    <span class="ov-icon">⏱️</span>
+    <div class="ov-label">Tempo totale (mese)</div>
+    <div class="ov-value" id="total-time">0h</div>
+    <div class="ov-sub" id="total-sub">di allenamento</div>
+  </div>
+  <div class="ov-card">
+    <span class="ov-icon">😴</span>
+    <div class="ov-label">Sonno medio</div>
+    <div class="ov-value" id="avg-sleep">—</div>
+    <div class="ov-sub">ore per notte</div>
+  </div>
+  <div class="ov-card">
+    <span class="ov-icon">🔥</span>
+    <div class="ov-label">Streak attivo</div>
+    <div class="ov-value" id="act-streak">0</div>
+    <div class="ov-sub">giorni consecutivi</div>
+  </div>
+</div>
+
+<div class="two-col">
+  <div class="panel">
+    <div class="panel-header">
+      <h3>Attività recenti</h3>
+      <span id="act-count">0 voci</span>
+    </div>
+    <div class="act-list" id="act-list">
+      <div class="act-empty">
+        <div class="empty-icon">💪</div>
+        Nessuna attività ancora.<br>Registra il tuo primo allenamento!
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:16px;">
+    <div class="panel">
+      <div class="panel-header"><h3>Attività — questa settimana</h3></div>
+      <div class="week-chart">
+        <div class="week-bars" id="week-bars"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><h3>Sonno — ultimi 7 giorni</h3></div>
+      <div class="sleep-grid">
+        <div class="sleep-card"><div class="sleep-val" id="sl-avg">—</div><div class="sleep-label">Media ore</div></div>
+        <div class="sleep-card"><div class="sleep-val" id="sl-qual">—</div><div class="sleep-label">Qualità media</div></div>
+        <div class="sleep-card"><div class="sleep-val" id="sl-best">—</div><div class="sleep-label">Notte migliore</div></div>
+        <div class="sleep-card"><div class="sleep-val" id="sl-worst">—</div><div class="sleep-label">Notte peggiore</div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><h3>Per tipo di attività</h3></div>
+      <div id="type-list" style="padding:14px 22px;display:flex;flex-direction:column;gap:10px;">
+        <div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">—</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-overlay" onclick="handleOverlayClick(event)">
+  <div class="modal">
+    <h3 id="modal-title">Nuova attività</h3>
+    <div class="modal-tabs">
+      <button class="modal-tab active" id="tab-workout" onclick="switchTab('workout')">💪 Allenamento</button>
+      <button class="modal-tab" id="tab-sleep" onclick="switchTab('sleep')">😴 Sonno</button>
+    </div>
+    <div class="tab-panel active" id="panel-workout">
+      <div class="form-group">
+        <label>Tipo di attività</label>
+        <select id="f-type">
+          <option value="corsa">🏃 Corsa</option>
+          <option value="palestra">💪 Palestra</option>
+          <option value="ciclismo">🚴 Ciclismo</option>
+          <option value="yoga">🧘 Yoga</option>
+          <option value="nuoto">🏊 Nuoto</option>
+          <option value="camminata">🚶 Camminata</option>
+          <option value="calcio">⚽ Calcio</option>
+          <option value="boxe">🥊 Boxe / MMA</option>
+          <option value="altro">⚡ Altro</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Durata (minuti)</label><input type="number" id="f-duration" placeholder="45" min="1"></div>
+        <div class="form-group"><label>Data</label><input type="date" id="f-workout-date"></div>
+      </div>
+      <div class="form-group">
+        <label>Intensità</label>
+        <div class="intensity-sel" id="intensity-sel">
+          <button class="int-btn" data-int="1" onclick="selectIntensity(1)">Bassa</button>
+          <button class="int-btn" data-int="2" onclick="selectIntensity(2)">Media</button>
+          <button class="int-btn selected" data-int="3" onclick="selectIntensity(3)">Alta</button>
+          <button class="int-btn" data-int="4" onclick="selectIntensity(4)">Massima</button>
+        </div>
+      </div>
+      <div class="form-group"><label>Note</label><input type="text" id="f-workout-note" placeholder="Es. PR sul km..."></div>
+    </div>
+    <div class="tab-panel" id="panel-sleep">
+      <div class="form-row">
+        <div class="form-group"><label>Ore di sonno</label><input type="number" id="f-sleep-hours" placeholder="7.5" min="0" max="24" step="0.5"></div>
+        <div class="form-group"><label>Data (notte del)</label><input type="date" id="f-sleep-date"></div>
+      </div>
+      <div class="form-group">
+        <label>Qualità del sonno</label>
+        <div class="quality-sel" id="quality-sel">
+          <button class="qual-btn" data-q="1" onclick="selectQuality(1)" title="Pessima">😫</button>
+          <button class="qual-btn" data-q="2" onclick="selectQuality(2)" title="Scarsa">😔</button>
+          <button class="qual-btn" data-q="3" onclick="selectQuality(3)" title="Nella norma">😐</button>
+          <button class="qual-btn" data-q="4" onclick="selectQuality(4)" title="Buona">😊</button>
+          <button class="qual-btn" data-q="5" onclick="selectQuality(5)" title="Ottima">🌟</button>
+        </div>
+      </div>
+      <div class="form-group"><label>Note</label><input type="text" id="f-sleep-note" placeholder="Es. Difficoltà ad addormentarmi..."></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Annulla</button>
+      <button class="btn-save" id="btn-save" onclick="saveEntry()">Salva</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let activities = [];
+  let currentTab = 'workout';
+  let selectedIntensity = 3;
+  let selectedQuality = null;
+
+  const actConfig = {
+    corsa:{icon:'🏃'}, palestra:{icon:'💪'}, ciclismo:{icon:'🚴'},
+    yoga:{icon:'🧘'}, nuoto:{icon:'🏊'}, camminata:{icon:'🚶'},
+    calcio:{icon:'⚽'}, boxe:{icon:'🥊'}, altro:{icon:'⚡'}, sonno:{icon:'😴'},
+  };
+  const qualEmoji = { 1:'😫', 2:'😔', 3:'😐', 4:'😊', 5:'🌟' };
+
+  function fmt(dateStr) {
+    return new Date(dateStr).toLocaleDateString('it-IT', { day:'2-digit', month:'short' });
+  }
+  function thisWeek() {
+    const now = new Date(); now.setHours(0,0,0,0);
+    const start = new Date(now); start.setDate(now.getDate() - now.getDay());
+    return activities.filter(a => { const d = new Date(a.date); d.setHours(0,0,0,0); return d >= start && d <= now; });
+  }
+  function thisMonth() {
+    const now = new Date();
+    return activities.filter(a => { const d = new Date(a.date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); });
+  }
+
+  async function loadActivities() {
+    try { const res = await fetch('/api/health/activities'); activities = await res.json(); } catch(e) {}
+    render();
+  }
+
+  function render() { renderOverview(); renderList(); renderWeekChart(); renderSleepSummary(); renderTypeBreakdown(); }
+
+  function renderOverview() {
+    const week = thisWeek().filter(a => a.kind === 'workout');
+    const month = thisMonth().filter(a => a.kind === 'workout');
+    const sleepWeek = activities.filter(a => a.kind === 'sleep').slice(0, 7);
+    document.getElementById('week-count').textContent = week.length;
+    document.getElementById('week-sub').textContent = week.length === 1 ? 'sessione' : 'sessioni';
+    const totalMin = month.reduce((s, a) => s + (a.duration || 0), 0);
+    const h = Math.floor(totalMin / 60), m = totalMin % 60;
+    document.getElementById('total-time').textContent = h > 0 ? `${h}h${m > 0 ? m+'m' : ''}` : `${totalMin}m`;
+    if (sleepWeek.length) {
+      const avg = (sleepWeek.reduce((s, a) => s + a.hours, 0) / sleepWeek.length).toFixed(1);
+      document.getElementById('avg-sleep').textContent = avg + 'h';
+    }
+    document.getElementById('act-streak').textContent = calcStreak();
+    document.getElementById('act-count').textContent = activities.length + ' voci';
+  }
+
+  function calcStreak() {
+    const workouts = activities.filter(a => a.kind === 'workout');
+    if (!workouts.length) return 0;
+    const dates = [...new Set(workouts.map(a => a.date.split('T')[0]))].sort().reverse();
+    let streak = 0; let today = new Date(); today.setHours(0,0,0,0);
+    for (const ds of dates) { const d = new Date(ds); d.setHours(0,0,0,0); if (Math.round((today - d) / 86400000) === streak) streak++; else break; }
+    return streak;
+  }
+
+  function renderList() {
+    const el = document.getElementById('act-list');
+    if (!activities.length) { el.innerHTML = `<div class="act-empty"><div class="empty-icon">💪</div>Nessuna attività ancora.<br>Registra il tuo primo allenamento!</div>`; return; }
+    el.innerHTML = activities.slice(0, 40).map(a => {
+      if (a.kind === 'workout') {
+        const cfg = actConfig[a.type] || actConfig.altro;
+        const dots = [1,2,3,4].map(i => `<div class="${i <= a.intensity ? 'dot-filled' : 'dot-empty'}"></div>`).join('');
+        return `<div class="act-item"><div class="act-icon">${cfg.icon}</div><div class="act-info"><div class="act-title">${a.type.charAt(0).toUpperCase() + a.type.slice(1)}</div><div class="act-meta">${fmt(a.date)}${a.note ? ' · ' + a.note : ''}</div></div><div class="act-right"><div class="intensity-dots">${dots}</div><div class="act-duration">${a.duration}m</div><button class="act-delete" onclick="deleteEntry(${a.id})">✕</button></div></div>`;
+      } else {
+        return `<div class="act-item"><div class="act-icon">😴</div><div class="act-info"><div class="act-title">Sonno — ${a.hours}h</div><div class="act-meta">${fmt(a.date)} · qualità ${qualEmoji[a.quality] || '—'}${a.note ? ' · ' + a.note : ''}</div></div><div class="act-right"><button class="act-delete" onclick="deleteEntry(${a.id})">✕</button></div></div>`;
+      }
+    }).join('');
+  }
+
+  function renderWeekChart() {
+    const el = document.getElementById('week-bars');
+    const days = ['D','L','M','M','G','V','S'];
+    const today = new Date(); today.setHours(0,0,0,0);
+    const cols = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      const ds = d.toISOString().split('T')[0];
+      const dayActs = activities.filter(a => a.kind === 'workout' && a.date.split('T')[0] === ds);
+      const totalMin = dayActs.reduce((s, a) => s + (a.duration || 0), 0);
+      cols.push({ totalMin, isToday: i === 0, label: days[d.getDay()] });
+    }
+    const maxMin = Math.max(...cols.map(c => c.totalMin), 1);
+    el.innerHTML = cols.map(c => `<div class="wbar-col"><div class="wbar-wrap"><div class="wbar-fill ${c.isToday ? 'active' : ''} ${!c.totalMin ? 'rest' : ''}" style="height:${c.totalMin ? (c.totalMin / maxMin * 100) : 8}%"></div></div><div class="wbar-label" style="${c.isToday ? 'color:var(--accent)' : ''}">${c.label}</div></div>`).join('');
+  }
+
+  function renderSleepSummary() {
+    const sleepData = activities.filter(a => a.kind === 'sleep').slice(0, 7);
+    if (!sleepData.length) return;
+    const avg = (sleepData.reduce((s, a) => s + a.hours, 0) / sleepData.length).toFixed(1);
+    const avgQ = (sleepData.reduce((s, a) => s + (a.quality || 3), 0) / sleepData.length).toFixed(1);
+    const best = Math.max(...sleepData.map(a => a.hours));
+    const worst = Math.min(...sleepData.map(a => a.hours));
+    document.getElementById('sl-avg').textContent = avg + 'h';
+    document.getElementById('sl-qual').textContent = qualEmoji[Math.round(avgQ)] || avgQ;
+    document.getElementById('sl-best').textContent = best + 'h';
+    document.getElementById('sl-worst').textContent = worst + 'h';
+  }
+
+  function renderTypeBreakdown() {
+    const el = document.getElementById('type-list');
+    const workouts = activities.filter(a => a.kind === 'workout');
+    if (!workouts.length) { el.innerHTML = `<div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">—</div>`; return; }
+    const byType = {};
+    workouts.forEach(a => { byType[a.type] = (byType[a.type] || 0) + 1; });
+    const sorted = Object.entries(byType).sort((a,b) => b[1]-a[1]).slice(0,5);
+    el.innerHTML = sorted.map(([type, count]) => {
+      const cfg = actConfig[type] || actConfig.altro;
+      return `<div style="display:flex;align-items:center;justify-content:space-between;font-size:13px;"><span>${cfg.icon} ${type}</span><span style="color:var(--muted)">${count} sess.</span></div>`;
+    }).join('');
+  }
+
+  async function deleteEntry(id) {
+    try { await fetch(`/api/health/activities/${id}`, { method: 'DELETE' }); } catch(e) {}
+    activities = activities.filter(a => a.id !== id);
+    render();
+  }
+
+  function selectIntensity(v) {
+    selectedIntensity = v;
+    document.querySelectorAll('.int-btn').forEach(b => b.classList.toggle('selected', parseInt(b.dataset.int) === v));
+  }
+  function selectQuality(v) {
+    selectedQuality = v;
+    document.querySelectorAll('.qual-btn').forEach(b => b.classList.toggle('selected', parseInt(b.dataset.q) === v));
+  }
+  function switchTab(tab) {
+    currentTab = tab;
+    document.getElementById('tab-workout').classList.toggle('active', tab === 'workout');
+    document.getElementById('tab-sleep').classList.toggle('active', tab === 'sleep');
+    document.getElementById('panel-workout').classList.toggle('active', tab === 'workout');
+    document.getElementById('panel-sleep').classList.toggle('active', tab === 'sleep');
+  }
+  function openModal(tab = 'workout') {
+    switchTab(tab);
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('f-workout-date').value = today;
+    document.getElementById('f-sleep-date').value = today;
+    document.getElementById('modal-overlay').classList.add('open');
+  }
+  function closeModal() {
+    document.getElementById('modal-overlay').classList.remove('open');
+    document.getElementById('f-duration').value = '';
+    document.getElementById('f-workout-note').value = '';
+    document.getElementById('f-sleep-hours').value = '';
+    document.getElementById('f-sleep-note').value = '';
+    selectedIntensity = 3; selectedQuality = null;
+    selectIntensity(3);
+    document.querySelectorAll('.qual-btn').forEach(b => b.classList.remove('selected'));
+  }
+  function handleOverlayClick(e) {
+    if (e.target === document.getElementById('modal-overlay')) closeModal();
+  }
+  async function saveEntry() {
+    const btn = document.getElementById('btn-save');
+    let payload = null;
+    if (currentTab === 'workout') {
+      const type = document.getElementById('f-type').value;
+      const duration = parseInt(document.getElementById('f-duration').value);
+      const date = document.getElementById('f-workout-date').value;
+      const note = document.getElementById('f-workout-note').value.trim();
+      if (!duration || !date) return;
+      payload = { kind: 'workout', type, duration, intensity: selectedIntensity, date, note: note || null };
+    } else {
+      const hours = parseFloat(document.getElementById('f-sleep-hours').value);
+      const date = document.getElementById('f-sleep-date').value;
+      const note = document.getElementById('f-sleep-note').value.trim();
+      const quality = selectedQuality || 3;
+      if (!hours || !date) return;
+      payload = { kind: 'sleep', hours, quality, date, note: note || null };
+    }
+    btn.disabled = true; btn.textContent = 'Salvataggio...';
+    try {
+      await fetch('/api/health/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      await loadActivities();
+    } catch(e) { activities.unshift({ id: Date.now(), ...payload }); render(); }
+    btn.disabled = false; btn.textContent = 'Salva';
+    closeModal();
+  }
+
+  loadActivities();
+</script>
