@@ -28,37 +28,37 @@ def auth():
 
 @app.get("/dashboard")
 def dashboard():
-    return FileResponse(os.path.join(BASE_DIR, "screens", "dashboard.html"))
+    return FileResponse(os.path.join(BASE_DIR, "screens", "index.html"))
 
 
 @app.get("/finance")
 def finance():
-    return FileResponse(os.path.join(BASE_DIR, "screens", "finance.html"))
+    return FileResponse(os.path.join(BASE_DIR, "screens", "index.html"))
 
 
 @app.get("/psychology")
 def psychology():
-    return FileResponse(os.path.join(BASE_DIR, "screens", "psychology.html"))
+    return FileResponse(os.path.join(BASE_DIR, "screens", "index.html"))
 
 
 @app.get("/health")
 def health():
-    return FileResponse(os.path.join(BASE_DIR, "screens", "health.html"))
+    return FileResponse(os.path.join(BASE_DIR, "screens", "index.html"))
 
 
 @app.get("/consciousness")
 def consciousness():
-    return FileResponse(os.path.join(BASE_DIR, "screens", "consciousness.html"))
+    return FileResponse(os.path.join(BASE_DIR, "screens", "index.html"))
 
 
 @app.get("/settings")
 def settings():
-    return FileResponse(os.path.join(BASE_DIR, "screens", "settings.html"))
+    return FileResponse(os.path.join(BASE_DIR, "screens", "index.html"))
 
 
 @app.get("/badges")
 def badges():
-    return FileResponse(os.path.join(BASE_DIR, "screens", "badges.html"))
+    return FileResponse(os.path.join(BASE_DIR, "screens", "index.html"))
 
 
 # ── USER PREFERENCES ─────────────────────────────────────

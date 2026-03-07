@@ -1,0 +1,256 @@
+<!-- Dashboard content -->
+<div class="dash-wrap">
+  <!-- KPI Cards -->
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <span class="kpi-icon">💰</span>
+      <div>
+        <div class="kpi-label">Bilancio</div>
+        <div class="kpi-value" id="kpi-balance">-- €</div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-icon">😊</span>
+      <div>
+        <div class="kpi-label">Umore medio</div>
+        <div class="kpi-value" id="kpi-mood">--</div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-icon">💪</span>
+      <div>
+        <div class="kpi-label">Attività mese</div>
+        <div class="kpi-value" id="kpi-activities">0</div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-icon">🏆</span>
+      <div>
+        <div class="kpi-label">Badge</div>
+        <div class="kpi-value" id="kpi-badges">0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts Grid -->
+  <div class="charts-grid">
+    <div class="chart-card">
+      <h4>Andamento finanziario (7 giorni)</h4>
+      <canvas id="financeChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <h4>Umore giornaliero</h4>
+      <canvas id="moodChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <h4>Distribuzione attività</h4>
+      <canvas id="activitiesChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <h4>Badge recenti</h4>
+      <div class="badge-mini-grid" id="badgeMiniGrid">
+        <!-- Popolato via JS -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  // Variabili globali per i grafici
+  let financeChart, moodChart, activitiesChart;
+
+  async function loadDashStats() {
+    try {
+      const [txRes, psyRes, hlRes] = await Promise.all([
+        fetch('/api/finance/transactions'),
+        fetch('/api/psychology/entries'),
+        fetch('/api/health/activities'),
+      ]);
+      const txs = await txRes.json();
+      const entries = await psyRes.json();
+      const acts = await hlRes.json();
+
+      // --- KPI ---
+      // Bilancio totale
+      if (Array.isArray(txs) && txs.length) {
+        const bal = txs.reduce((s, t) => s + (t.type === 'entrata' ? t.amount : -t.amount), 0);
+        document.getElementById('kpi-balance').textContent = (bal >= 0 ? '+' : '') + bal.toFixed(0) + ' €';
+      } else {
+        document.getElementById('kpi-balance').textContent = '0 €';
+      }
+
+      // Umore medio ultimi 7 giorni
+      if (Array.isArray(entries) && entries.length) {
+        const recent = entries.slice(0, 7);
+        const avg = recent.reduce((s, e) => s + e.mood, 0) / recent.length;
+        const emoji = avg >= 4.5 ? '🌟' : avg >= 3.5 ? '😊' : avg >= 2.5 ? '😐' : '😔';
+        document.getElementById('kpi-mood').textContent = avg.toFixed(1) + ' ' + emoji;
+      } else {
+        document.getElementById('kpi-mood').textContent = '—';
+      }
+
+      // Attività del mese corrente
+      if (Array.isArray(acts)) {
+        const m = new Date().getMonth();
+        const y = new Date().getFullYear();
+        const c = acts.filter(a => {
+          const d = new Date(a.date);
+          return d.getMonth() === m && d.getFullYear() === y;
+        });
+        document.getElementById('kpi-activities').textContent = c.length;
+      }
+
+      // Badge ottenuti
+      let badgesCount = 0;
+      let earnedBadges = [];
+      try {
+        earnedBadges = JSON.parse(localStorage.getItem('alter_badges') || '[]');
+        badgesCount = earnedBadges.length;
+      } catch (e) {}
+      document.getElementById('kpi-badges').textContent = badgesCount;
+
+      // --- GRAFICI ---
+      // Distruggi grafici precedenti se esistono
+      if (financeChart) financeChart.destroy();
+      if (moodChart) moodChart.destroy();
+      if (activitiesChart) activitiesChart.destroy();
+
+      // 1. Grafico finanziario (entrate/uscite ultimi 7 giorni)
+      const last7Days = [...Array(7)].map((_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        return d.toISOString().split('T')[0];
+      }).reverse();
+
+      const incomeData = last7Days.map(day => {
+        return Array.isArray(txs) ? txs.filter(t => t.type === 'entrata' && t.date.startsWith(day)).reduce((s, t) => s + t.amount, 0) : 0;
+      });
+      const expenseData = last7Days.map(day => {
+        return Array.isArray(txs) ? txs.filter(t => t.type === 'uscita' && t.date.startsWith(day)).reduce((s, t) => s + t.amount, 0) : 0;
+      });
+
+      const ctxFinance = document.getElementById('financeChart').getContext('2d');
+      financeChart = new Chart(ctxFinance, {
+        type: 'bar',
+        data: {
+          labels: last7Days.map(d => d.slice(5)), // "MM-GG"
+          datasets: [
+            { label: 'Entrate', data: incomeData, backgroundColor: 'rgba(90, 170, 138, 0.7)' },
+            { label: 'Uscite', data: expenseData, backgroundColor: 'rgba(196, 104, 104, 0.7)' }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: '#786e62' }
+            }
+          },
+          scales: {
+            y: {
+              ticks: { color: '#786e62' }
+            }
+          }
+        }
+      });
+
+      // 2. Grafico umore (ultimi 7 giorni)
+      const moodByDay = last7Days.map(day => {
+        if (!Array.isArray(entries)) return null;
+        const dayEntries = entries.filter(e => e.date.startsWith(day));
+        if (dayEntries.length === 0) return null;
+        return dayEntries.reduce((s, e) => s + e.mood, 0) / dayEntries.length;
+      });
+
+      const ctxMood = document.getElementById('moodChart').getContext('2d');
+      moodChart = new Chart(ctxMood, {
+        type: 'line',
+        data: {
+          labels: last7Days.map(d => d.slice(5)),
+          datasets: [{
+            label: 'Umore medio',
+            data: moodByDay,
+            borderColor: '#c87350',
+            backgroundColor: 'rgba(200, 115, 80, 0.1)',
+            tension: 0.2,
+            spanGaps: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: '#786e62' }
+            }
+          },
+          scales: {
+            y: {
+              min: 1,
+              max: 5,
+              ticks: { stepSize: 1, color: '#786e62' }
+            }
+          }
+        }
+      });
+
+      // 3. Grafico a torta per le attività (categorie)
+      let pieLabels = ['Nessuna attività'];
+      let pieData = [1];
+
+      if (Array.isArray(acts) && acts.length > 0) {
+        const workoutTypes = acts.filter(a => a.kind === 'workout').map(a => a.type);
+        const typeCount = {};
+        workoutTypes.forEach(t => typeCount[t] = (typeCount[t] || 0) + 1);
+        pieLabels = Object.keys(typeCount);
+        pieData = Object.values(typeCount);
+
+        if (pieLabels.length === 0) {
+          pieLabels = ['Nessuna attività'];
+          pieData = [1];
+        }
+      }
+
+      const ctxActivities = document.getElementById('activitiesChart').getContext('2d');
+      activitiesChart = new Chart(ctxActivities, {
+        type: 'doughnut',
+        data: {
+          labels: pieLabels,
+          datasets: [{
+            data: pieData,
+            backgroundColor: ['#c87350', '#5aaa8a', '#b45af0', '#00e4c8', '#a0a4b8'],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: '#786e62' }
+            }
+          }
+        }
+      });
+
+      // 4. Badge mini (icone dei badge guadagnati)
+      const badgeGrid = document.getElementById('badgeMiniGrid');
+      if (badgesCount > 0) {
+        const badgeIcons = ['◎', '◈', '◉', '✦', '◆', '▲', '◇'];
+        badgeGrid.innerHTML = earnedBadges.slice(0, 6).map((id, i) =>
+          `<div class="badge-mini" title="Badge sbloccato">${badgeIcons[i % badgeIcons.length]}</div>`
+        ).join('');
+      } else {
+        badgeGrid.innerHTML = '<div style="color:var(--muted);">Nessun badge ancora</div>';
+      }
+
+    } catch(e) {
+      console.warn('loadDashStats:', e);
+    }
+  }
+
+  // Carica i dati quando il partial viene caricato
+  loadDashStats();
+</script>

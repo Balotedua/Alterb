@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alter — Il tuo spazio personale</title>
+  <script>
+    (function(){
+      if(!localStorage.getItem('sb-cdhsdubmdawrjjupysqx-auth-token')) {
+        window.location.replace('/auth');
+      }
+    })();
+  </script>
+  <script src="/static/js/theme.js"></script>
+  <script>
+    (function(){
+      loadUserTheme();
+    })();
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    :root {
+      --bg: #0c0b09;
+      --bg-card: rgba(255,255,255,0.026);
+      --border: rgba(255,255,255,0.07);
+      --text: #e8e4da;
+      --muted: #786e62;
+      --accent: #c87350;
+      --accent-dim: rgba(200,115,80,0.1);
+      --accent-border: rgba(200,115,80,0.28);
+      --sidebar-w: 248px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    body {
+      display: flex;
+      position: relative;
+    }
+
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.007) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.007) 1px, transparent 1px);
+      background-size: 64px 64px;
+      pointer-events: none; z-index: 0;
+    }
+
+    /* ══ SIDEBAR ══════════════════════════════════════════════ */
+    .sidebar {
+      position: fixed; top: 0; left: 0;
+      width: var(--sidebar-w); height: 100vh;
+      background: rgba(255,255,255,0.016);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      z-index: 10; backdrop-filter: blur(24px);
+      overflow: hidden;
+    }
+
+    .sb-logo {
+      display: flex; align-items: center; gap: 11px;
+      padding: 22px 18px 18px;
+      border-bottom: 1px solid var(--border);
+      text-decoration: none; flex-shrink: 0;
+    }
+    .sb-logo-mark {
+      width: 34px; height: 34px; border-radius: 9px;
+      background: var(--accent-dim); border: 1px solid var(--accent-border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; font-weight: 700; color: var(--accent);
+      letter-spacing: -0.5px; flex-shrink: 0;
+    }
+    .sb-logo-text { display: flex; flex-direction: column; }
+    .sb-name { font-size: 15px; font-weight: 600; color: var(--text); letter-spacing: -0.3px; line-height: 1.2; }
+    .sb-tagline { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+
+    .sb-nav {
+      flex: 1; overflow-y: auto;
+      padding: 10px 10px;
+      display: flex; flex-direction: column; gap: 1px;
+    }
+    .sb-nav::-webkit-scrollbar { width: 3px; }
+    .sb-nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .sb-section-label {
+      font-size: 9.5px; font-weight: 700; letter-spacing: 1.8px;
+      text-transform: uppercase; color: var(--muted);
+      padding: 12px 10px 5px; opacity: 0.5;
+    }
+
+    .sb-item {
+      display: flex; align-items: center; gap: 9px;
+      padding: 8.5px 10px 8.5px 12px; border-radius: 8px;
+      font-size: 13.5px; font-weight: 500; color: var(--muted);
+      text-decoration: none; transition: all 0.15s;
+      position: relative; border: 1px solid transparent;
+    }
+    .sb-item:hover { background: rgba(255,255,255,0.038); color: var(--text); }
+    .sb-item.active {
+      background: var(--accent-dim); border-color: var(--accent-border);
+      color: var(--accent);
+    }
+    .sb-item.active::before {
+      content: ''; position: absolute; left: 0; top: 22%; bottom: 22%;
+      width: 2.5px; border-radius: 0 2px 2px 0; background: var(--accent);
+    }
+    .sb-icon { font-size: 12px; width: 16px; text-align: center; flex-shrink: 0; opacity: 0.85; }
+
+    .sb-footer {
+      padding: 8px 10px 0;
+      border-top: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 1px;
+    }
+    .sb-user {
+      display: flex; align-items: center; gap: 9px;
+      padding: 12px 12px; margin-top: 2px;
+    }
+    .sb-user-av {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--accent-dim); border: 1px solid var(--accent-border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: var(--accent);
+      flex-shrink: 0; overflow: hidden;
+    }
+    .sb-user-av img { width: 100%; height: 100%; object-fit: cover; display: none; }
+    .sb-user-info { flex: 1; min-width: 0; }
+    .sb-user-name { font-size: 12.5px; font-weight: 500; color: var(--text); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sb-user-sub { font-size: 10.5px; color: var(--muted); }
+    .sb-logout {
+      background: none; border: none; cursor: pointer; color: var(--muted);
+      font-size: 14px; padding: 4px; transition: color 0.15s; flex-shrink: 0; line-height: 1;
+    }
+    .sb-logout:hover { color: var(--text); }
+
+    /* ══ MAIN ══════════════════════════════════════════════════ */
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1; display: flex; flex-direction: column;
+      height: 100vh; overflow: hidden;
+      position: relative; z-index: 1;
+    }
+
+    /* Header */
+    .dash-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 26px 48px 20px; flex-shrink: 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .dash-greeting h2 {
+      font-size: 1.45rem; font-weight: 600; letter-spacing: -0.5px;
+    }
+    .dash-greeting p { font-size: 13px; color: var(--muted); margin-top: 3px; }
+
+    /* Content area */
+    .content-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 48px 32px;
+    }
+    .content-area::-webkit-scrollbar { width: 4px; }
+    .content-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ══ MOBILE TOPBAR ══════════════════════════════════════ */
+    .mobile-topbar {
+      display: none; position: fixed; top: 0; left: 0; right: 0; height: 54px;
+      background: var(--bg); border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(24px); align-items: center;
+      justify-content: space-between; padding: 0 16px; z-index: 20;
+    }
+    .mob-logo { display: flex; align-items: center; gap: 8px; text-decoration: none; }
+    .mob-logo-mark {
+      width: 28px; height: 28px; border-radius: 7px;
+      background: var(--accent-dim); border: 1px solid var(--accent-border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; color: var(--accent);
+    }
+    .mob-logo-text { font-size: 15px; font-weight: 600; color: var(--text); letter-spacing: -0.2px; }
+    .mob-page-title { font-size: 13px; font-weight: 500; color: var(--muted); }
+    .hamburger {
+      width: 36px; height: 36px; border: none; background: none; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 0;
+    }
+    .hamburger span { width: 18px; height: 1.5px; background: var(--muted); border-radius: 2px; }
+    .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); z-index: 9; }
+    .sidebar-overlay.open { display: block; }
+
+    /* ══ RESPONSIVE ═════════════════════════════════════════ */
+    @media (max-width: 768px) {
+      .sidebar { transform: translateX(-100%); transition: transform 0.28s ease; }
+      .sidebar.open { transform: translateX(0); }
+      .mobile-topbar { display: flex; }
+      .main { margin-left: 0; }
+      .dash-header { padding: 68px 16px 14px; flex-direction: column; gap: 10px; }
+      .content-area { padding: 20px 16px 40px; }
+    }
+    @media (max-width: 480px) {
+      .dash-header { padding: 64px 12px 12px; }
+      .content-area { padding: 16px 12px 32px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="mobile-topbar">
+    <a href="/dashboard" class="mob-logo">
+      <div class="mob-logo-mark">A</div>
+      <span class="mob-logo-text">Alter</span>
+    </a>
+    <span class="mob-page-title" id="page-title">Dashboard</span>
+    <button class="hamburger" onclick="toggleSidebar()"><span></span><span></span><span></span></button>
+  </div>
+
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+  <aside class="sidebar" id="sidebar">
+    <a href="/dashboard" class="sb-logo">
+      <div class="sb-logo-mark">A</div>
+      <div class="sb-logo-text">
+        <span class="sb-name">Alter</span>
+        <span class="sb-tagline">Il tuo spazio personale</span>
+      </div>
+    </a>
+    <nav class="sb-nav">
+      <div class="sb-section-label">Core</div>
+      <a href="/dashboard" class="sb-item active" data-route="dashboard"><span class="sb-icon">⌂</span>Dashboard</a>
+      <a href="/finance" class="sb-item" data-route="finance"><span class="sb-icon">◈</span>Finanza</a>
+      <a href="/psychology" class="sb-item" data-route="psychology"><span class="sb-icon">◎</span>Psicologia</a>
+      <a href="/health" class="sb-item" data-route="health"><span class="sb-icon">◉</span>Salute &amp; Fisico</a>
+      <a href="/consciousness" class="sb-item" data-route="consciousness"><span class="sb-icon">✦</span>Coscienza</a>
+      <div class="sb-section-label">Altro</div>
+      <a href="/badges" class="sb-item" data-route="badges"><span class="sb-icon">◆</span>Badge &amp; Obiettivi</a>
+      <a href="/settings" class="sb-item" data-route="settings"><span class="sb-icon">◎</span>Impostazioni</a>
+    </nav>
+    <div class="sb-footer">
+      <div class="sb-user">
+        <div class="sb-user-av" id="sb-av">
+          <img id="sb-av-img" alt="">
+          <span id="sb-av-init">—</span>
+        </div>
+        <div class="sb-user-info">
+          <span class="sb-user-name" id="sb-user-name">Utente</span>
+          <span class="sb-user-sub">Alter Free</span>
+        </div>
+        <button class="sb-logout" onclick="doLogout()" title="Esci">←</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="dash-header">
+      <div class="dash-greeting">
+        <h2 id="greeting-text">Ciao</h2>
+        <p id="greeting-sub">Oggi</p>
+      </div>
+    </div>
+    <div class="content-area" id="content">
+      <!-- Il contenuto delle pagine verrà caricato qui dinamicamente -->
+      <div style="text-align:center; padding: 60px 20px; color: var(--muted);">
+        <div style="font-size: 48px; margin-bottom: 20px;">⌂</div>
+        <h3 style="font-weight: 500; margin-bottom: 10px;">Caricamento...</h3>
+        <p>Alter sta caricando la tua dashboard</p>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/static/js/router.js"></script>
+  <script>
+    // Configurazione Supabase
+    const SUPABASE_URL = 'https://cdhsdubmdawrjjupysqx.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkaHNkdWJtZGF3cmpqdXB5c3F4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3MDcwMTAsImV4cCI6MjA4MzI4MzAxMH0.t90xeUV6VIHHV8iAa7uV3ZNQdtbh8CSXXTnrwXC72mI';
+    const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    async function doLogout() {
+      await _sb.auth.signOut();
+      window.location.replace('/auth');
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('sidebar-overlay').classList.toggle('open');
+    }
+
+    // Aggiorna il saluto
+    const hour = new Date().getHours();
+    const greet = hour < 12 ? 'Buongiorno' : hour < 18 ? 'Buon pomeriggio' : 'Buonasera';
+    const DAYS = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
+    const MONTHS = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+    const now = new Date();
+    const dateStr = DAYS[now.getDay()] + ', ' + now.getDate() + ' ' + MONTHS[now.getMonth()] + ' ' + now.getFullYear();
+
+    try {
+      const prefs = JSON.parse(localStorage.getItem('alter_prefs') || '{}');
+      const firstName = prefs.name ? prefs.name.trim().split(/\s+/)[0] : '';
+      document.getElementById('greeting-text').textContent = greet + (firstName ? ', ' + firstName : '');
+      
+      // Sidebar user avatar
+      const avInit = document.getElementById('sb-av-init');
+      const avImg = document.getElementById('sb-av-img');
+      if (prefs.avatarUrl) {
+        avImg.src = prefs.avatarUrl;
+        avImg.style.display = 'block';
+        avInit.style.display = 'none';
+      } else if (prefs.name) {
+        avInit.textContent = prefs.name.trim().split(/\s+/).map(w => w[0]).slice(0,2).join('').toUpperCase();
+      }
+      if (prefs.name) document.getElementById('sb-user-name').textContent = prefs.name;
+    } catch(e){}
+
+    document.getElementById('greeting-sub').textContent = dateStr;
+  </script>
+</body>
+</html>
