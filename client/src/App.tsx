@@ -14,6 +14,10 @@ const Health = lazy(() => import('@/pages/Health'));
 const Consciousness = lazy(() => import('@/pages/Consciousness'));
 const Badges = lazy(() => import('@/pages/Badges'));
 const Settings = lazy(() => import('@/pages/Settings'));
+const Routine = lazy(() => import('@/pages/Routine'));
+const News = lazy(() => import('@/pages/News'));
+const Career = lazy(() => import('@/pages/Career'));
+const Chatbot = lazy(() => import('@/pages/Chatbot'));
 
 function PageLoader() {
   return (
@@ -43,6 +47,10 @@ export default function App() {
                   <Route path="/consciousness" element={<Consciousness />} />
                   <Route path="/badges" element={<Badges />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route path="/routine" element={<Routine />} />
+                  <Route path="/news" element={<News />} />
+                  <Route path="/career" element={<Career />} />
+                  <Route path="/chatbot" element={<Chatbot />} />
                 </Route>
               </Route>
 

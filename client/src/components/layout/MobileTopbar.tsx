@@ -4,10 +4,14 @@ import { useAuth } from '@/hooks/useAuth';
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: '🏠' },
+  { to: '/chatbot', label: 'Chatbot', icon: '✦' },
   { to: '/finance', label: 'Finanze', icon: '💰' },
   { to: '/psychology', label: 'Psicologia', icon: '🧠' },
   { to: '/health', label: 'Salute', icon: '💪' },
   { to: '/consciousness', label: 'Coscienza', icon: '📝' },
+  { to: '/routine', label: 'Routine', icon: '⏱️' },
+  { to: '/news', label: 'News', icon: '📰' },
+  { to: '/career', label: 'Carriera', icon: '🚀' },
   { to: '/badges', label: 'Badge', icon: '🏆' },
   { to: '/settings', label: 'Impostazioni', icon: '⚙️' },
 ] as const;

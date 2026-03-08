@@ -1,39 +1,67 @@
-import { useTransactions } from '@/hooks/useTransactions';
+import { useMonthlyStats } from '@/hooks/useFinance';
 import { formatCurrency } from '@/utils/formatters';
-import { Card } from '@/components/ui';
 
-export function KPICards() {
-  const { data: transactions = [], isPending } = useTransactions();
+export function FinanceKPICards() {
+  const { income, expenses, balance, savingsRate, transactionCount } = useMonthlyStats();
 
-  const totals = transactions.reduce(
-    (acc, t) => {
-      if (t.type === 'income') acc.income += t.amount;
-      else acc.expense += t.amount;
-      return acc;
+  const cards = [
+    {
+      icon: '💳',
+      label: 'Saldo mese',
+      value: formatCurrency(balance),
+      color: balance >= 0 ? '#22c55e' : '#ef4444',
+      badge: balance >= 0 ? 'positive' : 'negative',
+      badgeText: balance >= 0 ? '▲ Attivo' : '▼ Deficit',
     },
-    { income: 0, expense: 0 },
-  );
+    {
+      icon: '📈',
+      label: 'Entrate',
+      value: formatCurrency(income),
+      color: '#22c55e',
+      badge: null,
+      badgeText: null,
+    },
+    {
+      icon: '📉',
+      label: 'Uscite',
+      value: formatCurrency(expenses),
+      color: '#ef4444',
+      badge: null,
+      badgeText: null,
+    },
+    {
+      icon: '🎯',
+      label: 'Risparmio',
+      value: `${savingsRate}%`,
+      color: 'var(--accent)',
+      badge: null,
+      badgeText: `${transactionCount ?? 0} transazioni`,
+    },
+  ];
 
-  const balance = totals.income - totals.expense;
-
-  if (isPending) return <div className="kpi-cards kpi-cards--skeleton" aria-busy="true" />;
+  const accentColors = ['#22c55e', '#22c55e', '#ef4444', 'var(--accent)'];
 
   return (
-    <div className="kpi-cards">
-      <Card>
-        <p className="kpi__label">Saldo</p>
-        <p className="kpi__value" style={{ color: balance >= 0 ? 'var(--accent)' : '#ef4444' }}>
-          {formatCurrency(balance)}
-        </p>
-      </Card>
-      <Card>
-        <p className="kpi__label">Entrate</p>
-        <p className="kpi__value">{formatCurrency(totals.income)}</p>
-      </Card>
-      <Card>
-        <p className="kpi__label">Uscite</p>
-        <p className="kpi__value">{formatCurrency(totals.expense)}</p>
-      </Card>
+    <div className="fin-kpi-grid">
+      {cards.map((card, i) => (
+        <div
+          key={i}
+          className="fin-kpi-card"
+          style={{ '--fin-kpi-accent': accentColors[i] } as React.CSSProperties}
+        >
+          <span className="fin-kpi-icon">{card.icon}</span>
+          <div className="fin-kpi-label">{card.label}</div>
+          <div className="fin-kpi-value" style={{ color: card.color }}>
+            {card.value}
+          </div>
+          {card.badge && (
+            <span className={`fin-kpi-badge ${card.badge}`}>{card.badgeText}</span>
+          )}
+          {!card.badge && card.badgeText && (
+            <span className="fin-kpi-sub">{card.badgeText}</span>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
