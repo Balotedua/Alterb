@@ -174,10 +174,21 @@ function autoMapColumns(headers: string[]): { date: string; amount: string; desc
   }));
 
   const pick = (role: 'date' | 'amt' | 'desc', used: Set<string>) => {
-    const best = [...scored]
+    const candidates = [...scored]
       .filter((s) => !used.has(s.h) && s[role] > 0)
-      .sort((a, b) => b[role] - a[role])[0];
-    return best?.h ?? '';
+      .sort((a, b) => {
+        // Ordina per punteggio decrescente
+        if (b[role] !== a[role]) return b[role] - a[role];
+        // Se il punteggio è uguale, dai priorità alle colonne che contengono "descrizione" o "description"
+        const aLower = a.h.toLowerCase();
+        const bLower = b.h.toLowerCase();
+        const aHasDesc = aLower.includes('descrizione') || aLower.includes('description');
+        const bHasDesc = bLower.includes('descrizione') || bLower.includes('description');
+        if (aHasDesc && !bHasDesc) return -1;
+        if (!aHasDesc && bHasDesc) return 1;
+        return 0;
+      });
+    return candidates[0]?.h ?? '';
   };
 
   const used = new Set<string>();
