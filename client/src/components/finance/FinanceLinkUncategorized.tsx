@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useUncategorizedTransactions, useRecategorizeContains } from '@/hooks/useFinance';
 import { CAT_CONFIG } from '@/utils/constants';
 import { formatCurrency, formatDate } from '@/utils/formatters';
@@ -7,10 +7,26 @@ export function FinanceLinkUncategorized() {
   const { data: uncategorized } = useUncategorizedTransactions();
   const recategorizeContains = useRecategorizeContains();
   const [selectedPattern, setSelectedPattern] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string>(CAT_CONFIG[0]?.id || '');
+  const [selectedCategory, setSelectedCategory] = useState<string>(CAT_CONFIG?.[0]?.id || '');
   const [newCategory, setNewCategory] = useState<string>('');
+  const [isClient, setIsClient] = useState(false);
 
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // Se non siamo sul client, non renderizzare nulla per evitare mismatch con SSR
+  if (!isClient) {
+    return null;
+  }
+
+  // Se non ci sono transazioni non associate, non mostrare nulla
   if (!uncategorized || uncategorized.length === 0) {
+    return null;
+  }
+
+  // Se CAT_CONFIG non è disponibile, non mostrare il componente
+  if (!CAT_CONFIG || CAT_CONFIG.length === 0) {
     return null;
   }
 

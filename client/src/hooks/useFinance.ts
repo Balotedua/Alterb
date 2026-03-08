@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
 import { useAuth } from './useAuth';
 import type { Transaction, TransactionInput } from '@/types';
+import { CAT_CONFIG } from '@/utils/constants';
 
 const QUERY_KEY = ['transactions'];
 
@@ -94,9 +95,10 @@ export function useRecategorizeContains() {
 // Ottieni transazioni non associate (categoria non presente in CAT_CONFIG)
 export function useUncategorizedTransactions() {
   const { data: transactions } = useTransactions();
-  const { CAT_CONFIG } = require('@/utils/constants'); // per evitare dipendenze circolari
 
   const uncategorized = transactions?.filter(t => {
+    // Se non ci sono categorie configurate, considera tutte come associate
+    if (!CAT_CONFIG || CAT_CONFIG.length === 0) return false;
     // Se la categoria non è in CAT_CONFIG, considerala non associata
     return !CAT_CONFIG.some((c: any) => c.id === t.category);
   }) || [];
