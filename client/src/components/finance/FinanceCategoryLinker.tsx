@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Tag, ChevronDown, Check } from 'lucide-react';
+import { Tag, ChevronDown, Check, Plus } from 'lucide-react';
 import { useTransactions, useRecategorize } from '@/hooks/useFinance';
 import { CAT_CONFIG } from '@/utils/constants';
 import type { Transaction } from '@/types';
@@ -36,6 +36,7 @@ export function FinanceCategoryLinker() {
   const recategorize = useRecategorize();
 
   const [selections, setSelections] = useState<Record<string, string>>({});
+  const [newCategoryInputs, setNewCategoryInputs] = useState<Record<string, string>>({});
   const [done,       setDone      ] = useState<Set<string>>(new Set());
   const [pending,    setPending   ] = useState<string | null>(null);
 
@@ -44,12 +45,26 @@ export function FinanceCategoryLinker() {
   if (groups.length === 0) return null;
 
   const handleLink = async (group: Group) => {
-    const cat = selections[group.key];
+    let cat = selections[group.key];
+    // Se la selezione è "new", usa il valore dell'input
+    if (cat === 'new') {
+      cat = newCategoryInputs[group.key]?.trim();
+      if (!cat) return;
+    }
     if (!cat) return;
     setPending(group.key);
     try {
       await recategorize.mutateAsync({ description: group.description, category: cat });
       setDone((prev) => new Set([...prev, group.key]));
+      // Pulisci gli stati per questo gruppo
+      setSelections(prev => {
+        const { [group.key]: _, ...rest } = prev;
+        return rest;
+      });
+      setNewCategoryInputs(prev => {
+        const { [group.key]: _, ...rest } = prev;
+        return rest;
+      });
     } finally {
       setPending(null);
     }
@@ -81,6 +96,8 @@ export function FinanceCategoryLinker() {
         {visibleGroups.map((g) => {
           const isPending = pending === g.key;
           const cat = selections[g.key] ?? '';
+          const showNewInput = cat === 'new';
+          const newCatValue = newCategoryInputs[g.key] ?? '';
 
           return (
             <div key={g.key} className="fin-linker-row">
@@ -102,9 +119,17 @@ export function FinanceCategoryLinker() {
                   <select
                     className="fin-linker-sel"
                     value={cat}
-                    onChange={(e) =>
-                      setSelections((prev) => ({ ...prev, [g.key]: e.target.value }))
-                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSelections((prev) => ({ ...prev, [g.key]: value }));
+                      // Se non è "new", pulisci l'input
+                      if (value !== 'new') {
+                        setNewCategoryInputs(prev => {
+                          const { [g.key]: _, ...rest } = prev;
+                          return rest;
+                        });
+                      }
+                    }}
                     disabled={isPending}
                   >
                     <option value="">Categoria…</option>
@@ -113,14 +138,32 @@ export function FinanceCategoryLinker() {
                         {c.icon} {c.label}
                       </option>
                     ))}
+                    <option value="new">
+                      <Plus size={11} /> Nuova categoria
+                    </option>
                   </select>
                   <ChevronDown size={11} className="fin-linker-arrow" />
                 </div>
 
+                {showNewInput && (
+                  <div className="fin-linker-new-input-wrap">
+                    <input
+                      type="text"
+                      className="fin-linker-new-input"
+                      placeholder="Nome nuova categoria"
+                      value={newCatValue}
+                      onChange={(e) =>
+                        setNewCategoryInputs((prev) => ({ ...prev, [g.key]: e.target.value }))
+                      }
+                      disabled={isPending}
+                    />
+                  </div>
+                )}
+
                 <button
                   className="fin-linker-btn"
                   onClick={() => handleLink(g)}
-                  disabled={!cat || isPending}
+                  disabled={(!cat || (cat === 'new' && !newCatValue.trim())) || isPending}
                 >
                   {isPending ? '…' : 'Collega'}
                 </button>
