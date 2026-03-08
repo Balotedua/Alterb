@@ -49,8 +49,9 @@ export function FinanceCategoryLinker() {
     // Se la selezione è "new", usa il valore dell'input
     if (cat === 'new') {
       cat = newCategoryInputs[group.key];
-      if (!cat || !cat.trim()) return;
+      if (!cat) return;
       cat = cat.trim();
+      if (!cat) return;
     }
     if (!cat) return;
     setPending(group.key);
@@ -171,7 +172,7 @@ export function FinanceCategoryLinker() {
                   disabled={
                     isPending ||
                     !cat ||
-                    (cat === 'new' && (!newCatValue || !newCatValue.trim()))
+                    (cat === 'new' && !newCatValue)
                   }
                 >
                   {isPending ? '…' : 'Collega'}
