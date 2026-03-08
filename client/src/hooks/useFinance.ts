@@ -55,6 +55,45 @@ export function useAddTransaction() {
   });
 }
 
+// Ricategorizza tutte le transazioni con una certa descrizione
+export function useRecategorize() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({ description, category }: { description: string; category: string }) => {
+      const { error } = await supabase
+        .from('transactions')
+        .update({ category })
+        .eq('user_id', user!.id)
+        .ilike('description', description); // case-insensitive exact match
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: QUERY_KEY }),
+  });
+}
+
+// Importa transazioni in bulk (da CSV)
+export function useBulkAddTransactions() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async (inputs: TransactionInput[]) => {
+      if (!user) throw new Error('Utente non autenticato');
+      const rows = inputs.map((input) => ({
+        ...input,
+        user_id: user.id,
+        created_at: new Date().toISOString(),
+      }));
+      const { error } = await supabase.from('transactions').insert(rows);
+      if (error) throw error;
+      return rows.length;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: QUERY_KEY }),
+  });
+}
+
 // Elimina una transazione
 export function useDeleteTransaction() {
   const qc = useQueryClient();

@@ -3,6 +3,7 @@ import { FinanceChart } from '@/components/finance/FinanceChart';
 import { FinanceTransactionForm } from '@/components/finance/FinanceTransactionForm';
 import { FinanceTransactionList } from '@/components/finance/FinanceTransactionList';
 import { FinanceCategories } from '@/components/finance/FinanceCategories';
+import { FinanceCsvImport } from '@/components/finance/FinanceCsvImport';
 import './Finance.css';
 
 export default function Finance() {
@@ -24,9 +25,10 @@ export default function Finance() {
           <FinanceTransactionList />
         </div>
 
-        {/* Right col: form + categories — viene prima su mobile via CSS order */}
+        {/* Right col: form + CSV import + categories — viene prima su mobile via CSS order */}
         <div className="fin-col fin-col-right">
           <FinanceTransactionForm />
+          <FinanceCsvImport />
           <FinanceCategories />
         </div>
       </div>
