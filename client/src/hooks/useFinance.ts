@@ -92,15 +92,15 @@ export function useRecategorizeContains() {
   });
 }
 
-// Ottieni transazioni non associate (categoria non presente in CAT_CONFIG)
+// Ottieni transazioni non associate (categoria non presente in CAT_CONFIG o categoria 'other')
 export function useUncategorizedTransactions() {
   const { data: transactions } = useTransactions();
 
   const uncategorized = transactions?.filter(t => {
     // Se non ci sono categorie configurate, considera tutte come associate
     if (!CAT_CONFIG || CAT_CONFIG.length === 0) return false;
-    // Se la categoria non è in CAT_CONFIG, considerala non associata
-    return !CAT_CONFIG.some((c: any) => c.id === t.category);
+    // Se la categoria è 'other' o non è in CAT_CONFIG, considerala non associata
+    return t.category === 'other' || !CAT_CONFIG.some((c: any) => c.id === t.category);
   }) || [];
 
   return { data: uncategorized };
