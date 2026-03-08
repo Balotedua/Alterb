@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import { AuthProvider } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
@@ -31,6 +32,11 @@ export default function App() {
   return (
     <AuthProvider>
       <ThemeProvider>
+        <Toaster
+          position="top-right"
+          toastOptions={{ unstyled: true }}
+          richColors={false}
+        />
         <BrowserRouter>
           <Suspense fallback={<PageLoader />}>
             <Routes>
