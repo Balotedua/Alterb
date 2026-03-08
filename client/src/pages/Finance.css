@@ -777,6 +777,182 @@
   .fin-linker-btn    { width: 100%; }
 }
 
+/* ─── Link Uncategorized ───────────────────────────────────────────────────── */
+.fin-uncat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.fin-uncat-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--bg);
+  animation: fin-fade-up 0.3s ease both;
+}
+
+.fin-uncat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.fin-uncat-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.fin-uncat-desc {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  display: block;
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+
+.fin-uncat-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.fin-uncat-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.fin-uncat-right .input {
+  min-width: 140px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+}
+
+.fin-uncat-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+}
+
+.fin-uncat-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.fin-uncat-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fin-uncat-btn.primary {
+  background: #22c55e;
+}
+
+.fin-uncat-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.fin-uncat-detail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.fin-uncat-type {
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+}
+
+.fin-uncat-type.income {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.fin-uncat-type.expense {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.fin-uncat-more {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding-top: 4px;
+}
+
+.fin-uncat-new {
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+  margin-top: 20px;
+}
+
+.fin-uncat-new h4 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.fin-uncat-new-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.fin-uncat-new-form .input {
+  padding: 10px 12px;
+  font-size: 0.85rem;
+}
+
+.fin-uncat-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .fin-uncat-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .fin-uncat-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .fin-uncat-right .input {
+    flex: 1;
+  }
+
+  .fin-uncat-new-form {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ─── Responsive ────────────────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
   .fin-grid {
@@ -801,4 +977,12 @@
   /* Delete always visible on mobile — already is, but ensure min tap target */
   .fin-item-del { width: 34px; height: 34px; font-size: 0.9rem; }
   .fin-item { padding: 11px 12px; }
+
+  .fin-uncat-item {
+    padding: 12px;
+  }
+
+  .fin-uncat-new-form {
+    grid-template-columns: 1fr;
+  }
 }
