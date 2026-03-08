@@ -5,7 +5,10 @@
       "Bash(.venv/Scripts/pip install:*)",
       "Bash(\"C:\\\\Users\\\\danie\\\\Desktop\\\\vercelesercizio\\\\supabase_client.py\":*)",
       "Bash(\"C:\\\\Users\\\\danie\\\\Desktop\\\\vercelesercizio\\\\.env\":*)",
-      "Bash(printf:*)"
+      "Bash(printf:*)",
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(npx vite:*)"
     ]
   }
 }

@@ -1,6 +1,0 @@
-{
-  "name": "alterb",
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index" }
-  ]
-}
