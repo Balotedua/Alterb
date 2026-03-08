@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { chatWithDeepSeek, DeepSeekError, type ChatMessage } from '@/services/deepseek';
 
 interface Message {
   id: number;
@@ -16,33 +17,26 @@ const SUGGESTIONS = [
   'Suggerisci un obiettivo di carriera',
 ];
 
-const REPLIES: [RegExp, string][] = [
-  [/ciao|salve|hey/i, 'Ciao! Sono Alter, il tuo assistente personale. Come posso aiutarti oggi?'],
-  [/finanz|soldi|spese|budget/i, 'Vai nella sezione Finanze per tracciare entrate e uscite. Ti aiuto ad analizzare i pattern di spesa nel tempo.'],
-  [/umore|mood|sento|sto/i, 'Registra il tuo umore ogni giorno nella sezione Psicologia. Con il tempo emergeranno pattern interessanti.'],
-  [/sonno|dorm|riposo/i, 'Il sonno è fondamentale. Vai in Salute per loggare le ore di sonno e migliorare le tue abitudini.'],
-  [/routine|abitudin|giornata/i, 'La sezione Routine ti aiuta a strutturare la giornata. Piccoli passi quotidiani fanno la differenza.'],
-  [/carrie|lavoro|obiettivo|professionale/i, 'Vai nella sezione Carriera per tracciare obiettivi professionali e mappare le tue competenze.'],
-  [/news|notizie|interesse/i, 'Configura i tuoi interessi nella sezione News per ricevere contenuti su misura per te.'],
-  [/badge|livello|xp|punti/i, 'I badge si sbloccano usando le varie sezioni di Alter. Vai in Badge per vedere i tuoi progressi!'],
-  [/consiglio|produttiv|miglior/i, 'Il mio consiglio: traccia una cosa alla volta. Inizia con il modulo che ti preme di più e costruisci l\'abitudine.'],
-  [/appunt|nota|coscienza/i, 'Vai in Coscienza & Appunti per journaling, riflessioni e note personali.'],
-];
-
-function getBotReply(text: string): string {
-  for (const [pattern, reply] of REPLIES) {
-    if (pattern.test(text)) return reply;
-  }
-  return 'Sono qui per aiutarti a tracciare e migliorare la tua vita. Prova a chiedermi di finanze, umore, salute, routine o carriera.';
-}
-
 function formatTime(d: Date) {
   return d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 }
 
+/** Converte i messaggi UI in formato API (escludendo il messaggio di benvenuto iniziale) */
+function toApiHistory(messages: Message[]): ChatMessage[] {
+  return messages
+    .filter((m) => m.id !== 0) // skip welcome message
+    .map((m) => ({
+      role: m.from === 'user' ? 'user' : 'assistant',
+      content: m.text,
+    }));
+}
+
 export default function Chatbot() {
   const { user } = useAuth();
-  const firstName = user?.email?.split('@')[0] ?? 'utente';
+  const firstName =
+    (user?.user_metadata?.['name'] as string | undefined)?.trim() ||
+    user?.email?.split('@')[0] ||
+    'utente';
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -54,6 +48,7 @@ export default function Chatbot() {
   ]);
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -61,20 +56,43 @@ export default function Chatbot() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, typing]);
 
-  const sendMessage = (text: string) => {
+  const sendMessage = async (text: string) => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed || typing) return;
 
     const userMsg: Message = { id: Date.now(), from: 'user', text: trimmed, ts: new Date() };
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
     setTyping(true);
+    setError(null);
 
-    setTimeout(() => {
-      const reply = getBotReply(trimmed);
+    try {
+      // Passa la history completa incluso il nuovo messaggio utente
+      const history = toApiHistory([...messages, userMsg]);
+      const reply = await chatWithDeepSeek(history);
+      setMessages((prev) => [
+        ...prev,
+        { id: Date.now() + 1, from: 'bot', text: reply, ts: new Date() },
+      ]);
+    } catch (err) {
+      const msg =
+        err instanceof DeepSeekError
+          ? err.message
+          : 'Errore di connessione. Riprova tra poco.';
+      setError(msg);
+      // Aggiunge un messaggio di errore inline nel chat
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now() + 1,
+          from: 'bot',
+          text: `⚠️ ${msg}`,
+          ts: new Date(),
+        },
+      ]);
+    } finally {
       setTyping(false);
-      setMessages((prev) => [...prev, { id: Date.now() + 1, from: 'bot', text: reply, ts: new Date() }]);
-    }, 900 + Math.random() * 700);
+    }
   };
 
   const handleKey = (e: React.KeyboardEvent) => {
@@ -133,6 +151,8 @@ export default function Chatbot() {
         </div>
       )}
 
+      {error && <p className="chatbot-error">{error}</p>}
+
       <div className="chatbot-input-wrap">
         <div className="chatbot-input-row">
           <input
@@ -144,6 +164,7 @@ export default function Chatbot() {
             onKeyDown={handleKey}
             placeholder="Scrivi un messaggio ad Alter..."
             autoComplete="off"
+            disabled={typing}
           />
           <button
             className="chatbot-send"

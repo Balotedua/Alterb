@@ -4,6 +4,7 @@ const envSchema = z.object({
   VITE_SUPABASE_URL: z.string().url('VITE_SUPABASE_URL must be a valid URL'),
   VITE_SUPABASE_ANON_KEY: z.string().min(1, 'VITE_SUPABASE_ANON_KEY is required'),
   VITE_API_BASE_URL: z.string().optional().default('/api'),
+  VITE_DEEPSEEK_API_KEY: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(import.meta.env);
