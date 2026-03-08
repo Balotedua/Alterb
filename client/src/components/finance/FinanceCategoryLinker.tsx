@@ -48,8 +48,9 @@ export function FinanceCategoryLinker() {
     let cat = selections[group.key];
     // Se la selezione è "new", usa il valore dell'input
     if (cat === 'new') {
-      cat = newCategoryInputs[group.key]?.trim();
-      if (!cat) return;
+      cat = newCategoryInputs[group.key];
+      if (!cat || !cat.trim()) return;
+      cat = cat.trim();
     }
     if (!cat) return;
     setPending(group.key);
@@ -122,8 +123,14 @@ export function FinanceCategoryLinker() {
                     onChange={(e) => {
                       const value = e.target.value;
                       setSelections((prev) => ({ ...prev, [g.key]: value }));
-                      // Se non è "new", pulisci l'input
-                      if (value !== 'new') {
+                      // Se è "new", imposta un valore vuoto in newCategoryInputs
+                      if (value === 'new') {
+                        setNewCategoryInputs(prev => ({
+                          ...prev,
+                          [g.key]: prev[g.key] || ''
+                        }));
+                      } else {
+                        // Se non è "new", pulisci l'input
                         setNewCategoryInputs(prev => {
                           const { [g.key]: _, ...rest } = prev;
                           return rest;
@@ -135,7 +142,7 @@ export function FinanceCategoryLinker() {
                     <option value="">Categoria…</option>
                     {CAT_CONFIG.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.icon} {c.label}
+                        {c.label}
                       </option>
                     ))}
                     <option value="new">➕ Nuova categoria</option>
@@ -164,7 +171,7 @@ export function FinanceCategoryLinker() {
                   disabled={
                     isPending ||
                     !cat ||
-                    (cat === 'new' && !newCatValue.trim())
+                    (cat === 'new' && (!newCatValue || !newCatValue.trim()))
                   }
                 >
                   {isPending ? '…' : 'Collega'}
