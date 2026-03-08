@@ -4,6 +4,7 @@ import { FinanceTransactionForm } from '@/components/finance/FinanceTransactionF
 import { FinanceTransactionList } from '@/components/finance/FinanceTransactionList';
 import { FinanceCategories } from '@/components/finance/FinanceCategories';
 import { FinanceCsvImport } from '@/components/finance/FinanceCsvImport';
+import { FinanceLinkUncategorized } from '@/components/finance/FinanceLinkUncategorized';
 import './Finance.css';
 
 export default function Finance() {
@@ -30,6 +31,7 @@ export default function Finance() {
           <FinanceTransactionForm />
           <FinanceCsvImport />
           <FinanceCategories />
+          <FinanceLinkUncategorized />
         </div>
       </div>
     </div>

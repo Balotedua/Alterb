@@ -73,6 +73,37 @@ export function useRecategorize() {
   });
 }
 
+// Ricategorizza tutte le transazioni la cui descrizione contiene una certa stringa
+export function useRecategorizeContains() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({ pattern, category }: { pattern: string; category: string }) => {
+      const { error } = await supabase
+        .from('transactions')
+        .update({ category })
+        .eq('user_id', user!.id)
+        .ilike('description', `%${pattern}%`); // contiene la stringa
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: QUERY_KEY }),
+  });
+}
+
+// Ottieni transazioni non associate (categoria non presente in CAT_CONFIG)
+export function useUncategorizedTransactions() {
+  const { data: transactions } = useTransactions();
+  const { CAT_CONFIG } = require('@/utils/constants'); // per evitare dipendenze circolari
+
+  const uncategorized = transactions?.filter(t => {
+    // Se la categoria non è in CAT_CONFIG, considerala non associata
+    return !CAT_CONFIG.some((c: any) => c.id === t.category);
+  }) || [];
+
+  return { data: uncategorized };
+}
+
 // Importa transazioni in bulk (da CSV)
 export function useBulkAddTransactions() {
   const qc = useQueryClient();
