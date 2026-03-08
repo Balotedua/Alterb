@@ -146,6 +146,14 @@ const DESC_HINTS = [
   'dati aggiuntivi', 'note aggiuntive', 'product', 'prodotto',
   'commerciante', 'pagamento a', 'pagamento da', 'mittente', 'destinatario',
   'title', 'titolo', 'abstract', 'comment', 'commento',
+  'movimento', 'operazione', 'transaction', 'transazione',
+  'addebito', 'accredito', 'bonifico', 'pagamento', 'rimborso',
+  'ricevuta', 'fattura', 'invoice', 'receipt',
+  'desc', 'caus', 'note', 'info', 'detail',
+  'descrizione movimento', 'descrizione transazione', 'descrizione pagamento',
+  'causale movimento', 'causale transazione', 'causale pagamento',
+  'descrizione addebito', 'descrizione accredito', 'descrizione bonifico',
+  'descrizione rimborso', 'causale rimborso',
 ];
 
 function colScore(col: string, hints: string[]): number {
@@ -175,7 +183,25 @@ function autoMapColumns(headers: string[]): { date: string; amount: string; desc
   const used = new Set<string>();
   const date = pick('date', used); used.add(date);
   const amount = pick('amt', used); used.add(amount);
-  const description = pick('desc', used);
+  let description = pick('desc', used);
+  
+  // Se non troviamo una descrizione, proviamo a usare la prima colonna che non è data o importo
+  if (!description) {
+    for (const header of headers) {
+      if (header !== date && header !== amount) {
+        // Preferiamo colonne che sembrano contenere testo (basato su lunghezza media del nome?)
+        // Per ora prendiamo la prima colonna disponibile
+        description = header;
+        break;
+      }
+    }
+  }
+  
+  // Se ancora non abbiamo una descrizione, usiamo la prima colonna disponibile
+  if (!description && headers.length > 0) {
+    description = headers[0];
+  }
+  
   return { date, amount, description };
 }
 
@@ -243,16 +269,43 @@ export function FinanceCsvImport() {
   const parsed: ParsedRow[] = rawRows.map((row) => {
     const rawDate = colDate ? (row[colDate] ?? '') : '';
     const rawAmt  = colAmt  ? (row[colAmt]  ?? '') : '';
-    const rawDesc = colDesc ? (row[colDesc] ?? '') : '';
+    let rawDesc = colDesc ? (row[colDesc] ?? '') : '';
+    
+    // Se rawDesc è vuoto, proviamo a trovare una colonna che potrebbe contenere la descrizione
+    if (!rawDesc.trim()) {
+      // Cerchiamo in tutte le colonne che non sono data o importo
+      for (const [key, value] of Object.entries(row)) {
+        if (key !== colDate && key !== colAmt && value && value.toString().trim().length > 0) {
+          // Prendiamo il primo valore non vuoto che troviamo
+          rawDesc = value.toString().trim();
+          break;
+        }
+      }
+    }
+    
     const date   = normalizeDate(rawDate);
     const amount = normalizeAmount(rawAmt);
     const ok     = date !== null && amount !== null;
     const n      = amount ?? 0;
+    
+    // Usiamo rawDesc se non è vuoto, altrimenti un valore predefinito più specifico
+    let description = rawDesc.trim();
+    if (!description) {
+      // Se l'importo è negativo, potrebbe essere una spesa, altrimenti un'entrata
+      if (n < 0) {
+        description = 'Pagamento';
+      } else if (n > 0) {
+        description = 'Rimborso';
+      } else {
+        description = 'Importato da CSV';
+      }
+    }
+    
     return {
       date:        date ?? rawDate,
       amount:      Math.abs(n),
       type:        n < 0 ? 'expense' : 'income',
-      description: rawDesc.trim() || 'Importato da CSV',
+      description: description,
       ok,
     };
   });
