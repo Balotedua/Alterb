@@ -64,6 +64,30 @@ export interface Activity {
   created_at: string;
 }
 
+export interface BodyVital {
+  id: string;
+  weight_kg?: number;
+  height_cm?: number;
+  date: string;
+}
+
+export type ExerciseUnit = 'reps' | 'seconds' | 'kg';
+
+export interface ExerciseMax {
+  id: string;
+  exercise: string;
+  value: number;
+  unit: ExerciseUnit;
+  date: string;
+}
+
+export interface SleepEntry {
+  id: string;
+  duration_minutes: number;
+  quality: 1 | 2 | 3 | 4 | 5;
+  date: string;
+}
+
 // ─── Consciousness ────────────────────────────────────────────────────────────
 export interface Note {
   id: string;

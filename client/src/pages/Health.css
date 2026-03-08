@@ -1,0 +1,775 @@
+/* ═══════════════════════════════════════════════════════════
+   HEALTH DASHBOARD
+   ═══════════════════════════════════════════════════════════ */
+
+@keyframes h-fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes h-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Page shell ─────────────────────────────────────────── */
+
+.h-page {
+  padding: 28px 28px 48px;
+  max-width: 1500px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: h-fade-in 0.25s ease;
+}
+
+.h-header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.h-header h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.5px;
+  margin: 0;
+}
+
+.h-header-sub {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+/* ── Vitals row (KPI cards) ─────────────────────────────── */
+
+.h-vitals-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.h-kpi-card {
+  padding: 20px 22px 18px;
+  border-radius: 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.h-kpi-card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--h-kpi-accent, var(--accent));
+}
+
+.h-kpi-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+
+.h-kpi-icon {
+  color: var(--h-kpi-accent, var(--accent));
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.h-kpi-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+}
+
+.h-kpi-value {
+  font-size: 1.85rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.h-kpi-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.h-kpi-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 99px;
+  width: fit-content;
+  margin-top: 4px;
+}
+
+.h-kpi-badge.positive {
+  background: rgba(34, 197, 94, 0.14);
+  color: #22c55e;
+}
+
+.h-kpi-badge.negative {
+  background: rgba(239, 68, 68, 0.14);
+  color: #ef4444;
+}
+
+/* ── Bento Grid ─────────────────────────────────────────── */
+
+.h-bento {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.h-bento--chart   { grid-column: span 2; }
+.h-bento--maxes   { grid-column: span 1; }
+.h-bento--wellness{ grid-column: span 1; }
+.h-bento--sleep   { grid-column: span 2; }
+.h-bento--quicklog{ grid-column: span 2; }
+
+/* ── Card base ──────────────────────────────────────────── */
+
+.h-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.h-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.h-card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.h-card-icon {
+  color: var(--accent);
+}
+
+.h-card-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.h-card-meta {
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  background: var(--bg);
+  padding: 3px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+}
+
+/* ── Chart ──────────────────────────────────────────────── */
+
+.h-chart-wrap {
+  height: 200px;
+  position: relative;
+}
+
+.h-chart-empty {
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+
+/* ── Exercise Maxes ─────────────────────────────────────── */
+
+.h-icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.h-icon-btn:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.h-add-panel {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.h-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.h-preset-chip {
+  padding: 5px 12px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.h-preset-chip.active,
+.h-preset-chip:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.h-add-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.h-add-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 0.87rem;
+  color: var(--text);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.h-add-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.h-add-input--num {
+  max-width: 90px;
+  flex: unset;
+}
+
+.h-add-select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 10px;
+  font-size: 0.87rem;
+  color: var(--text);
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+}
+
+.h-save-btn {
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.87rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.2s;
+}
+
+.h-save-btn:hover { opacity: 0.85; }
+
+.h-exercise-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.h-exercise-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: border-color 0.15s;
+}
+
+.h-exercise-item:hover { border-color: var(--accent); }
+
+.h-exercise-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.h-exercise-name {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.h-exercise-date {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.h-exercise-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.h-exercise-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  min-width: 52px;
+  text-align: center;
+}
+
+.h-step-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.h-step-btn:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.h-step-btn--lg {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.h-del-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s;
+  opacity: 0;
+}
+
+.h-exercise-item:hover .h-del-btn { opacity: 1; }
+.h-del-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.h-empty-hint {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 16px 0;
+}
+
+/* ── Wellness Stats ──────────────────────────────────────── */
+
+.h-wellness-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.h-wellness-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.h-wellness-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.h-wellness-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.h-wellness-value {
+  font-size: 0.87rem;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.h-progress-track {
+  width: 100%;
+  height: 6px;
+  background: var(--border);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.h-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+}
+
+.h-step-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.h-water-emoji {
+  flex: 1;
+  font-size: 1rem;
+  letter-spacing: 1px;
+  text-align: center;
+  min-height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.h-wellness-meta {
+  font-size: 0.73rem;
+  color: var(--text-muted);
+}
+
+.h-stars {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.h-last-sleep {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.h-last-sleep-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.h-last-sleep-val {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.87rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ── Quick Log ──────────────────────────────────────────── */
+
+.h-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+}
+
+.h-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 7px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.h-tab.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.h-log-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.h-log-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-items: end;
+}
+
+.h-log-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.h-log-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.h-log-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 13px;
+  font-size: 0.9rem;
+  color: var(--text);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.h-log-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.h-log-save-btn {
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+  white-space: nowrap;
+  align-self: end;
+}
+
+.h-log-save-btn:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+.h-log-quality {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.h-quality-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.h-quality-btn {
+  flex: 1;
+  padding: 8px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.h-quality-btn:hover,
+.h-quality-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  transform: scale(1.08);
+}
+
+/* ── Sleep Section ──────────────────────────────────────── */
+
+.h-sleep-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.h-sleep-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.h-sleep-item__meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.h-sleep-item__date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.h-sleep-item__hours {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.h-sleep-item__del {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  display: flex;
+  align-items: center;
+}
+
+.h-sleep-item:hover .h-sleep-item__del { opacity: 1; }
+.h-sleep-item__del:hover { color: #ef4444; }
+
+/* ── Responsive ─────────────────────────────────────────── */
+
+@media (max-width: 1200px) {
+  .h-vitals-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .h-bento {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .h-bento--chart   { grid-column: span 2; }
+  .h-bento--maxes   { grid-column: span 1; }
+  .h-bento--wellness{ grid-column: span 1; }
+  .h-bento--sleep   { grid-column: span 1; }
+  .h-bento--quicklog{ grid-column: span 1; }
+}
+
+@media (max-width: 768px) {
+  .h-page {
+    padding: 0 14px 60px;
+    gap: 14px;
+  }
+  .h-header h1 { font-size: 1.5rem; }
+  .h-vitals-row {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .h-kpi-value { font-size: 1.4rem; }
+  .h-bento {
+    grid-template-columns: 1fr;
+  }
+  .h-bento--chart,
+  .h-bento--maxes,
+  .h-bento--wellness,
+  .h-bento--sleep,
+  .h-bento--quicklog {
+    grid-column: span 1;
+  }
+  .h-log-row { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .h-vitals-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .h-quality-picker { gap: 4px; }
+  .h-quality-btn { padding: 6px 4px; font-size: 1rem; }
+}
