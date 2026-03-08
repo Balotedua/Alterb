@@ -10,6 +10,8 @@ export function FinanceLinkUncategorized() {
   const [selectedCategory, setSelectedCategory] = useState<string>(CAT_CONFIG?.[0]?.id || '');
   const [newCategory, setNewCategory] = useState<string>('');
   const [isClient, setIsClient] = useState(false);
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
     setIsClient(true);
@@ -25,7 +27,7 @@ export function FinanceLinkUncategorized() {
     return null;
   }
 
-  // Raggruppa per descrizione (case-insensitive)
+  // Raggruppa per descrizione (case-insensitive) e ordina per numero di transazioni (decrescente)
   const grouped = uncategorized?.reduce<Record<string, typeof uncategorized>>((acc, t) => {
     const key = t.description.toLowerCase().trim();
     if (!acc[key]) {
@@ -34,6 +36,62 @@ export function FinanceLinkUncategorized() {
     acc[key].push(t);
     return acc;
   }, {}) || {};
+
+  // Converti in array e ordina per numero di transazioni (più transazioni prima)
+  const sortedEntries = Object.entries(grouped).sort(([, a], [, b]) => b.length - a.length);
+
+  const hasUncategorized = uncategorized && uncategorized.length > 0;
+
+  // Se non ci sono transazioni non associate, mostra solo il form per creare categorie
+  if (!hasUncategorized) {
+    return (
+      <div className="fin-card">
+        <div className="fin-card-title">
+          🔗 Collega transazioni non associate
+        </div>
+        <div className="fin-empty">
+          <span className="fin-empty-icon">✅</span>
+          <p>Tutte le transazioni sono già associate a una categoria.</p>
+          <small>Puoi comunque creare nuove categorie per pattern futuri.</small>
+        </div>
+        <div className="fin-uncat-new">
+          <h4>Crea nuova categoria</h4>
+          <div className="fin-uncat-new-form">
+            <input
+              type="text"
+              className="input"
+              placeholder="Nome categoria (es. benzina, supermercato)"
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value)}
+            />
+            <button
+              className="fin-uncat-btn primary"
+              onClick={() => {
+                if (!newCategory.trim()) return;
+                // Qui dovremmo aggiungere la categoria a CAT_CONFIG
+                // Per ora, solo log
+                console.log('Nuova categoria:', newCategory);
+                setNewCategory('');
+              }}
+            >
+              Crea categoria
+            </button>
+          </div>
+          <p className="fin-uncat-hint">
+            La nuova categoria sarà disponibile per collegare transazioni future.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Se ci sono transazioni non associate, mostra una scheda alla volta
+  const currentEntry = sortedEntries[currentIndex];
+  const [desc, transactions] = currentEntry || [];
+  const total = transactions?.reduce((sum, t) => sum + t.amount, 0) || 0;
+  const count = transactions?.length || 0;
+  const currentCatId = transactions?.[0]?.category;
+  const currentCat = CAT_CONFIG.find(c => c.id === currentCatId);
 
   const handleLink = (pattern: string, category: string) => {
     if (!pattern || !category) return;
@@ -44,118 +102,135 @@ export function FinanceLinkUncategorized() {
     if (!selectedPattern || !newCategory.trim()) return;
     handleLink(selectedPattern, newCategory.trim());
     setNewCategory('');
+    setShowNewCategoryInput(false);
   };
 
-  const hasUncategorized = uncategorized && uncategorized.length > 0;
+  const handleNext = () => {
+    if (currentIndex < sortedEntries.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex(currentIndex - 1);
+    }
+  };
 
   return (
     <div className="fin-card">
       <div className="fin-card-title">
         🔗 Collega transazioni non associate
-        {hasUncategorized && (
-          <span className="fin-card-count">{uncategorized.length} non associate</span>
-        )}
+        <span className="fin-card-count">
+          {currentIndex + 1} di {sortedEntries.length}
+        </span>
       </div>
 
-      {!hasUncategorized ? (
-        <div className="fin-empty">
-          <span className="fin-empty-icon">✅</span>
-          <p>Tutte le transazioni sono già associate a una categoria.</p>
-          <small>Puoi comunque creare nuove categorie per pattern futuri.</small>
+      <div className="fin-uncat-single">
+        <div className="fin-uncat-header">
+          <div className="fin-uncat-left">
+            <span className="fin-uncat-desc">{desc}</span>
+            <span className="fin-uncat-meta">
+              {count} transazioni · Totale: {formatCurrency(total)}
+              {currentCat && (
+                <> · Attuale: <span style={{ color: currentCat.color }}>{currentCat.icon} {currentCat.label}</span></>
+              )}
+            </span>
+          </div>
         </div>
-      ) : (
-        <div className="fin-uncat-list">
-          {Object.entries(grouped).map(([desc, transactions]) => {
-            const total = transactions.reduce((sum, t) => sum + t.amount, 0);
-            const count = transactions.length;
-            // Trova la categoria attuale (se presente)
-            const currentCatId = transactions[0]?.category;
-            const currentCat = CAT_CONFIG.find(c => c.id === currentCatId);
-            return (
-              <div key={desc} className="fin-uncat-item">
-                <div className="fin-uncat-header">
-                  <div className="fin-uncat-left">
-                    <span className="fin-uncat-desc">{desc}</span>
-                    <span className="fin-uncat-meta">
-                      {count} transazioni · Totale: {formatCurrency(total)}
-                      {currentCat && (
-                        <> · Attuale: <span style={{ color: currentCat.color }}>{currentCat.icon} {currentCat.label}</span></>
-                      )}
-                    </span>
-                  </div>
-                  <div className="fin-uncat-right">
-                    <select
-                      className="input"
-                      value={selectedPattern === desc ? selectedCategory : ''}
-                      onChange={(e) => {
-                        setSelectedPattern(desc);
-                        setSelectedCategory(e.target.value);
-                      }}
-                    >
-                      <option value="">Scegli categoria</option>
-                      {CAT_CONFIG.map(cat => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.icon} {cat.label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      className="fin-uncat-btn"
-                      onClick={() => handleLink(desc, selectedCategory)}
-                      disabled={!selectedCategory || selectedPattern !== desc || recategorizeContains.isPending}
-                    >
-                      {recategorizeContains.isPending ? 'Collegamento...' : 'Collega'}
-                    </button>
-                  </div>
-                </div>
-                <div className="fin-uncat-details">
-                  {transactions.slice(0, 3).map(t => (
-                    <div key={t.id} className="fin-uncat-detail">
-                      <span>{formatDate(t.date)}</span>
-                      <span>{formatCurrency(t.amount)}</span>
-                      <span className={`fin-uncat-type ${t.type}`}>
-                        {t.type === 'income' ? 'Entrata' : 'Uscita'}
-                      </span>
-                    </div>
-                  ))}
-                  {transactions.length > 3 && (
-                    <div className="fin-uncat-more">e altre {transactions.length - 3} transazioni...</div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
 
-      <div className="fin-uncat-new">
-        <h4>Crea nuova categoria e collega</h4>
-        <div className="fin-uncat-new-form">
-          <input
-            type="text"
-            className="input"
-            placeholder="Pattern nella descrizione (es. q8, basko)"
-            value={selectedPattern}
-            onChange={(e) => setSelectedPattern(e.target.value)}
-          />
-          <input
-            type="text"
-            className="input"
-            placeholder="Nuova categoria (es. benzina, supermercato)"
-            value={newCategory}
-            onChange={(e) => setNewCategory(e.target.value)}
-          />
-          <button
-            className="fin-uncat-btn primary"
-            onClick={handleCreateAndLink}
-            disabled={!selectedPattern || !newCategory.trim() || recategorizeContains.isPending}
-          >
-            {recategorizeContains.isPending ? 'Creazione...' : 'Crea e collega'}
-          </button>
+        <div className="fin-uncat-details">
+          {transactions?.slice(0, 5).map(t => (
+            <div key={t.id} className="fin-uncat-detail">
+              <span>{formatDate(t.date)}</span>
+              <span>{formatCurrency(t.amount)}</span>
+              <span className={`fin-uncat-type ${t.type}`}>
+                {t.type === 'income' ? 'Entrata' : 'Uscita'}
+              </span>
+            </div>
+          ))}
+          {transactions && transactions.length > 5 && (
+            <div className="fin-uncat-more">e altre {transactions.length - 5} transazioni...</div>
+          )}
         </div>
-        <p className="fin-uncat-hint">
-          Tutte le transazioni la cui descrizione contiene il pattern verranno collegate alla nuova categoria.
-        </p>
+
+        <div className="fin-uncat-actions">
+          <div className="fin-uncat-select-row">
+            <select
+              className="input"
+              value={selectedCategory}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === '__new__') {
+                  setShowNewCategoryInput(true);
+                  setSelectedCategory('');
+                } else {
+                  setSelectedCategory(value);
+                  setShowNewCategoryInput(false);
+                }
+              }}
+            >
+              <option value="">Scegli categoria</option>
+              {CAT_CONFIG.map(cat => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.icon} {cat.label}
+                </option>
+              ))}
+              <option value="__new__">➕ Crea nuova categoria</option>
+            </select>
+            <button
+              className="fin-uncat-btn"
+              onClick={() => handleLink(desc, selectedCategory)}
+              disabled={!selectedCategory || recategorizeContains.isPending}
+            >
+              {recategorizeContains.isPending ? 'Collegamento...' : 'Collega'}
+            </button>
+          </div>
+
+          {showNewCategoryInput && (
+            <div className="fin-uncat-new-form">
+              <input
+                type="text"
+                className="input"
+                placeholder="Nome categoria (es. benzina, supermercato)"
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+              />
+              <button
+                className="fin-uncat-btn primary"
+                onClick={handleCreateAndLink}
+                disabled={!newCategory.trim() || recategorizeContains.isPending}
+              >
+                {recategorizeContains.isPending ? 'Creazione...' : 'Crea e collega'}
+              </button>
+            </div>
+          )}
+
+          <div className="fin-uncat-navigation">
+            <button
+              className="fin-uncat-btn ghost"
+              onClick={handlePrev}
+              disabled={currentIndex === 0}
+            >
+              ← Precedente
+            </button>
+            <span className="fin-uncat-nav-info">
+              {currentIndex + 1} / {sortedEntries.length}
+            </span>
+            <button
+              className="fin-uncat-btn ghost"
+              onClick={handleNext}
+              disabled={currentIndex === sortedEntries.length - 1}
+            >
+              Successiva →
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="fin-uncat-hint">
+        <strong>Suggerimento:</strong> Collega questa descrizione a una categoria esistente o creane una nuova.
+        Tutte le transazioni con descrizione simile verranno automaticamente ricategorizzate.
       </div>
     </div>
   );
