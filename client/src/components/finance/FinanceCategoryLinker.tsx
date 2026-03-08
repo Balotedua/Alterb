@@ -138,9 +138,7 @@ export function FinanceCategoryLinker() {
                         {c.icon} {c.label}
                       </option>
                     ))}
-                    <option value="new">
-                      <Plus size={11} /> Nuova categoria
-                    </option>
+                    <option value="new">➕ Nuova categoria</option>
                   </select>
                   <ChevronDown size={11} className="fin-linker-arrow" />
                 </div>
@@ -163,7 +161,11 @@ export function FinanceCategoryLinker() {
                 <button
                   className="fin-linker-btn"
                   onClick={() => handleLink(g)}
-                  disabled={(!cat || (cat === 'new' && !newCatValue.trim())) || isPending}
+                  disabled={
+                    isPending ||
+                    !cat ||
+                    (cat === 'new' && !newCatValue.trim())
+                  }
                 >
                   {isPending ? '…' : 'Collega'}
                 </button>
