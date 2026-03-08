@@ -16,40 +16,57 @@ export function MobileTopbar() {
   const [open, setOpen] = useState(false);
   const { logout } = useAuth();
 
+  const close = () => setOpen(false);
+
   return (
-    <header className="mobile-topbar">
-      <div className="mobile-topbar__inner">
-        <span className="mobile-topbar__logo">✦ Alter</span>
-        <button
-          className="mobile-topbar__menu-btn"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          aria-label="Menu"
-        >
-          {open ? '✕' : '☰'}
-        </button>
-      </div>
-      {open ? (
-        <nav className="mobile-topbar__drawer" aria-label="Navigazione mobile">
-          {NAV_ITEMS.map(({ to, label, icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                ['mobile-topbar__link', isActive ? 'mobile-topbar__link--active' : '']
-                  .filter(Boolean)
-                  .join(' ')
-              }
-              onClick={() => setOpen(false)}
-            >
-              <span aria-hidden="true">{icon}</span> {label}
-            </NavLink>
-          ))}
-          <button className="mobile-topbar__logout" onClick={logout}>
-            ↩ Esci
-          </button>
-        </nav>
-      ) : null}
-    </header>
+    <>
+      {/* hamburger button fisso in alto a sinistra */}
+      <button
+        className="mob-hamburger"
+        onClick={() => setOpen(true)}
+        aria-label="Apri menu"
+        aria-expanded={open}
+      >
+        <span /><span /><span />
+      </button>
+
+      {/* drawer overlay */}
+      {open && (
+        <div className="mob-drawer" role="dialog" aria-modal="true" aria-label="Menu di navigazione">
+          <div className="mob-drawer__overlay" onClick={close} />
+
+          <aside className="mob-drawer__panel">
+            <div className="mob-drawer__header">
+              <div className="mob-drawer__logo">
+                <span className="mob-drawer__logo-icon">✦</span>
+                <span className="mob-drawer__logo-text">Alter</span>
+              </div>
+              <button className="mob-drawer__close" onClick={close} aria-label="Chiudi menu">✕</button>
+            </div>
+
+            <nav className="mob-drawer__nav">
+              {NAV_ITEMS.map(({ to, label, icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) =>
+                    ['mob-drawer__link', isActive ? 'mob-drawer__link--active' : '']
+                      .filter(Boolean).join(' ')
+                  }
+                  onClick={close}
+                >
+                  <span className="mob-drawer__link-icon">{icon}</span>
+                  {label}
+                </NavLink>
+              ))}
+            </nav>
+
+            <button className="mob-drawer__logout" onClick={() => { logout(); close(); }}>
+              <span>↩</span> Esci
+            </button>
+          </aside>
+        </div>
+      )}
+    </>
   );
 }

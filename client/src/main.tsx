@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { QueryProvider } from '@/providers/QueryProvider';
 import App from '@/App';
 import './index.css';
+import './styles/global.css';
 
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('Root element #root not found');

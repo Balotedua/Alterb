@@ -1,210 +1,178 @@
 import { useState } from 'react';
-import type { FormEvent } from 'react';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/services/supabase';
 import './Login.css';
 
-type Mode = 'login' | 'register';
-
-const ORBS = [
-  { id: 1, size: 520, top: -12, left: -8,  color: '124,58,237',  opacity: 0.08, blur: 110, dur: 22, delay: 0   },
-  { id: 2, size: 360, top: 55,  left: 30,  color: '6,182,212',   opacity: 0.06, blur: 90,  dur: 18, delay: -8  },
-  { id: 3, size: 200, top: 20,  left: 65,  color: '52,211,153',  opacity: 0.07, blur: 70,  dur: 14, delay: -5  },
-];
+type Tab = 'login' | 'register';
 
 export default function Login() {
-  const { login } = useAuth();
-  const [mode, setMode] = useState<Mode>('login');
-  const [email, setEmail]       = useState('');
+  const { login, register } = useAuth();
+  const navigate = useNavigate();
+  const [tab, setTab] = useState<Tab>('login');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirm, setConfirm]   = useState('');
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
-  const [registered, setRegistered] = useState(false);
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const switchMode = (m: Mode) => {
-    setMode(m);
+  const switchTab = (t: Tab) => {
+    setTab(t);
+    setError('');
+    setSuccess('');
     setEmail('');
     setPassword('');
     setConfirm('');
-    setError('');
-    setRegistered(false);
   };
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
 
-    if (mode === 'register' && password !== confirm) {
-      setError('Le password non coincidono.');
+    if (tab === 'register' && password !== confirm) {
+      setError('Le password non coincidono');
       return;
     }
 
     setLoading(true);
     try {
-      if (mode === 'login') {
+      if (tab === 'login') {
         await login(email, password);
+        navigate('/dashboard');
       } else {
-        const { error: err } = await supabase.auth.signUp({ email, password });
-        if (err) throw err;
-        setRegistered(true);
+        await register(email, password);
+        setSuccess('Controlla la tua email per confermare la registrazione.');
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Si è verificato un errore.');
+    } catch {
+      setError(tab === 'login' ? 'Email o password errati' : 'Registrazione fallita. Riprova.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="login-root">
+    <div className="lp-root">
 
-      {/* ── SINISTRA — brand panel ── */}
-      <aside className="login-brand-panel">
-        {ORBS.map(o => (
-          <div
-            key={o.id}
-            className={`login-orb login-orb--${o.id}`}
-            style={{
-              width:  o.size,
-              height: o.size,
-              top:    `${o.top}%`,
-              left:   `${o.left}%`,
-              background: `radial-gradient(circle at 40% 40%, rgba(${o.color},${o.opacity}) 0%, transparent 68%)`,
-              filter: `blur(${o.blur}px)`,
-              animationDuration: `${o.dur}s`,
-              animationDelay:    `${o.delay}s`,
-            }}
+      {/* background animato */}
+      <div className="lp-bg" />
+      <div className="lp-bg-extra" />
+      <div className="lp-bg-grid" />
+
+      {/* card centrale */}
+      <div className="lp-card">
+
+        {/* brand */}
+        <div className="lp-brand">
+          <span className="lp-symbol">✦</span>
+          <span className="lp-wordmark">Alter</span>
+        </div>
+
+        {/* tabs */}
+        <div className="lp-tabs">
+          <button
+            className={`lp-tab ${tab === 'login' ? 'lp-tab--active' : ''}`}
+            onClick={() => switchTab('login')}
+            type="button"
+          >
+            Accedi
+          </button>
+          <button
+            className={`lp-tab ${tab === 'register' ? 'lp-tab--active' : ''}`}
+            onClick={() => switchTab('register')}
+            type="button"
+          >
+            Registrati
+          </button>
+          <span
+            className="lp-tab-indicator"
+            style={{ transform: `translateX(${tab === 'login' ? '0%' : '100%'})` }}
           />
-        ))}
+        </div>
 
-        <div className="login-brand-content">
-          <div className="login-monogram" aria-label="Alter">
-            <span className="login-monogram__a">A</span>
-            <span className="login-monogram__rest">lter</span>
-          </div>
-
-          <p className="login-brand-tagline">
-            La tua evoluzione personale,<br />tracciata con precisione.
+        {/* header */}
+        <div className="lp-form-header">
+          <h2 className="lp-form-title">
+            {tab === 'login' ? 'Bentornato' : 'Crea account'}
+          </h2>
+          <p className="lp-form-sub">
+            {tab === 'login'
+              ? 'Inserisci le tue credenziali per accedere'
+              : 'Inizia il tuo percorso con Alter'}
           </p>
-
-          <div className="login-brand-rule" />
-
-          <ul className="login-pillars">
-            <li>
-              <span className="login-pillars__dot login-pillars__dot--violet" />
-              Finanze intelligenti
-            </li>
-            <li>
-              <span className="login-pillars__dot login-pillars__dot--cyan" />
-              Salute &amp; attività
-            </li>
-            <li>
-              <span className="login-pillars__dot login-pillars__dot--emerald" />
-              Mindset &amp; crescita
-            </li>
-          </ul>
         </div>
 
-        <p className="login-brand-ver">v 1.0</p>
-      </aside>
+        {/* form */}
+        <form onSubmit={handleSubmit} className="lp-form" key={tab}>
 
-      {/* ── DESTRA — form panel ── */}
-      <main className="login-form-panel">
-        <div className="login-card" role="region" aria-label={mode === 'login' ? 'Accedi' : 'Registrati'}>
-
-          {/* Tab switcher */}
-          <div className="login-tabs" role="tablist">
-            <div className={`login-tabs__pill${mode === 'register' ? ' login-tabs__pill--right' : ''}`} />
-            <button
-              role="tab"
-              aria-selected={mode === 'login'}
-              className={`login-tab${mode === 'login' ? ' login-tab--active' : ''}`}
-              onClick={() => switchMode('login')}
-            >
-              Accedi
-            </button>
-            <button
-              role="tab"
-              aria-selected={mode === 'register'}
-              className={`login-tab${mode === 'register' ? ' login-tab--active' : ''}`}
-              onClick={() => switchMode('register')}
-            >
-              Registrati
-            </button>
+          <div className="lp-field">
+            <label className="lp-label" htmlFor="lp-email">Email</label>
+            <input
+              id="lp-email"
+              className="lp-input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="nome@email.com"
+              required
+              autoComplete="email"
+            />
           </div>
 
-          {/* Successo registrazione */}
-          {registered ? (
-            <div className="login-success" role="status">
-              <span className="login-success__icon">✓</span>
-              <p className="login-success__title">Account creato!</p>
-              <p className="login-success__sub">
-                Controlla la tua email per confermare l&apos;account, poi accedi.
-              </p>
-              <button className="login-success__link" onClick={() => switchMode('login')}>
-                Vai al login →
-              </button>
+          <div className="lp-field">
+            <label className="lp-label" htmlFor="lp-password">Password</label>
+            <input
+              id="lp-password"
+              className="lp-input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
+            />
+          </div>
+
+          {tab === 'register' && (
+            <div className="lp-field lp-field--anim">
+              <label className="lp-label" htmlFor="lp-confirm">Conferma password</label>
+              <input
+                id="lp-confirm"
+                className="lp-input"
+                type="password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                placeholder="••••••••"
+                required
+                autoComplete="new-password"
+              />
             </div>
-          ) : (
-            <form
-              key={mode}
-              onSubmit={handleSubmit}
-              noValidate
-              className="login-form"
-            >
-              <div className="login-fields">
-                <Input
-                  label="Email"
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="nome@esempio.it"
-                  autoComplete="email"
-                  required
-                />
-                <Input
-                  label="Password"
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                  required
-                />
-                {mode === 'register' && (
-                  <Input
-                    label="Conferma password"
-                    type="password"
-                    value={confirm}
-                    onChange={e => setConfirm(e.target.value)}
-                    placeholder="••••••••"
-                    autoComplete="new-password"
-                    required
-                  />
-                )}
-              </div>
-
-              {error && (
-                <p className="login-error" role="alert">{error}</p>
-              )}
-
-              <Button
-                type="submit"
-                loading={loading}
-                disabled={loading || !email || !password || (mode === 'register' && !confirm)}
-                className="login-cta"
-              >
-                {loading
-                  ? mode === 'login' ? 'Accesso…' : 'Creazione…'
-                  : mode === 'login' ? 'Entra'    : 'Crea account'}
-              </Button>
-            </form>
           )}
-        </div>
-      </main>
+
+          {error && <div className="lp-msg lp-msg--error">{error}</div>}
+          {success && <div className="lp-msg lp-msg--success">{success}</div>}
+
+          <button type="submit" className="lp-btn" disabled={loading}>
+            {loading
+              ? <span className="lp-btn__spinner" />
+              : tab === 'login' ? 'Accedi' : 'Crea account'}
+          </button>
+
+        </form>
+
+        <p className="lp-switch">
+          {tab === 'login' ? 'Non hai un account?' : 'Hai già un account?'}
+          {' '}
+          <button
+            type="button"
+            className="lp-switch__link"
+            onClick={() => switchTab(tab === 'login' ? 'register' : 'login')}
+          >
+            {tab === 'login' ? 'Registrati' : 'Accedi'}
+          </button>
+        </p>
+
+      </div>
     </div>
   );
 }
