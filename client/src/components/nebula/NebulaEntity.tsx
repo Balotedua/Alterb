@@ -66,12 +66,16 @@ export function NebulaEntity() {
     let sActive = false; let sT = 0; let prevS = false;
     let rActive = false; let rT = 0; let prevR = false;
 
+    // Stato per la dissolvenza quando il fragment è attivo
+    let fragmentActive = false;
+    let fragmentFade = 0; // 0 = visibile, 1 = completamente dissolto
+
     const loop = (now: number) => {
       const delta = Math.min((now - lastNow) / 1000, 0.05);
       lastNow = now;
       t += delta;
 
-      const { typingIntensity, isBursting, isResponseBursting, isThinking } =
+      const { typingIntensity, isBursting, isResponseBursting, isThinking, activeFragment } =
         useNebulaStore.getState();
 
       // Leading-edge detection
@@ -79,6 +83,16 @@ export function NebulaEntity() {
       if (isResponseBursting && !prevR) { rActive = true; rT = 0; }
       prevS = isBursting;
       prevR = isResponseBursting;
+
+      // Gestione transizione fragment attivo
+      const targetFragmentActive = !!activeFragment;
+      if (targetFragmentActive !== fragmentActive) {
+        // Inizia la transizione
+        fragmentActive = targetFragmentActive;
+      }
+      // Interpolazione smooth del fade
+      const targetFade = fragmentActive ? 1 : 0;
+      fragmentFade += (targetFade - fragmentFade) * delta * 4; // velocità di transizione
 
       if (sActive) { sT += delta; if (sT >= SEND_DUR) sActive = false; }
       if (rActive) { rT += delta; if (rT >= RESP_DUR) rActive = false; }
@@ -104,8 +118,8 @@ export function NebulaEntity() {
       const glowR = r * (0.80 + sR * 0.6 + rRad * 1.1);
       const glowA = 0.04 + typingIntensity * 0.06 + sB * 0.14 + rB * 0.28;
       const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
-      grd.addColorStop(0,    `rgba(130,70,245,${glowA})`);
-      grd.addColorStop(0.5,  `rgba(95,50,205,${(glowA * 0.38).toFixed(3)})`);
+      grd.addColorStop(0,    `rgba(130,70,245,${glowA * (1 - fragmentFade)})`);
+      grd.addColorStop(0.5,  `rgba(95,50,205,${(glowA * 0.38 * (1 - fragmentFade)).toFixed(3)})`);
       grd.addColorStop(1,    'rgba(0,0,0,0)');
       ctx.fillStyle = grd;
       ctx.beginPath();
@@ -133,8 +147,8 @@ export function NebulaEntity() {
 
         // Brightness: flash from burst, gentle boost from typing/thinking
         const brightMul = 1 + typingIntensity * 0.35 + anxiousThrob * 0.18 + sB * 1.0 + rB * 2.2;
-        const alpha = Math.min(0.97, (0.08 + wave * 0.84) * brightMul);
-        const dotR  = (1.4 + wave * 1.7) * (1 + sB * 0.35 + rB * 0.55);
+        const alpha = Math.min(0.97, (0.08 + wave * 0.84) * brightMul) * (1 - fragmentFade);
+        const dotR  = (1.4 + wave * 1.7) * (1 + sB * 0.35 + rB * 0.55) * (1 - fragmentFade * 0.5);
 
         // On flash: color warms toward white-lavender, then returns to violet
         const red   = Math.round(148 + wave * 72 + sB * 30 + rB * 60);
@@ -144,6 +158,42 @@ export function NebulaEntity() {
         ctx.arc(x, y, dotR, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${red},${green},250,${alpha.toFixed(3)})`;
         ctx.fill();
+      }
+
+      // ── Linee di connessione dal centro verso l'esterno (solo quando fragment è attivo) ──
+      if (fragmentFade > 0.01) {
+        const lineCount = 12;
+        const lineLength = r * 1.8;
+        const lineWidth = 2 * (1 - fragmentFade);
+        const lineAlpha = 0.15 * fragmentFade;
+
+        for (let i = 0; i < lineCount; i++) {
+          const angle = (i / lineCount) * Math.PI * 2 + t * 0.3;
+          const startX = cx + Math.cos(angle) * r * 0.7;
+          const startY = cy + Math.sin(angle) * r * 0.7;
+          const endX = cx + Math.cos(angle) * (r * 0.7 + lineLength);
+          const endY = cy + Math.sin(angle) * (r * 0.7 + lineLength);
+
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(endX, endY);
+          ctx.strokeStyle = `rgba(167, 139, 250, ${lineAlpha})`;
+          ctx.lineWidth = lineWidth;
+          ctx.stroke();
+        }
+
+        // Punti di connessione alle estremità delle linee
+        for (let i = 0; i < lineCount; i++) {
+          const angle = (i / lineCount) * Math.PI * 2 + t * 0.3;
+          const pointX = cx + Math.cos(angle) * (r * 0.7 + lineLength);
+          const pointY = cy + Math.sin(angle) * (r * 0.7 + lineLength);
+          const pointRadius = 3 * fragmentFade;
+
+          ctx.beginPath();
+          ctx.arc(pointX, pointY, pointRadius, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(167, 139, 250, ${0.6 * fragmentFade})`;
+          ctx.fill();
+        }
       }
 
       rafRef.current = requestAnimationFrame(loop);
