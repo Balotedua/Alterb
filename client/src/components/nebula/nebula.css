@@ -85,16 +85,73 @@
   pointer-events: none;
 }
 
-/* On mobile: mantieni centrale */
+/* On mobile: mantieni centrale e adatta altezza */
 @media (max-width: 860px) {
   .nb-fragment-area {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: min(400px, 90vw);
+    width: min(400px, 92vw);
+    max-height: 80vh;
     margin-top: 0;
     pointer-events: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .nebula-card {
+    padding: 18px;
+    border-radius: 16px;
+    max-height: 78vh;
+    backdrop-filter: blur(15px) saturate(180%);
+  }
+
+  .nebula-card-header {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+  }
+
+  .nebula-card-title {
+    font-size: 16px;
+  }
+
+  .nebula-card-icon {
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
+  }
+
+  .nebula-card-close {
+    width: 28px;
+    height: 28px;
+    padding: 4px;
+  }
+
+  /* Sposta la chat ancora più in basso su mobile quando il fragment è attivo */
+  .nebula-core--fragment .nebula-chat-wrapper {
+    bottom: calc(0.5rem + var(--kb-offset, 0px));
+    opacity: 0.4;
+  }
+
+  /* Riduci le dimensioni della chat su mobile */
+  .nebula-chat-wrapper {
+    width: 95vw;
+    gap: 0.5rem;
+  }
+
+  .nebula-input-bar {
+    padding: 0.4rem 0.4rem 0.4rem 1rem;
+  }
+
+  .nebula-send-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .nebula-send-btn svg {
+    width: 13px;
+    height: 13px;
   }
 }
 
@@ -581,6 +638,22 @@
   gap: 0.75rem;
   z-index: 20;
   transition: bottom 0.2s ease;
+}
+
+/* Quando un fragment è attivo, sposta la chat più in basso e riduci l'opacità */
+.nebula-core--fragment .nebula-chat-wrapper {
+  bottom: calc(1rem + var(--kb-offset, 0px));
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.nebula-core--fragment .nebula-input-bar {
+  border-color: rgba(124, 58, 237, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.nebula-core--fragment .nebula-send-btn {
+  opacity: 0.5;
 }
 
 .nebula-reply {

@@ -161,10 +161,13 @@ export function NebulaEntity() {
       }
 
       // ── Effetto esplosione (particelle che si disperdono) ──
-      if (fragmentFade > 0.01) {
+      if (fragmentFade > 0.01 && fragmentFade < 0.95) {
         const particleCount = 80;
         const explosionSpeed = 2.0;
         const baseRadius = r * 0.5;
+
+        // Calcola un fattore di visibilità che va da 1 a 0 quando fragmentFade si avvicina a 0.95
+        const visibility = 1 - (fragmentFade / 0.95);
 
         for (let i = 0; i < particleCount; i++) {
           // Angolo distribuito uniformemente
@@ -175,9 +178,9 @@ export function NebulaEntity() {
           const y = cy + Math.sin(angle) * dist;
 
           // Dimensione della particella che si riduce con il fade
-          const particleSize = (2 + Math.random() * 4) * (1 - fragmentFade * 0.7);
+          const particleSize = (2 + Math.random() * 4) * (1 - fragmentFade * 0.7) * visibility;
           // Opacità che diminuisce
-          const alpha = (0.3 + Math.random() * 0.5) * (1 - fragmentFade);
+          const alpha = (0.3 + Math.random() * 0.5) * visibility;
 
           ctx.beginPath();
           ctx.arc(x, y, particleSize, 0, Math.PI * 2);
@@ -192,8 +195,8 @@ export function NebulaEntity() {
         // Linee radiali che si allungano
         const lineCount = 16;
         const lineLength = r * (1.5 + fragmentFade * 3);
-        const lineWidth = 2 * (1 - fragmentFade);
-        const lineAlpha = 0.2 * fragmentFade;
+        const lineWidth = 2 * (1 - fragmentFade) * visibility;
+        const lineAlpha = 0.2 * fragmentFade * visibility;
 
         for (let i = 0; i < lineCount; i++) {
           const angle = (i / lineCount) * Math.PI * 2 + t * 0.5;
