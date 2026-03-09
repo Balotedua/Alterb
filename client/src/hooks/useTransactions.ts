@@ -26,3 +26,24 @@ export function useDeleteTransaction() {
     onSuccess: () => qc.invalidateQueries({ queryKey: QUERY_KEY }),
   });
 }
+
+export interface DeleteCriteria {
+  category?: string;
+  descriptionContains?: string;
+  startDate?: string;
+  endDate?: string;
+  type?: 'income' | 'expense';
+}
+
+export function useDeleteTransactions() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, DeleteCriteria>({
+    mutationFn: async (criteria) => {
+      // Chiamata API per eliminare transazioni in base ai criteri
+      // Dobbiamo creare un endpoint API che accetti questi criteri
+      // Per ora, usiamo una chiamata POST a /transactions/delete
+      return apiPost<void>('/transactions/delete', criteria);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: QUERY_KEY }),
+  });
+}

@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { useTransactions, useDeleteTransaction } from '@/hooks/useFinance';
+import { useTransactions, useDeleteTransaction, useFinanceCategories } from '@/hooks/useFinance';
+import { useDeleteTransactions, type DeleteCriteria } from '@/hooks/useTransactions';
 import { formatCurrency } from '@/utils/formatters';
 import { NebulaCard } from '@/components/ui/nebula';
 import { useNebulaStore } from '@/store/nebulaStore';
-import { supabase } from '@/services/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import { useQueryClient } from '@tanstack/react-query';
 import type { Transaction } from '@/types';
 
 interface Props { params: Record<string, unknown> }
@@ -15,16 +14,23 @@ export function FinanceDeleteFragment({ params }: Props) {
   const filterType = params.filterType as Transaction['type'] | null ?? null;
 
   const { data: allTransactions } = useTransactions();
+  const { data: categories = [] } = useFinanceCategories();
   const { mutate: delOne, isPending: delOnePending } = useDeleteTransaction();
+  const { mutate: deleteByCriteria, isPending: criteriaPending } = useDeleteTransactions();
   const { setFragment } = useNebulaStore();
   const { user } = useAuth();
-  const qc = useQueryClient();
 
   const [deleting, setDeleting] = useState<string | null>(null);
-  const [bulkPending, setBulkPending] = useState(false);
   const [deleted, setDeleted] = useState<Set<string>>(new Set());
+  const [criteria, setCriteria] = useState<DeleteCriteria>({
+    category: '',
+    descriptionContains: '',
+    startDate: '',
+    endDate: '',
+    type: undefined,
+  });
 
-  // Filter list
+  // Filter list for display
   const cutoff = filterDays
     ? new Date(Date.now() - filterDays * 86400_000).toISOString().split('T')[0]
     : null;
@@ -46,35 +52,112 @@ export function FinanceDeleteFragment({ params }: Props) {
     });
   };
 
-  const handleDeleteAll = async () => {
-    if (!user || list.length === 0) return;
-    setBulkPending(true);
-    try {
-      let q = supabase.from('transactions').delete().eq('user_id', user.id);
-      if (cutoff) q = q.gte('date', cutoff);
-      if (filterType) q = q.eq('type', filterType);
-      await q;
-      setDeleted((prev) => {
-        const next = new Set(prev);
-        list.forEach((t) => next.add(t.id));
-        return next;
-      });
-      await qc.invalidateQueries({ queryKey: ['transactions'] });
-    } finally {
-      setBulkPending(false);
-    }
+  const handleDeleteByCriteria = () => {
+    if (!user) return;
+    deleteByCriteria(criteria, {
+      onSuccess: () => {
+        // Aggiorna la lista locale marcando come eliminate quelle che corrispondono ai criteri
+        const toDelete = new Set<string>();
+        (allTransactions ?? []).forEach(t => {
+          if (criteria.category && t.category !== criteria.category) return;
+          if (criteria.descriptionContains && !t.description.toLowerCase().includes(criteria.descriptionContains.toLowerCase())) return;
+          if (criteria.startDate && t.date < criteria.startDate) return;
+          if (criteria.endDate && t.date > criteria.endDate) return;
+          if (criteria.type && t.type !== criteria.type) return;
+          toDelete.add(t.id);
+        });
+        setDeleted(prev => new Set([...prev, ...toDelete]));
+        // Reset criteria
+        setCriteria({
+          category: '',
+          descriptionContains: '',
+          startDate: '',
+          endDate: '',
+          type: undefined,
+        });
+      },
+    });
   };
 
   const close = () => setFragment(null, {}, 'TALK');
 
   const title =
-    filterDays ? `Ultimi ${filterDays} giorni` :
-    filterType === 'expense' ? 'Uscite recenti'  :
-    filterType === 'income'  ? 'Entrate recenti' :
-                               'Transazioni recenti';
+    filterDays ? `Elimina transazioni (ultimi ${filterDays} giorni)` :
+    filterType === 'expense' ? 'Elimina uscite'  :
+    filterType === 'income'  ? 'Elimina entrate' :
+                               'Elimina transazioni';
 
   return (
     <NebulaCard icon="🗑" title={title} variant="finance">
+      {/* Form per filtraggio avanzato */}
+      <div className="fragment-form" style={{ marginBottom: '1.5rem' }}>
+        <div className="fragment-field">
+          <label className="fragment-label">Categoria</label>
+          <select
+            className="fragment-input"
+            value={criteria.category}
+            onChange={(e) => setCriteria({...criteria, category: e.target.value})}
+          >
+            <option value="">Tutte le categorie</option>
+            {categories.map(cat => (
+              <option key={cat.id} value={cat.id}>{cat.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="fragment-field">
+          <label className="fragment-label">Descrizione contiene</label>
+          <input
+            type="text"
+            className="fragment-input"
+            placeholder="es. supermercato"
+            value={criteria.descriptionContains}
+            onChange={(e) => setCriteria({...criteria, descriptionContains: e.target.value})}
+          />
+        </div>
+        <div className="fragment-field">
+          <label className="fragment-label">Tipo</label>
+          <select
+            className="fragment-input"
+            value={criteria.type || ''}
+            onChange={(e) => setCriteria({...criteria, type: e.target.value as 'income' | 'expense' | undefined})}
+          >
+            <option value="">Tutti i tipi</option>
+            <option value="income">Entrata</option>
+            <option value="expense">Uscita</option>
+          </select>
+        </div>
+        <div className="fragment-field" style={{ display: 'flex', gap: '0.5rem' }}>
+          <div style={{ flex: 1 }}>
+            <label className="fragment-label">Da data</label>
+            <input
+              type="date"
+              className="fragment-input"
+              value={criteria.startDate}
+              onChange={(e) => setCriteria({...criteria, startDate: e.target.value})}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label className="fragment-label">A data</label>
+            <input
+              type="date"
+              className="fragment-input"
+              value={criteria.endDate}
+              onChange={(e) => setCriteria({...criteria, endDate: e.target.value})}
+            />
+          </div>
+        </div>
+        <button
+          type="button"
+          className="fragment-btn fragment-btn--danger"
+          onClick={handleDeleteByCriteria}
+          disabled={criteriaPending}
+          style={{ marginTop: '0.5rem' }}
+        >
+          {criteriaPending ? 'Eliminazione...' : 'Elimina transazioni con questi filtri'}
+        </button>
+      </div>
+
+      {/* Lista transazioni */}
       {list.length === 0 ? (
         <p className="fragment-empty">Nessuna transazione corrispondente.</p>
       ) : (
@@ -92,7 +175,7 @@ export function FinanceDeleteFragment({ params }: Props) {
                 <button
                   className="fragment-delete-btn"
                   onClick={() => handleDelete(t.id)}
-                  disabled={deleting === t.id || delOnePending || bulkPending}
+                  disabled={deleting === t.id || delOnePending || criteriaPending}
                   title="Elimina"
                   aria-label="Elimina transazione"
                 >
@@ -110,7 +193,7 @@ export function FinanceDeleteFragment({ params }: Props) {
           type="button"
           className="fragment-btn"
           onClick={close}
-          disabled={bulkPending}
+          disabled={criteriaPending}
         >
           Chiudi
         </button>
@@ -118,10 +201,17 @@ export function FinanceDeleteFragment({ params }: Props) {
           <button
             type="button"
             className="fragment-btn fragment-btn--danger"
-            onClick={handleDeleteAll}
-            disabled={bulkPending || delOnePending}
+            onClick={() => {
+              // Elimina tutte le transazioni visibili
+              const ids = list.map(t => t.id);
+              ids.forEach(id => {
+                delOne(id);
+              });
+              setDeleted(prev => new Set([...prev, ...ids]));
+            }}
+            disabled={delOnePending || criteriaPending}
           >
-            {bulkPending ? '…' : `Elimina tutte (${list.length})`}
+            {delOnePending ? '…' : `Elimina tutte visibili (${list.length})`}
           </button>
         )}
       </div>
