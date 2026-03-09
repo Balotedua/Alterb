@@ -1,12 +1,9 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useNebulaStore } from '@/store/nebulaStore';
-import { NebulaEntity } from './NebulaEntity';
+import { NebulaEntity }    from './NebulaEntity';
 import { NebulaChatInput } from './NebulaChatInput';
-import { FinanceFragment } from '@/components/fragments/FinanceFragment';
-import { HealthFragment } from '@/components/fragments/HealthFragment';
-import { PsychologyFragment } from '@/components/fragments/PsychologyFragment';
-import { ConsciousnessFragment } from '@/components/fragments/ConsciousnessFragment';
+import { FRAGMENT_REGISTRY } from '@/modules/fragmentRegistry';
 
 /** Tracks how many px the virtual keyboard has pushed the viewport up. */
 function useKeyboardOffset() {
@@ -33,27 +30,27 @@ function useKeyboardOffset() {
 }
 
 function ActiveFragment() {
-  const { intent } = useNebulaStore();
-  switch (intent) {
-    case 'FINANCE':       return <FinanceFragment />;
-    case 'HEALTH':        return <HealthFragment />;
-    case 'PSYCHOLOGY':    return <PsychologyFragment />;
-    case 'CONSCIOUSNESS': return <ConsciousnessFragment />;
-    default:              return null;
-  }
+  const { activeFragment, fragmentParams } = useNebulaStore();
+
+  if (!activeFragment) return null;
+
+  const Component = FRAGMENT_REGISTRY[activeFragment];
+  if (!Component) return null;
+
+  return <Component params={fragmentParams} />;
 }
 
 export function NebulaCore() {
-  const { intent } = useNebulaStore();
-  const kbOffset  = useKeyboardOffset();
-  const kbOpen    = kbOffset > 80;
+  const { activeFragment } = useNebulaStore();
+  const kbOffset = useKeyboardOffset();
+  const kbOpen   = kbOffset > 80;
 
   return (
     <div
       className={[
         'nebula-core',
         kbOpen          ? 'nebula-core--kb'       : '',
-        intent !== 'IDLE' ? 'nebula-core--fragment' : '',
+        activeFragment  ? 'nebula-core--fragment'  : '',
       ].filter(Boolean).join(' ')}
       style={{ '--kb-offset': `${kbOffset}px` } as React.CSSProperties}
     >
@@ -66,7 +63,7 @@ export function NebulaCore() {
 
       <div className="nb-fragment-area">
         <AnimatePresence mode="wait">
-          <ActiveFragment key={intent} />
+          <ActiveFragment key={activeFragment ?? 'none'} />
         </AnimatePresence>
       </div>
 

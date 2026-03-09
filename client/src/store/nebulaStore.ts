@@ -8,6 +8,8 @@ export type NebulaIntent =
   | 'CONSCIOUSNESS'
   | 'BADGES';
 
+export type NebulaResponseType = 'TALK' | 'ACTION' | 'VISUAL' | 'HYBRID';
+
 export interface ChatEntry {
   role: 'user' | 'assistant';
   content: string;
@@ -22,11 +24,18 @@ interface NebulaState {
   isThinking: boolean;
   chatHistory: ChatEntry[];
 
+  /** Type of AI response — drives whether a Fragment is rendered */
+  responseType: NebulaResponseType | null;
+  /** Name key in FRAGMENT_REGISTRY to render (null = none) */
+  activeFragment: string | null;
+  /** Params forwarded to the active fragment */
+  fragmentParams: Record<string, unknown>;
+
   /** 0–1: grows with each keystroke, resets after submit */
   typingIntensity: number;
   /** true for ~700 ms after the user hits send */
   isBursting: boolean;
-  /** true for ~1100 ms after the AI responds — bigger, bouncier */
+  /** true for ~2300 ms after the AI responds */
   isResponseBursting: boolean;
 
   setIntent: (
@@ -34,6 +43,12 @@ interface NebulaState {
     intensity: number,
     message: string,
     data?: Record<string, unknown>,
+  ) => void;
+  /** Set active fragment with its params and response type */
+  setFragment: (
+    fragment: string | null,
+    params: Record<string, unknown>,
+    type: NebulaResponseType,
   ) => void;
   setThinking: (v: boolean) => void;
   addMessage: (role: 'user' | 'assistant', content: string) => void;
@@ -50,12 +65,18 @@ export const useNebulaStore = create<NebulaState>((set) => ({
   data: {},
   isThinking: false,
   chatHistory: [],
+  responseType: null,
+  activeFragment: null,
+  fragmentParams: {},
   typingIntensity: 0,
   isBursting: false,
   isResponseBursting: false,
 
   setIntent: (intent, intensity, message, data = {}) =>
     set({ intent, intensity, message, data }),
+
+  setFragment: (activeFragment, fragmentParams, responseType) =>
+    set({ activeFragment, fragmentParams, responseType }),
 
   setThinking: (isThinking) => set({ isThinking }),
 
@@ -68,7 +89,15 @@ export const useNebulaStore = create<NebulaState>((set) => ({
     })),
 
   reset: () =>
-    set({ intent: 'IDLE', intensity: 0.2, message: 'Come posso aiutarti?', data: {} }),
+    set({
+      intent: 'IDLE',
+      intensity: 0.2,
+      message: 'Come posso aiutarti?',
+      data: {},
+      activeFragment: null,
+      fragmentParams: {},
+      responseType: null,
+    }),
 
   setTypingIntensity: (typingIntensity) => set({ typingIntensity }),
 

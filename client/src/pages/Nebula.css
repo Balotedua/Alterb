@@ -166,8 +166,10 @@
   margin-top: 0.08rem;
 }
 
-.fkv--green { color: #6ee7b7; }
-.fkv--red   { color: #fca5a5; }
+.fkv--green  { color: #6ee7b7; }
+.fkv--red    { color: #fca5a5; }
+.fkv--blue   { color: #93c5fd; }
+.fkv--purple { color: #c4b5fd; }
 
 .fragment-list {
   display: flex;
@@ -338,6 +340,64 @@
 @keyframes nb-dot {
   0%, 100% { opacity: 0.25; transform: scale(0.8); }
   50%       { opacity: 1;    transform: scale(1.2); }
+}
+
+/* ─── NebulaGraph ───────────────────────────────────────────────────────────── */
+.nebula-graph-wrap {
+  margin-top: 0.6rem;
+}
+
+.nebula-graph-label {
+  display: block;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(196, 181, 253, 0.35);
+  margin-bottom: 0.3rem;
+}
+
+.nebula-graph {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+/* ─── HealthWater buttons ───────────────────────────────────────────────────── */
+.nebula-water-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  margin: 0.75rem 0 0.65rem;
+  overflow: hidden;
+}
+
+.nebula-water-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+
+.nebula-water-btn {
+  width: 100%;
+  padding: 0.45rem 0;
+  border-radius: 8px;
+  border: 1px solid rgba(124, 58, 237, 0.25);
+  background: rgba(124, 58, 237, 0.1);
+  color: #c4b5fd;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+  pointer-events: auto;
+}
+
+.nebula-water-btn:hover:not(:disabled) {
+  background: rgba(124, 58, 237, 0.2);
+}
+
+.nebula-water-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 /* ─── Mobile ────────────────────────────────────────────────────────────────── */

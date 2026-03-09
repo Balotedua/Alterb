@@ -1,17 +1,27 @@
 import { useCallback } from 'react';
-import { useNebulaStore, type NebulaIntent } from '@/store/nebulaStore';
+import { useNebulaStore, type NebulaIntent, type NebulaResponseType } from '@/store/nebulaStore';
 import { chatWithSystemPrompt } from '@/services/deepseek';
 import { NEBULA_SYSTEM_PROMPT } from '@/prompts/nebula';
 
 interface NebulaResponse {
-  intent: NebulaIntent;
+  type: NebulaResponseType;
+  module: 'FINANCE' | 'HEALTH' | 'PSYCH' | 'NONE';
+  fragment: string;
+  params: Record<string, unknown>;
   intensity: number;
   message: string;
-  data?: Record<string, unknown>;
 }
 
+/** Maps module name to the legacy NebulaIntent (used for blob color animations) */
+const MODULE_TO_INTENT: Record<string, NebulaIntent> = {
+  FINANCE: 'FINANCE',
+  HEALTH:  'HEALTH',
+  PSYCH:   'PSYCHOLOGY',
+  NONE:    'IDLE',
+};
+
 export function useIntent() {
-  const { setIntent, setThinking, addMessage, chatHistory } = useNebulaStore();
+  const { setIntent, setFragment, setThinking, addMessage, chatHistory } = useNebulaStore();
 
   const processInput = useCallback(
     async (text: string) => {
@@ -39,18 +49,27 @@ export function useIntent() {
 
         const parsed: NebulaResponse = JSON.parse(jsonStr);
 
-        setIntent(
-          parsed.intent ?? 'IDLE',
-          Math.max(0, Math.min(1, parsed.intensity ?? 0.5)),
-          parsed.message ?? '',
-          parsed.data ?? {},
-        );
-        addMessage('assistant', parsed.message ?? '');
-        // Response burst — entity explodes when the answer arrives
+        const type      = parsed.type      ?? 'TALK';
+        const intensity = Math.max(0, Math.min(1, parsed.intensity ?? 0.5));
+        const message   = parsed.message   ?? '';
+        const fragment  = parsed.fragment  ?? '';
+        const params    = parsed.params    ?? {};
+        const intent    = MODULE_TO_INTENT[parsed.module] ?? 'IDLE';
+
+        // Update blob animation intent
+        setIntent(intent, intensity, message);
+
+        // Update fragment state
+        const showFragment = (type === 'VISUAL' || type === 'HYBRID') && fragment !== '';
+        setFragment(showFragment ? fragment : null, params, type);
+
+        addMessage('assistant', message);
         useNebulaStore.getState().triggerResponseBurst();
       } catch {
-        setIntent('IDLE', 0.3, 'Non ho capito bene. Puoi riformulare?', {});
-        addMessage('assistant', 'Non ho capito bene. Puoi riformulare?');
+        const fallback = 'Non ho capito bene. Puoi riformulare?';
+        setIntent('IDLE', 0.3, fallback);
+        setFragment(null, {}, 'TALK');
+        addMessage('assistant', fallback);
         useNebulaStore.getState().triggerResponseBurst();
       } finally {
         setThinking(false);
