@@ -78,9 +78,9 @@
 .nb-fragment-area {
   position: absolute;
   top: 50%;
-  right: max(2rem, calc(50% - 600px));
+  right: max(2rem, calc(50% - 620px));
   transform: translateY(-50%);
-  width: 280px;
+  width: 320px;
   z-index: 10;
   pointer-events: none;
 }
@@ -92,8 +92,8 @@
     top: auto;
     right: auto;
     transform: none;
-    width: min(300px, 88vw);
-    margin-top: 1.25rem;
+    width: min(320px, 90vw);
+    margin-top: 1.5rem;
     pointer-events: auto;
   }
 }
