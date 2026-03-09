@@ -103,80 +103,106 @@
   display: none;
 }
 
-/* ─── Fragment card — minimal ───────────────────────────────────────────────── */
+/* ─── Fragment card — solid dark panel ──────────────────────────────────────── */
 .fragment {
-  background: rgba(8, 3, 22, 0.82);
-  border: 1px solid rgba(124, 58, 237, 0.18);
-  border-radius: 14px;
-  padding: 1.1rem 1.25rem;
-  color: #ddd6fe;
+  background: #0d0d20;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-left: 3px solid var(--fragment-accent, #7c3aed);
+  border-radius: 12px;
+  padding: 1rem 1.1rem 1rem 1rem;
+  color: #e2e0f0;
   pointer-events: auto;
+  max-height: 72vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
 }
+.fragment::-webkit-scrollbar { display: none; }
 
+/* Accent colors per module */
+.fragment--finance     { --fragment-accent: #a78bfa; }
+.fragment--health      { --fragment-accent: #34d399; }
+.fragment--psychology  { --fragment-accent: #60a5fa; }
+
+/* ─── Header ────────────────────────────────────────────────────────────────── */
 .fragment-header {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.9rem;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .fragment-icon {
-  font-size: 1rem;
-  opacity: 0.8;
+  font-size: 0.95rem;
+  line-height: 1;
 }
 
 .fragment-title {
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(196, 181, 253, 0.5);
+  color: var(--fragment-accent, #a78bfa);
+  opacity: 0.85;
 }
 
+/* ─── KPI strip ─────────────────────────────────────────────────────────────── */
 .fragment-kpis {
   display: flex;
-  gap: 1.25rem;
-  flex-wrap: wrap;
+  gap: 0;
+  flex-wrap: nowrap;
   margin-bottom: 0.85rem;
 }
 
 .fragment-kpi {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.18rem;
+  padding: 0.55rem 0.6rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-right: 0.5rem;
+  min-width: 0;
 }
+.fragment-kpi:last-child { margin-right: 0; }
 
 .fragment-kpi-label {
-  font-size: 0.65rem;
-  color: rgba(196, 181, 253, 0.4);
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: rgba(200, 195, 230, 0.4);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
+  white-space: nowrap;
 }
 
 .fragment-kpi-value {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: #ede9fe;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #f0edff;
   line-height: 1;
+  letter-spacing: -0.02em;
 }
 
 .fragment-kpi-sub {
-  font-size: 0.68rem;
-  color: rgba(196, 181, 253, 0.4);
-  margin-top: 0.08rem;
+  font-size: 0.62rem;
+  color: rgba(200, 195, 230, 0.38);
+  margin-top: 0.06rem;
 }
 
-.fkv--green  { color: #6ee7b7; }
-.fkv--red    { color: #fca5a5; }
-.fkv--blue   { color: #93c5fd; }
-.fkv--purple { color: #c4b5fd; }
+.fkv--green  { color: #4ade80; }
+.fkv--red    { color: #f87171; }
+.fkv--blue   { color: #60a5fa; }
+.fkv--purple { color: #a78bfa; }
 
+/* ─── List ──────────────────────────────────────────────────────────────────── */
 .fragment-list {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-  border-top: 1px solid rgba(124, 58, 237, 0.12);
-  padding-top: 0.7rem;
+  gap: 0;
 }
 
 .fragment-list-row {
@@ -184,47 +210,217 @@
   justify-content: space-between;
   align-items: center;
   gap: 0.5rem;
+  padding: 0.42rem 0.3rem;
+  border-radius: 6px;
+  transition: background 0.15s;
+  cursor: default;
+}
+
+.fragment-list-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.fragment-list-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
 }
 
 .fragment-list-desc {
-  font-size: 0.76rem;
-  color: rgba(221, 214, 254, 0.6);
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: rgba(230, 225, 255, 0.75);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 150px;
+  max-width: 160px;
 }
 
 .fragment-list-amt {
-  font-size: 0.76rem;
-  font-weight: 600;
+  font-size: 0.8rem;
+  font-weight: 700;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .fragment-list-sub {
-  font-size: 0.68rem;
-  color: rgba(196, 181, 253, 0.35);
+  font-size: 0.64rem;
+  color: rgba(200, 195, 230, 0.3);
 }
 
-.fragment-list-row--note .fragment-list-desc {
-  font-style: italic;
+/* ─── Delete button (per-row) ───────────────────────────────────────────────── */
+.fragment-delete-btn {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  color: rgba(248, 113, 113, 0.0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: color 0.15s, background 0.15s;
+  padding: 0;
+}
+.fragment-list-row:hover .fragment-delete-btn {
+  color: rgba(248, 113, 113, 0.6);
+}
+.fragment-delete-btn:hover {
+  color: #f87171 !important;
+  background: rgba(248, 113, 113, 0.1);
+}
+.fragment-delete-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 
+/* ─── Action buttons strip ─────────────────────────────────────────────────── */
+.fragment-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.fragment-btn {
+  flex: 1;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(220, 215, 255, 0.7);
+  font-size: 0.73rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  letter-spacing: 0.02em;
+}
+.fragment-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.fragment-btn--danger {
+  border-color: rgba(248, 113, 113, 0.2);
+  color: rgba(248, 113, 113, 0.7);
+}
+.fragment-btn--danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.08);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.35);
+}
+.fragment-btn--primary {
+  border-color: rgba(167, 139, 250, 0.3);
+  color: rgba(167, 139, 250, 0.9);
+  background: rgba(124, 58, 237, 0.08);
+}
+.fragment-btn--primary:hover:not(:disabled) {
+  background: rgba(124, 58, 237, 0.18);
+  color: #c4b5fd;
+  border-color: rgba(167, 139, 250, 0.5);
+}
+.fragment-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ─── Add form ──────────────────────────────────────────────────────────────── */
+.fragment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.fragment-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 3px;
+  margin-bottom: 0.2rem;
+}
+.fragment-toggle-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 0.4rem 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: rgba(200, 195, 230, 0.45);
+  transition: background 0.15s, color 0.15s;
+  letter-spacing: 0.03em;
+}
+.fragment-toggle-btn--active-expense {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
+.fragment-toggle-btn--active-income {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+}
+
+.fragment-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.fragment-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(200, 195, 230, 0.4);
+}
+.fragment-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.85rem;
+  color: #f0edff;
+  outline: none;
+  transition: border-color 0.18s, background 0.18s;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+.fragment-input:focus {
+  border-color: rgba(167, 139, 250, 0.5);
+  background: rgba(255, 255, 255, 0.07);
+}
+.fragment-input::placeholder {
+  color: rgba(200, 195, 230, 0.2);
+}
+
+/* ─── Misc ──────────────────────────────────────────────────────────────────── */
 .fragment-note {
-  margin-top: 0.65rem;
-  font-size: 0.75rem;
+  margin-top: 0.6rem;
+  font-size: 0.74rem;
   font-style: italic;
-  color: rgba(196, 181, 253, 0.45);
-  border-top: 1px solid rgba(124, 58, 237, 0.1);
-  padding-top: 0.55rem;
-  line-height: 1.5;
+  color: rgba(200, 195, 230, 0.38);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 0.5rem;
+  line-height: 1.55;
 }
 
 .fragment-empty {
   font-size: 0.76rem;
-  color: rgba(196, 181, 253, 0.35);
-  line-height: 1.5;
-  margin: 0;
+  color: rgba(200, 195, 230, 0.3);
+  line-height: 1.6;
+  margin: 0.2rem 0;
+}
+
+.fragment-count {
+  font-size: 0.65rem;
+  color: rgba(200, 195, 230, 0.3);
+  text-align: right;
+  margin-top: 0.35rem;
+  letter-spacing: 0.04em;
 }
 
 /* ─── Chat input ─────────────────────────────────────────────────────────────── */
@@ -277,7 +473,6 @@
   background: transparent;
   border: none;
   outline: none;
-  font-size: 0.9rem;
   color: #ede9fe;
   font-family: inherit;
   /* Prevent iOS zoom on focus (font-size must be ≥ 16px for inputs) */

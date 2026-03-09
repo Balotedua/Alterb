@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════
-   LOGIN PAGE — fullscreen animated
+   LOGIN SCREEN — fullscreen animated
    ═══════════════════════════════════════════ */
 
 .lp-root {
@@ -58,7 +58,7 @@
   to   { transform: translate(-100px, -60px) scale(1.1); }
 }
 
-/* blob 3 (CSS via box-shadow trick su lp-bg-extra) */
+/* blob 3 */
 .lp-bg-extra {
   position: absolute;
   width: 400px;

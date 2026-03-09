@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { FinanceOverviewFragment, FinanceChartFragment, FinanceListFragment } from './finance';
+import { FinanceOverviewFragment, FinanceChartFragment, FinanceListFragment, FinanceAddFragment, FinanceDeleteFragment } from './finance';
 import { HealthOverviewFragment, HealthSleepFragment, HealthWaterFragment }   from './health';
 import { PsychOverviewFragment, MoodHistoryFragment }                         from './psychology';
 
@@ -10,6 +10,8 @@ export const FRAGMENT_REGISTRY: Record<string, FragmentComponent> = {
   FinanceOverview: FinanceOverviewFragment,
   FinanceChart:    FinanceChartFragment,
   FinanceList:     FinanceListFragment,
+  FinanceAdd:      FinanceAddFragment,
+  FinanceDelete:   FinanceDeleteFragment,
 
   // Health
   HealthOverview: HealthOverviewFragment,

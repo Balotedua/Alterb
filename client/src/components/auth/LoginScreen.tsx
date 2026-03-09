@@ -1,13 +1,11 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import './Login.css';
+import './LoginScreen.css';
 
 type Tab = 'login' | 'register';
 
-export default function Login() {
+export default function LoginScreen() {
   const { login, register } = useAuth();
-  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -51,7 +49,7 @@ export default function Login() {
     try {
       if (tab === 'login') {
         await login(email, password);
-        navigate('/nebula');
+        // Auth state change in AuthContext triggers App re-render → NebulaCore
       } else {
         await register(email, password, {
           first_name: firstName.trim(),

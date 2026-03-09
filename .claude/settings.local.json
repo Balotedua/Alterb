@@ -11,7 +11,13 @@
       "Bash(npx vite:*)",
       "Bash(rm:*)",
       "Bash(npx tsc:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(gh run:*)",
+      "Bash(git checkout:*)",
+      "Bash(vercel:*)",
+      "Bash(wc:*)",
+      "Bash(git rm:*)",
+      "Bash(git:*)"
     ]
   }
 }

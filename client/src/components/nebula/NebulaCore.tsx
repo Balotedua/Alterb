@@ -4,6 +4,7 @@ import { useNebulaStore } from '@/store/nebulaStore';
 import { NebulaEntity }    from './NebulaEntity';
 import { NebulaChatInput } from './NebulaChatInput';
 import { FRAGMENT_REGISTRY } from '@/modules/fragmentRegistry';
+import './nebula.css';
 
 /** Tracks how many px the virtual keyboard has pushed the viewport up. */
 function useKeyboardOffset() {
