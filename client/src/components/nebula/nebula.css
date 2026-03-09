@@ -148,6 +148,134 @@
   opacity: 0.85;
 }
 
+/* ─── New NebulaCard styles ────────────────────────────────────────────────── */
+.nebula-card {
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(20px);
+  border-radius: 24px;
+  padding: 28px;
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  max-width: 480px;
+  width: 100%;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+  color: #1a1a1a;
+  pointer-events: auto;
+  max-height: 75vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,0,0,0.2) transparent;
+}
+
+.nebula-card::-webkit-scrollbar {
+  width: 6px;
+}
+.nebula-card::-webkit-scrollbar-track {
+  background: transparent;
+}
+.nebula-card::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.15);
+  border-radius: 3px;
+}
+
+.nebula-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.nebula-card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.nebula-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #8a2be2, #4a00e0);
+  color: white;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.nebula-card-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #1a1a1a;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.nebula-card-close {
+  background: transparent;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.nebula-card-close:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #333;
+}
+
+.nebula-card-content {
+  color: #333;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+/* Variants */
+.fragment--finance .nebula-card-icon {
+  background: linear-gradient(135deg, #00b09b, #96c93d);
+}
+.fragment--health .nebula-card-icon {
+  background: linear-gradient(135deg, #ff7e5f, #feb47b);
+}
+.fragment--psychology .nebula-card-icon {
+  background: linear-gradient(135deg, #8a2be2, #4a00e0);
+}
+
+/* Ensure the fragment area adapts */
+.nb-fragment-area .nebula-card {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Mobile adjustments */
+@media (max-width: 860px) {
+  .nebula-card {
+    padding: 22px;
+    border-radius: 20px;
+    max-height: 70vh;
+  }
+  .nebula-card-title {
+    font-size: 20px;
+  }
+  .nebula-card-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 18px;
+  }
+}
+
 /* ─── KPI strip ─────────────────────────────────────────────────────────────── */
 .fragment-kpis {
   display: flex;
