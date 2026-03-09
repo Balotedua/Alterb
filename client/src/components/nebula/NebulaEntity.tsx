@@ -160,39 +160,54 @@ export function NebulaEntity() {
         ctx.fill();
       }
 
-      // ── Linee di connessione dal centro verso l'esterno (solo quando fragment è attivo) ──
+      // ── Effetto esplosione (particelle che si disperdono) ──
       if (fragmentFade > 0.01) {
-        const lineCount = 12;
-        const lineLength = r * 1.8;
+        const particleCount = 80;
+        const explosionSpeed = 2.0;
+        const baseRadius = r * 0.5;
+
+        for (let i = 0; i < particleCount; i++) {
+          // Angolo distribuito uniformemente
+          const angle = (i / particleCount) * Math.PI * 2;
+          // Distanza progressiva in base al tempo e al fade
+          const dist = baseRadius * (1 + fragmentFade * explosionSpeed * (0.5 + Math.random() * 1.5));
+          const x = cx + Math.cos(angle) * dist;
+          const y = cy + Math.sin(angle) * dist;
+
+          // Dimensione della particella che si riduce con il fade
+          const particleSize = (2 + Math.random() * 4) * (1 - fragmentFade * 0.7);
+          // Opacità che diminuisce
+          const alpha = (0.3 + Math.random() * 0.5) * (1 - fragmentFade);
+
+          ctx.beginPath();
+          ctx.arc(x, y, particleSize, 0, Math.PI * 2);
+          // Colore che varia dal viola al bianco
+          const colorR = 167 + Math.floor(88 * fragmentFade);
+          const colorG = 139 + Math.floor(116 * fragmentFade);
+          const colorB = 250;
+          ctx.fillStyle = `rgba(${colorR}, ${colorG}, ${colorB}, ${alpha})`;
+          ctx.fill();
+        }
+
+        // Linee radiali che si allungano
+        const lineCount = 16;
+        const lineLength = r * (1.5 + fragmentFade * 3);
         const lineWidth = 2 * (1 - fragmentFade);
-        const lineAlpha = 0.15 * fragmentFade;
+        const lineAlpha = 0.2 * fragmentFade;
 
         for (let i = 0; i < lineCount; i++) {
-          const angle = (i / lineCount) * Math.PI * 2 + t * 0.3;
-          const startX = cx + Math.cos(angle) * r * 0.7;
-          const startY = cy + Math.sin(angle) * r * 0.7;
-          const endX = cx + Math.cos(angle) * (r * 0.7 + lineLength);
-          const endY = cy + Math.sin(angle) * (r * 0.7 + lineLength);
+          const angle = (i / lineCount) * Math.PI * 2 + t * 0.5;
+          const startX = cx + Math.cos(angle) * r * 0.3;
+          const startY = cy + Math.sin(angle) * r * 0.3;
+          const endX = cx + Math.cos(angle) * (r * 0.3 + lineLength);
+          const endY = cy + Math.sin(angle) * (r * 0.3 + lineLength);
 
           ctx.beginPath();
           ctx.moveTo(startX, startY);
           ctx.lineTo(endX, endY);
-          ctx.strokeStyle = `rgba(167, 139, 250, ${lineAlpha})`;
+          ctx.strokeStyle = `rgba(255, 255, 255, ${lineAlpha})`;
           ctx.lineWidth = lineWidth;
           ctx.stroke();
-        }
-
-        // Punti di connessione alle estremità delle linee
-        for (let i = 0; i < lineCount; i++) {
-          const angle = (i / lineCount) * Math.PI * 2 + t * 0.3;
-          const pointX = cx + Math.cos(angle) * (r * 0.7 + lineLength);
-          const pointY = cy + Math.sin(angle) * (r * 0.7 + lineLength);
-          const pointRadius = 3 * fragmentFade;
-
-          ctx.beginPath();
-          ctx.arc(pointX, pointY, pointRadius, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(167, 139, 250, ${0.6 * fragmentFade})`;
-          ctx.fill();
         }
       }
 

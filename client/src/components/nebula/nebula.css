@@ -54,11 +54,11 @@
   transition: opacity 0.35s, transform 0.55s cubic-bezier(0.34, 1.2, 0.64, 1);
 }
 
-/* Shift entity left when a fragment is visible (desktop only) */
-@media (min-width: 861px) {
-  .nebula-core--fragment .nb-entity-wrapper {
-    transform: translateX(-150px);
-  }
+/* Nascondi completamente l'entità quando un fragment è attivo */
+.nebula-core--fragment .nb-entity-wrapper {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.8);
 }
 
 .nb-entity-wrapper canvas {
@@ -78,22 +78,22 @@
 .nb-fragment-area {
   position: absolute;
   top: 50%;
-  right: max(2rem, calc(50% - 620px));
-  transform: translateY(-50%);
-  width: 320px;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, 90vw);
   z-index: 10;
   pointer-events: none;
 }
 
-/* On mobile: below entity, inline */
+/* On mobile: mantieni centrale */
 @media (max-width: 860px) {
   .nb-fragment-area {
-    position: relative;
-    top: auto;
-    right: auto;
-    transform: none;
-    width: min(320px, 90vw);
-    margin-top: 1.5rem;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(400px, 90vw);
+    margin-top: 0;
     pointer-events: auto;
   }
 }
