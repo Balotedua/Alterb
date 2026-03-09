@@ -81,8 +81,13 @@
   left: 50%;
   transform: translate(-50%, -50%);
   width: min(460px, 90vw);
-  z-index: 10;
+  z-index: 30; /* Più alto della chat (20) */
   pointer-events: none;
+}
+
+/* Il fragment card deve avere pointer-events auto */
+.nb-fragment-area .nebula-card {
+  pointer-events: auto;
 }
 
 /* On mobile: mantieni centrale e adatta altezza */
@@ -98,6 +103,7 @@
     pointer-events: auto;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    z-index: 30;
   }
 
   .nebula-card {
@@ -105,6 +111,7 @@
     border-radius: 16px;
     max-height: 78vh;
     backdrop-filter: blur(15px) saturate(180%);
+    pointer-events: auto;
   }
 
   .nebula-card-header {
@@ -128,10 +135,14 @@
     padding: 4px;
   }
 
-  /* Sposta la chat ancora più in basso su mobile quando il fragment è attivo */
+  /* Nascondi completamente la chat su mobile quando il fragment è attivo */
   .nebula-core--fragment .nebula-chat-wrapper {
-    bottom: calc(0.5rem + var(--kb-offset, 0px));
-    opacity: 0.4;
+    bottom: calc(0.2rem + var(--kb-offset, 0px));
+    opacity: 0.2;
+  }
+
+  .nebula-core--fragment .nebula-reply {
+    display: none;
   }
 
   /* Riduci le dimensioni della chat su mobile */
@@ -637,23 +648,30 @@
   align-items: center;
   gap: 0.75rem;
   z-index: 20;
-  transition: bottom 0.2s ease;
+  transition: bottom 0.2s ease, opacity 0.3s ease;
 }
 
-/* Quando un fragment è attivo, sposta la chat più in basso e riduci l'opacità */
+/* Quando un fragment è attivo, nascondi completamente la chat bubble e riduci l'input */
 .nebula-core--fragment .nebula-chat-wrapper {
-  bottom: calc(1rem + var(--kb-offset, 0px));
-  opacity: 0.6;
+  bottom: calc(0.5rem + var(--kb-offset, 0px));
+  opacity: 0.3;
   pointer-events: none;
 }
 
+/* Nascondi il messaggio di risposta quando il fragment è attivo */
+.nebula-core--fragment .nebula-reply {
+  display: none;
+}
+
 .nebula-core--fragment .nebula-input-bar {
-  border-color: rgba(124, 58, 237, 0.1);
-  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(124, 58, 237, 0.05);
+  background: rgba(255, 255, 255, 0.01);
+  opacity: 0.5;
 }
 
 .nebula-core--fragment .nebula-send-btn {
-  opacity: 0.5;
+  opacity: 0.3;
+  pointer-events: none;
 }
 
 .nebula-reply {
@@ -678,7 +696,7 @@
   border: 1px solid rgba(124, 58, 237, 0.22);
   border-radius: 999px;
   padding: 0.5rem 0.5rem 0.5rem 1.2rem;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background 0.2s, opacity 0.2s;
 }
 
 .nebula-input-bar:focus-within {
