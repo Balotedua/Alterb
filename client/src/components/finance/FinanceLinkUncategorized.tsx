@@ -6,7 +6,7 @@ import { formatCurrency, formatDate } from '@/utils/formatters';
 export function FinanceLinkUncategorized() {
   const { data: uncategorized } = useUncategorizedTransactions();
   const recategorizeContains = useRecategorizeContains();
-  const [selectedPattern, setSelectedPattern] = useState<string>('');
+  const [linkError, setLinkError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>(CAT_CONFIG?.[0]?.id || '');
   const [newCategory, setNewCategory] = useState<string>('');
   const [isClient, setIsClient] = useState(false);
@@ -95,12 +95,17 @@ export function FinanceLinkUncategorized() {
 
   const handleLink = (pattern: string, category: string) => {
     if (!pattern || !category) return;
-    recategorizeContains.mutate({ pattern, category });
+    setLinkError(null);
+    recategorizeContains.mutate({ pattern, category }, {
+      onError: (err: unknown) => {
+        setLinkError(err instanceof Error ? err.message : 'Errore durante il collegamento');
+      },
+    });
   };
 
-  const handleCreateAndLink = () => {
-    if (!selectedPattern || !newCategory.trim()) return;
-    handleLink(selectedPattern, newCategory.trim());
+  const handleCreateAndLink = (pattern: string) => {
+    if (!pattern || !newCategory.trim()) return;
+    handleLink(pattern, newCategory.trim());
     setNewCategory('');
     setShowNewCategoryInput(false);
   };
@@ -155,6 +160,11 @@ export function FinanceLinkUncategorized() {
         </div>
 
         <div className="fin-uncat-actions">
+          {linkError && (
+            <div style={{ color: 'var(--error, #ef4444)', fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+              ⚠ {linkError}
+            </div>
+          )}
           <div className="fin-uncat-select-row">
             <select
               className="input"
@@ -198,7 +208,7 @@ export function FinanceLinkUncategorized() {
               />
               <button
                 className="fin-uncat-btn primary"
-                onClick={handleCreateAndLink}
+                onClick={() => handleCreateAndLink(desc)}
                 disabled={!newCategory.trim() || recategorizeContains.isPending}
               >
                 {recategorizeContains.isPending ? 'Creazione...' : 'Crea e collega'}

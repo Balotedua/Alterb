@@ -1,0 +1,358 @@
+/* ─── Core layout ───────────────────────────────────────────────────────────── */
+.nebula-core {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at 55% 40%, #1e0f4a 0%, #0f0228 35%, #070014 70%, #020009 100%);
+  overflow: hidden;
+  /* Force GPU clipping — prevents blur bleeding outside on mobile */
+  clip-path: inset(0);
+  font-family: 'Inter', 'Geist', system-ui, sans-serif;
+}
+
+/* ─── Background orbs (only 2, smaller, fully contained) ────────────────────── */
+.nb-orb {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: nb-orb-drift 16s ease-in-out infinite;
+}
+
+.nb-orb--1 {
+  width: 480px;
+  height: 480px;
+  background: radial-gradient(circle, rgba(109, 40, 217, 0.22) 0%, transparent 70%);
+  top: -80px;
+  left: -100px;
+  animation-delay: 0s;
+}
+
+.nb-orb--2 {
+  width: 360px;
+  height: 360px;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.14) 0%, transparent 70%);
+  bottom: -60px;
+  right: -60px;
+  animation-delay: -7s;
+}
+
+@keyframes nb-orb-drift {
+  0%, 100% { transform: translate(0, 0); }
+  50%       { transform: translate(18px, -14px); }
+}
+
+/* ─── Entity canvas ─────────────────────────────────────────────────────────── */
+.nb-entity-wrapper {
+  position: relative;
+  width: min(340px, 78vw);
+  height: min(340px, 78vw);
+  flex-shrink: 0;
+  z-index: 1;
+  transition: opacity 0.35s, transform 0.55s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+
+/* Shift entity left when a fragment is visible (desktop only) */
+@media (min-width: 861px) {
+  .nebula-core--fragment .nb-entity-wrapper {
+    transform: translateX(-150px);
+  }
+}
+
+.nb-entity-wrapper canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Hide entity when keyboard is open */
+.nebula-core--kb .nb-entity-wrapper {
+  opacity: 0;
+  transform: scale(0.9);
+  pointer-events: none;
+  position: absolute;
+}
+
+/* ─── Fragment area ─────────────────────────────────────────────────────────── */
+.nb-fragment-area {
+  position: absolute;
+  top: 50%;
+  right: max(2rem, calc(50% - 600px));
+  transform: translateY(-50%);
+  width: 280px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* On mobile: below entity, inline */
+@media (max-width: 860px) {
+  .nb-fragment-area {
+    position: relative;
+    top: auto;
+    right: auto;
+    transform: none;
+    width: min(300px, 88vw);
+    margin-top: 1.25rem;
+    pointer-events: auto;
+  }
+}
+
+/* Hide fragment when keyboard is open */
+.nebula-core--kb .nb-fragment-area {
+  display: none;
+}
+
+/* ─── Fragment card — minimal ───────────────────────────────────────────────── */
+.fragment {
+  background: rgba(8, 3, 22, 0.82);
+  border: 1px solid rgba(124, 58, 237, 0.18);
+  border-radius: 14px;
+  padding: 1.1rem 1.25rem;
+  color: #ddd6fe;
+  pointer-events: auto;
+}
+
+.fragment-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+}
+
+.fragment-icon {
+  font-size: 1rem;
+  opacity: 0.8;
+}
+
+.fragment-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(196, 181, 253, 0.5);
+}
+
+.fragment-kpis {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.85rem;
+}
+
+.fragment-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.fragment-kpi-label {
+  font-size: 0.65rem;
+  color: rgba(196, 181, 253, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.fragment-kpi-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #ede9fe;
+  line-height: 1;
+}
+
+.fragment-kpi-sub {
+  font-size: 0.68rem;
+  color: rgba(196, 181, 253, 0.4);
+  margin-top: 0.08rem;
+}
+
+.fkv--green { color: #6ee7b7; }
+.fkv--red   { color: #fca5a5; }
+
+.fragment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  border-top: 1px solid rgba(124, 58, 237, 0.12);
+  padding-top: 0.7rem;
+}
+
+.fragment-list-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fragment-list-desc {
+  font-size: 0.76rem;
+  color: rgba(221, 214, 254, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.fragment-list-amt {
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.fragment-list-sub {
+  font-size: 0.68rem;
+  color: rgba(196, 181, 253, 0.35);
+}
+
+.fragment-list-row--note .fragment-list-desc {
+  font-style: italic;
+}
+
+.fragment-note {
+  margin-top: 0.65rem;
+  font-size: 0.75rem;
+  font-style: italic;
+  color: rgba(196, 181, 253, 0.45);
+  border-top: 1px solid rgba(124, 58, 237, 0.1);
+  padding-top: 0.55rem;
+  line-height: 1.5;
+}
+
+.fragment-empty {
+  font-size: 0.76rem;
+  color: rgba(196, 181, 253, 0.35);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ─── Chat input ─────────────────────────────────────────────────────────────── */
+.nebula-chat-wrapper {
+  position: absolute;
+  /* Shift up by keyboard height when open */
+  bottom: calc(2rem + var(--kb-offset, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(540px, 90vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  z-index: 20;
+  transition: bottom 0.2s ease;
+}
+
+.nebula-reply {
+  font-size: 0.85rem;
+  color: rgba(196, 181, 253, 0.65);
+  text-align: center;
+  min-height: 1.3em;
+  transition: opacity 0.25s;
+  letter-spacing: 0.01em;
+  line-height: 1.55;
+  max-width: 420px;
+  padding: 0 0.5rem;
+}
+
+.nebula-reply--thinking { opacity: 0.5; }
+
+.nebula-input-bar {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(124, 58, 237, 0.22);
+  border-radius: 999px;
+  padding: 0.5rem 0.5rem 0.5rem 1.2rem;
+  transition: border-color 0.2s;
+}
+
+.nebula-input-bar:focus-within {
+  border-color: rgba(139, 92, 246, 0.45);
+}
+
+.nebula-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 0.9rem;
+  color: #ede9fe;
+  font-family: inherit;
+  /* Prevent iOS zoom on focus (font-size must be ≥ 16px for inputs) */
+  font-size: 16px;
+}
+
+.nebula-input::placeholder {
+  color: rgba(167, 139, 250, 0.3);
+  font-size: 14px;
+}
+
+.nebula-input:disabled { opacity: 0.45; }
+
+.nebula-send-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, #6d28d9, #4338ca);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #fff;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.nebula-send-btn:hover:not(:disabled) {
+  opacity: 0.88;
+  transform: scale(1.06);
+}
+
+.nebula-send-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+.nebula-send-btn svg { width: 15px; height: 15px; }
+
+/* ─── Thinking dots ──────────────────────────────────────────────────────────── */
+.nebula-dots {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.nebula-dots span {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(139, 92, 246, 0.6);
+  animation: nb-dot 1.2s ease-in-out infinite;
+}
+
+.nebula-dots span:nth-child(2) { animation-delay: 0.18s; }
+.nebula-dots span:nth-child(3) { animation-delay: 0.36s; }
+
+@keyframes nb-dot {
+  0%, 100% { opacity: 0.25; transform: scale(0.8); }
+  50%       { opacity: 1;    transform: scale(1.2); }
+}
+
+/* ─── Mobile ────────────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .nb-entity-wrapper {
+    width: min(240px, 72vw);
+    height: min(240px, 72vw);
+  }
+
+  .nebula-chat-wrapper {
+    width: 92vw;
+    bottom: calc(1.25rem + var(--kb-offset, 0px));
+  }
+
+  /* Reduce orbs on small screens to avoid bleed */
+  .nb-orb--1 { width: 300px; height: 300px; }
+  .nb-orb--2 { width: 220px; height: 220px; }
+}

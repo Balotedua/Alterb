@@ -223,6 +223,20 @@
   gap: 7px;
 }
 
+.lp-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.lp-label-opt {
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.25);
+  letter-spacing: 0.05em;
+  font-weight: 400;
+  text-transform: none;
+}
+
 .lp-field--anim {
   animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }

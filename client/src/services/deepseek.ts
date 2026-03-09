@@ -20,6 +20,44 @@ export class DeepSeekError extends Error {
 }
 
 /**
+ * Invia la cronologia messaggi a DeepSeek con un system prompt personalizzato.
+ * Usato da Nebula per ottenere risposte JSON strutturate.
+ */
+export async function chatWithSystemPrompt(
+  systemPrompt: string,
+  history: ChatMessage[],
+): Promise<string> {
+  const apiKey = env.VITE_DEEPSEEK_API_KEY;
+  if (!apiKey) throw new DeepSeekError('VITE_DEEPSEEK_API_KEY non configurata nel .env');
+
+  const messages: ChatMessage[] = [{ role: 'system', content: systemPrompt }, ...history];
+
+  const res = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: DEEPSEEK_MODEL,
+      messages,
+      max_tokens: 256,
+      temperature: 0.3,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new DeepSeekError(`DeepSeek API error ${res.status}: ${body}`, res.status);
+  }
+
+  const data = await res.json();
+  const content = data?.choices?.[0]?.message?.content;
+  if (typeof content !== 'string') throw new DeepSeekError('Risposta API non valida');
+  return content.trim();
+}
+
+/**
  * Invia la cronologia messaggi a DeepSeek e restituisce la risposta dell'AI.
  *
  * @param history   - array di messaggi {role, content} (senza system, viene aggiunto qui)

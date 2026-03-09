@@ -7,7 +7,7 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, metadata?: Record<string, unknown>) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -37,8 +37,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   };
 
-  const register = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password });
+  const register = async (
+    email: string,
+    password: string,
+    metadata?: Record<string, unknown>,
+  ) => {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: metadata },
+    });
     if (error) throw error;
   };
 

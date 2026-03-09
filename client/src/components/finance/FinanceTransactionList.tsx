@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import { useTransactions, useDeleteTransaction } from '@/hooks/useFinance';
+import { useTransactions, useDeleteTransaction, useFinanceCategories } from '@/hooks/useFinance';
 import { formatCurrency, formatDate } from '@/utils/formatters';
-import { CAT_CONFIG } from '@/utils/constants';
+import type { CategoryConfig } from '@/types';
 
 const PAGE_SIZE = 10;
 
-function getCat(catId: string) {
-  return CAT_CONFIG.find(c => c.id === catId);
+function getCat(catId: string, categories: CategoryConfig[]) {
+  return categories.find(c => c.id === catId);
 }
 
 export function FinanceTransactionList() {
   const { data: transactions, isPending } = useTransactions();
+  const { data: categories = [] } = useFinanceCategories();
   const deleteMutation = useDeleteTransaction();
   const [limit, setLimit] = useState(PAGE_SIZE);
 
@@ -52,7 +53,7 @@ export function FinanceTransactionList() {
 
       <div className="fin-list">
         {visible.map((t, i) => {
-          const cat = getCat(t.category);
+          const cat = getCat(t.category, categories);
           return (
             <div
               key={t.id}

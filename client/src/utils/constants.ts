@@ -8,15 +8,7 @@ export const MOOD_CONFIG: MoodConfig[] = [
   { id: 5, label: 'Ottimo', emoji: '😄', color: '#06b6d4' },
 ];
 
-export const CAT_CONFIG: CategoryConfig[] = [
-  { id: 'food', label: 'Cibo & Spesa', icon: '🛒', color: '#f97316' },
-  { id: 'transport', label: 'Trasporti', icon: '🚌', color: '#3b82f6' },
-  { id: 'health', label: 'Salute', icon: '💊', color: '#22c55e' },
-  { id: 'entertainment', label: 'Svago', icon: '🎮', color: '#a855f7' },
-  { id: 'utilities', label: 'Bollette', icon: '⚡', color: '#eab308' },
-  { id: 'income', label: 'Entrate', icon: '💰', color: '#10b981' },
-  { id: 'other', label: 'Altro', icon: '📦', color: '#6b7280' },
-];
+export const CAT_CONFIG: CategoryConfig[] = [];
 
 export const ACT_CONFIG: ActivityConfig[] = [
   { id: 'run', label: 'Corsa', icon: '🏃' },

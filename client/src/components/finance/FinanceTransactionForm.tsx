@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { useAddTransaction, useTransactions } from '@/hooks/useFinance';
+import { useAddTransaction, useTransactions, useFinanceCategories } from '@/hooks/useFinance';
 import { Button, Input } from '@/components/ui';
-import { CAT_CONFIG } from '@/utils/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { badgeService } from '@/services/badgeService';
 import type { TransactionType } from '@/types';
@@ -10,10 +9,11 @@ export function FinanceTransactionForm() {
   const { user }       = useAuth();
   const addMutation    = useAddTransaction();
   const { data: txns } = useTransactions();
+  const { data: categories = [] } = useFinanceCategories();
 
   const [type,        setType       ] = useState<TransactionType>('expense');
   const [amount,      setAmount     ] = useState('');
-  const [category,    setCategory   ] = useState(CAT_CONFIG[0].id);
+  const [category,    setCategory   ] = useState('');
   const [description, setDescription] = useState('');
   const [date,        setDate       ] = useState(new Date().toISOString().slice(0, 10));
   const [error,       setError      ] = useState('');
@@ -25,6 +25,7 @@ export function FinanceTransactionForm() {
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) { setError('Inserisci un importo valido'); return; }
     if (!description.trim()) { setError('Inserisci una descrizione'); return; }
+    if (!category) { setError('Seleziona una categoria'); return; }
 
     try {
       await addMutation.mutateAsync({ amount: amt, type, category, description: description.trim(), date });
@@ -33,7 +34,6 @@ export function FinanceTransactionForm() {
       setDescription('');
       setDate(new Date().toISOString().slice(0, 10));
 
-      // ── Trigger gamification event (fire-and-forget) ──
       if (user) {
         const newCount = (txns?.length ?? 0) + 1;
         void badgeService.triggerEvent(user.id, 'transaction_added', { count: newCount });
@@ -78,15 +78,22 @@ export function FinanceTransactionForm() {
           />
           <div className="fin-field">
             <label className="fin-label">Categoria</label>
-            <select
-              className="fin-select"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            >
-              {CAT_CONFIG.map((c) => (
-                <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
-              ))}
-            </select>
+            {categories.length === 0 ? (
+              <div className="fin-select fin-select-empty">
+                Nessuna categoria — creane una in basso
+              </div>
+            ) : (
+              <select
+                className="fin-select"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                <option value="">Scegli categoria…</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
 
@@ -109,7 +116,12 @@ export function FinanceTransactionForm() {
 
         {error && <div className="fin-error">{error}</div>}
 
-        <Button type="submit" loading={addMutation.isPending} className="fin-submit-btn">
+        <Button
+          type="submit"
+          loading={addMutation.isPending}
+          className="fin-submit-btn"
+          disabled={categories.length === 0}
+        >
           {type === 'expense' ? '↓ Aggiungi uscita' : '↑ Aggiungi entrata'}
         </Button>
       </form>

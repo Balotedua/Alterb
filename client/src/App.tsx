@@ -8,6 +8,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 
 // Lazy-loaded pages
 const Login = lazy(() => import('@/pages/Login'));
+const Nebula = lazy(() => import('@/pages/Nebula'));
 const Dashboard = lazy(() => import('@/pages/Dashboard'));
 const Finance = lazy(() => import('@/pages/Finance'));
 const Psychology = lazy(() => import('@/pages/Psychology'));
@@ -43,8 +44,12 @@ export default function App() {
               {/* Pubblica */}
               <Route path="/auth" element={<Login />} />
 
-              {/* Private: ProtectedRoute wrappa il layout con Outlet */}
+              {/* Private */}
               <Route element={<ProtectedRoute />}>
+                {/* ── Nebula Core (senza sidebar) ── */}
+                <Route path="/nebula" element={<Nebula />} />
+
+                {/* ── Pagine classiche con sidebar ── */}
                 <Route element={<MainLayout />}>
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/finance" element={<Finance />} />
@@ -60,8 +65,8 @@ export default function App() {
                 </Route>
               </Route>
 
-              {/* Fallback */}
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              {/* Fallback → Nebula */}
+              <Route path="*" element={<Navigate to="/nebula" replace />} />
             </Routes>
           </Suspense>
         </BrowserRouter>

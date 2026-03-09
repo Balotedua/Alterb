@@ -12,6 +12,9 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,6 +26,9 @@ export default function Login() {
     setEmail('');
     setPassword('');
     setConfirm('');
+    setFirstName('');
+    setLastName('');
+    setAvatarUrl('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,18 +36,29 @@ export default function Login() {
     setError('');
     setSuccess('');
 
-    if (tab === 'register' && password !== confirm) {
-      setError('Le password non coincidono');
-      return;
+    if (tab === 'register') {
+      if (!firstName.trim() || !lastName.trim()) {
+        setError('Nome e cognome sono obbligatori');
+        return;
+      }
+      if (password !== confirm) {
+        setError('Le password non coincidono');
+        return;
+      }
     }
 
     setLoading(true);
     try {
       if (tab === 'login') {
         await login(email, password);
-        navigate('/dashboard');
+        navigate('/nebula');
       } else {
-        await register(email, password);
+        await register(email, password, {
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          full_name: `${firstName.trim()} ${lastName.trim()}`,
+          avatar_url: avatarUrl.trim() || null,
+        });
         setSuccess('Controlla la tua email per confermare la registrazione.');
       }
     } catch {
@@ -105,6 +122,38 @@ export default function Login() {
         {/* form */}
         <form onSubmit={handleSubmit} className="lp-form" key={tab}>
 
+          {/* Nome + Cognome (solo registrazione) */}
+          {tab === 'register' && (
+            <div className="lp-field-row lp-field--anim">
+              <div className="lp-field">
+                <label className="lp-label" htmlFor="lp-firstname">Nome</label>
+                <input
+                  id="lp-firstname"
+                  className="lp-input"
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="Mario"
+                  required
+                  autoComplete="given-name"
+                />
+              </div>
+              <div className="lp-field">
+                <label className="lp-label" htmlFor="lp-lastname">Cognome</label>
+                <input
+                  id="lp-lastname"
+                  className="lp-input"
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Rossi"
+                  required
+                  autoComplete="family-name"
+                />
+              </div>
+            </div>
+          )}
+
           <div className="lp-field">
             <label className="lp-label" htmlFor="lp-email">Email</label>
             <input
@@ -134,19 +183,36 @@ export default function Login() {
           </div>
 
           {tab === 'register' && (
-            <div className="lp-field lp-field--anim">
-              <label className="lp-label" htmlFor="lp-confirm">Conferma password</label>
-              <input
-                id="lp-confirm"
-                className="lp-input"
-                type="password"
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                placeholder="••••••••"
-                required
-                autoComplete="new-password"
-              />
-            </div>
+            <>
+              <div className="lp-field lp-field--anim">
+                <label className="lp-label" htmlFor="lp-confirm">Conferma password</label>
+                <input
+                  id="lp-confirm"
+                  className="lp-input"
+                  type="password"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <div className="lp-field lp-field--anim">
+                <label className="lp-label" htmlFor="lp-avatar">
+                  Avatar URL <span className="lp-label-opt">(opzionale)</span>
+                </label>
+                <input
+                  id="lp-avatar"
+                  className="lp-input"
+                  type="url"
+                  value={avatarUrl}
+                  onChange={(e) => setAvatarUrl(e.target.value)}
+                  placeholder="https://..."
+                  autoComplete="off"
+                />
+              </div>
+            </>
           )}
 
           {error && <div className="lp-msg lp-msg--error">{error}</div>}

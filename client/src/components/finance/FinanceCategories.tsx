@@ -1,9 +1,9 @@
-import { useTransactions } from '@/hooks/useFinance';
-import { CAT_CONFIG } from '@/utils/constants';
+import { useTransactions, useFinanceCategories } from '@/hooks/useFinance';
 import { formatCurrency } from '@/utils/formatters';
 
 export function FinanceCategories() {
   const { data: transactions } = useTransactions();
+  const { data: categories = [] } = useFinanceCategories();
 
   if (!transactions?.length) return null;
 
@@ -34,7 +34,7 @@ export function FinanceCategories() {
 
       <div className="fin-cat-list">
         {sorted.map(([catId, amount], i) => {
-          const cat = CAT_CONFIG.find(c => c.id === catId);
+          const cat = categories.find(c => c.id === catId);
           const pct = (amount / total) * 100;
 
           return (

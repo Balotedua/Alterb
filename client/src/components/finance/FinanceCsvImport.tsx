@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { Upload, FileText, X, CheckCircle, AlertTriangle } from 'lucide-react';
-import { useBulkAddTransactions } from '@/hooks/useFinance';
+import { useBulkAddTransactions, useTransactions } from '@/hooks/useFinance';
 import type { TransactionType, TransactionInput } from '@/types';
 
 // ── CSV parser ───────────────────────────────────────────────────────────────
@@ -49,19 +49,15 @@ function normalizeDate(s: string): string | null {
   const str = s.trim().replace(/"/g, '');
   if (!str) return null;
 
-  // YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
 
-  // DD/MM/YYYY  DD-MM-YYYY  DD.MM.YYYY
   const dmy = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
   if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
 
-  // YYYYMMDD
   if (/^\d{8}$/.test(str)) {
     return `${str.slice(0, 4)}-${str.slice(4, 6)}-${str.slice(6, 8)}`;
   }
 
-  // DD MMM YYYY  (es. "08 Mar 2026" o "08-mar-2026")
   const months: Record<string, string> = {
     gen:'01', feb:'02', mar:'03', apr:'04', mag:'05', giu:'06',
     lug:'07', ago:'08', set:'09', ott:'10', nov:'11', dic:'12',
@@ -82,14 +78,11 @@ function normalizeAmount(s: string): number | null {
   const pos = str.startsWith('+');
   str = str.replace(/^[+\-]/, '');
 
-  // European: 1.234,56  or  1.234  (solo separatore migliaia)
   if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(str)) {
     str = str.replace(/\./g, '').replace(',', '.');
   } else if (/^\d+(,\d{1,2})?$/.test(str)) {
-    // Italian decimal: 1234,56
     str = str.replace(',', '.');
   } else {
-    // US: remove thousand commas, keep decimal dot
     str = str.replace(/,(?=\d{3}(?:\.|$))/g, '');
   }
 
@@ -98,8 +91,7 @@ function normalizeAmount(s: string): number | null {
   return neg ? -n : pos ? n : n;
 }
 
-// ── Name-based column matching (primary strategy) ────────────────────────────
-// Scoring: exact match = 100, starts-with = 40, contains hint = 15, hint contains col = 8
+// ── Column matching ──────────────────────────────────────────────────────────
 
 const DATE_HINTS = [
   'data', 'date', 'datum', 'fecha', 'dt',
@@ -158,9 +150,9 @@ const DESC_HINTS = [
 
 function colScore(col: string, hints: string[]): number {
   const c = col.toLowerCase().trim();
-  if (hints.some((h) => c === h))                  return 100;
-  if (hints.some((h) => c.startsWith(h)))          return 40;
-  if (hints.some((h) => c.includes(h)))            return 15;
+  if (hints.some((h) => c === h))                       return 100;
+  if (hints.some((h) => c.startsWith(h)))               return 40;
+  if (hints.some((h) => c.includes(h)))                 return 15;
   if (hints.some((h) => h.includes(c) && c.length >= 4)) return 8;
   return 0;
 }
@@ -177,15 +169,13 @@ function autoMapColumns(headers: string[]): { date: string; amount: string; desc
     const candidates = [...scored]
       .filter((s) => !used.has(s.h) && s[role] > 0)
       .sort((a, b) => {
-        // Ordina per punteggio decrescente
         if (b[role] !== a[role]) return b[role] - a[role];
-        // Se il punteggio è uguale, dai priorità alle colonne che contengono "descrizione" o "description"
-        const aLower = a.h.toLowerCase();
-        const bLower = b.h.toLowerCase();
-        const aHasDesc = aLower.includes('descrizione') || aLower.includes('description');
-        const bHasDesc = bLower.includes('descrizione') || bLower.includes('description');
-        if (aHasDesc && !bHasDesc) return -1;
-        if (!aHasDesc && bHasDesc) return 1;
+        const aL = a.h.toLowerCase();
+        const bL = b.h.toLowerCase();
+        const aD = aL.includes('descrizione') || aL.includes('description');
+        const bD = bL.includes('descrizione') || bL.includes('description');
+        if (aD && !bD) return -1;
+        if (!aD && bD) return 1;
         return 0;
       });
     return candidates[0]?.h ?? '';
@@ -195,24 +185,14 @@ function autoMapColumns(headers: string[]): { date: string; amount: string; desc
   const date = pick('date', used); used.add(date);
   const amount = pick('amt', used); used.add(amount);
   let description = pick('desc', used);
-  
-  // Se non troviamo una descrizione, proviamo a usare la prima colonna che non è data o importo
+
   if (!description) {
     for (const header of headers) {
-      if (header !== date && header !== amount) {
-        // Preferiamo colonne che sembrano contenere testo (basato su lunghezza media del nome?)
-        // Per ora prendiamo la prima colonna disponibile
-        description = header;
-        break;
-      }
+      if (header !== date && header !== amount) { description = header; break; }
     }
   }
-  
-  // Se ancora non abbiamo una descrizione, usiamo la prima colonna disponibile
-  if (!description && headers.length > 0) {
-    description = headers[0];
-  }
-  
+  if (!description && headers.length > 0) description = headers[0];
+
   return { date, amount, description };
 }
 
@@ -226,8 +206,16 @@ interface ParsedRow {
   ok: boolean;
 }
 
+interface DuplicateInfo {
+  date: string;
+  description: string;
+  amount: number;
+  type: TransactionType;
+}
+
 export function FinanceCsvImport() {
   const bulkAdd = useBulkAddTransactions();
+  const { data: existingTxns = [] } = useTransactions();
 
   const [headers,  setHeaders ] = useState<string[]>([]);
   const [rawRows,  setRawRows ] = useState<Record<string, string>[]>([]);
@@ -239,6 +227,10 @@ export function FinanceCsvImport() {
   const [imported, setImported] = useState<number | null>(null);
   const [err,      setErr     ] = useState('');
 
+  // Stato modale doppioni
+  const [duplicates,    setDuplicates   ] = useState<DuplicateInfo[]>([]);
+  const [pendingInputs, setPendingInputs] = useState<TransactionInput[]>([]);
+  const [showDupModal,  setShowDupModal ] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -273,6 +265,7 @@ export function FinanceCsvImport() {
     setHeaders([]); setRawRows([]); setFileName('');
     setColDate(''); setColAmt(''); setColDesc('');
     setImported(null); setErr('');
+    setDuplicates([]); setPendingInputs([]); setShowDupModal(false);
   };
 
   // ── Live parsing ─────────────────────────────────────────────────────────
@@ -280,43 +273,29 @@ export function FinanceCsvImport() {
   const parsed: ParsedRow[] = rawRows.map((row) => {
     const rawDate = colDate ? (row[colDate] ?? '') : '';
     const rawAmt  = colAmt  ? (row[colAmt]  ?? '') : '';
-    let rawDesc = colDesc ? (row[colDesc] ?? '') : '';
-    
-    // Se rawDesc è vuoto, proviamo a trovare una colonna che potrebbe contenere la descrizione
+    let rawDesc   = colDesc ? (row[colDesc] ?? '') : '';
+
     if (!rawDesc.trim()) {
-      // Cerchiamo in tutte le colonne che non sono data o importo
       for (const [key, value] of Object.entries(row)) {
-        if (key !== colDate && key !== colAmt && value && value.toString().trim().length > 0) {
-          // Prendiamo il primo valore non vuoto che troviamo
-          rawDesc = value.toString().trim();
-          break;
+        if (key !== colDate && key !== colAmt && value?.trim()) {
+          rawDesc = value.trim(); break;
         }
       }
     }
-    
+
     const date   = normalizeDate(rawDate);
     const amount = normalizeAmount(rawAmt);
     const ok     = date !== null && amount !== null;
     const n      = amount ?? 0;
-    
-    // Usiamo rawDesc se non è vuoto, altrimenti un valore predefinito più specifico
+
     let description = rawDesc.trim();
-    if (!description) {
-      // Se l'importo è negativo, potrebbe essere una spesa, altrimenti un'entrata
-      if (n < 0) {
-        description = 'Pagamento';
-      } else if (n > 0) {
-        description = 'Rimborso';
-      } else {
-        description = 'Importato da CSV';
-      }
-    }
-    
+    if (!description) description = n < 0 ? 'Pagamento' : n > 0 ? 'Rimborso' : 'Importato da CSV';
+
     return {
       date:        date ?? rawDate,
       amount:      Math.abs(n),
       type:        n < 0 ? 'expense' : 'income',
-      description: description,
+      description,
       ok,
     };
   });
@@ -324,24 +303,61 @@ export function FinanceCsvImport() {
   const valid   = parsed.filter((r) => r.ok);
   const skipped = parsed.length - valid.length;
 
+  // ── Duplicate detection ───────────────────────────────────────────────────
+
+  const existingKeys = new Set(
+    existingTxns.map((t) => `${t.date}|${t.description.toLowerCase().trim()}`)
+  );
+
+  const findDuplicates = (inputs: TransactionInput[]): DuplicateInfo[] =>
+    inputs
+      .filter((i) => existingKeys.has(`${i.date}|${i.description.toLowerCase().trim()}`))
+      .map((i) => ({ date: i.date, description: i.description, amount: i.amount, type: i.type }));
+
   // ── Import ───────────────────────────────────────────────────────────────
 
-  const handleImport = async () => {
-    if (!valid.length) return;
+  const doImport = async (inputs: TransactionInput[]) => {
     setErr('');
-    const inputs: TransactionInput[] = valid.map((r) => ({
-      amount:      r.amount,
-      type:        r.type,
-      category:    'other',          // non classificate — da assegnare manualmente
-      description: r.description,
-      date:        r.date,
-    }));
     try {
       await bulkAdd.mutateAsync(inputs);
       setImported(inputs.length);
+      setShowDupModal(false);
     } catch {
       setErr("Errore durante l'importazione. Riprova.");
+      setShowDupModal(false);
     }
+  };
+
+  const handleImport = () => {
+    if (!valid.length) return;
+    const inputs: TransactionInput[] = valid.map((r) => ({
+      amount:      r.amount,
+      type:        r.type,
+      category:    'other',
+      description: r.description,
+      date:        r.date,
+    }));
+
+    const dups = findDuplicates(inputs);
+    if (dups.length > 0) {
+      setDuplicates(dups);
+      setPendingInputs(inputs);
+      setShowDupModal(true);
+      return;
+    }
+
+    void doImport(inputs);
+  };
+
+  const handleImportSkipDups = () => {
+    const filtered = pendingInputs.filter(
+      (i) => !existingKeys.has(`${i.date}|${i.description.toLowerCase().trim()}`)
+    );
+    void doImport(filtered);
+  };
+
+  const handleImportAll = () => {
+    void doImport(pendingInputs);
   };
 
   const hasFile = headers.length > 0;
@@ -408,7 +424,6 @@ export function FinanceCsvImport() {
             <span className="fin-csv-file-count">{rawRows.length} righe</span>
           </div>
 
-          {/* Status */}
           <div className="fin-csv-status">
             {valid.length > 0 ? (
               <>
@@ -423,7 +438,6 @@ export function FinanceCsvImport() {
             )}
           </div>
 
-          {/* Preview */}
           {parsed.length > 0 && (
             <div className="fin-csv-table-wrap">
               <table className="fin-csv-table">
@@ -472,6 +486,49 @@ export function FinanceCsvImport() {
               : `Importa ${valid.length} transazion${valid.length === 1 ? 'e' : 'i'}`}
           </button>
         </>
+      )}
+
+      {/* Modale doppioni */}
+      {showDupModal && (
+        <div className="fin-dup-overlay" onClick={() => setShowDupModal(false)}>
+          <div className="fin-dup-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="fin-dup-header">
+              <AlertTriangle size={16} style={{ color: '#f59e0b' }} />
+              <span>Possibili doppioni rilevati</span>
+            </div>
+
+            <p className="fin-dup-desc">
+              {duplicates.length} transazion{duplicates.length === 1 ? 'e' : 'i'} nel CSV {duplicates.length === 1 ? 'ha' : 'hanno'} stessa data e descrizione di transazioni già presenti.
+            </p>
+
+            <div className="fin-dup-list">
+              {duplicates.slice(0, 8).map((d, i) => (
+                <div key={i} className="fin-dup-item">
+                  <span className="fin-dup-date">{d.date}</span>
+                  <span className="fin-dup-desc-text">{d.description}</span>
+                  <span className={`fin-dup-amt ${d.type}`}>
+                    {d.type === 'income' ? '+' : '−'}€{d.amount.toFixed(2)}
+                  </span>
+                </div>
+              ))}
+              {duplicates.length > 8 && (
+                <p className="fin-dup-more">+ altri {duplicates.length - 8} doppioni…</p>
+              )}
+            </div>
+
+            <div className="fin-dup-actions">
+              <button className="fin-dup-btn fin-dup-btn-skip" onClick={handleImportSkipDups}>
+                Salta i doppioni ({pendingInputs.length - duplicates.length} da importare)
+              </button>
+              <button className="fin-dup-btn fin-dup-btn-all" onClick={handleImportAll}>
+                Importa tutto ({pendingInputs.length})
+              </button>
+              <button className="fin-dup-btn fin-dup-btn-cancel" onClick={() => setShowDupModal(false)}>
+                Annulla
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

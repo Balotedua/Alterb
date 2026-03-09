@@ -1,10 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
 import { useAuth } from './useAuth';
-import type { Transaction, TransactionInput } from '@/types';
-import { CAT_CONFIG } from '@/utils/constants';
+import type { Transaction, TransactionInput, CategoryConfig } from '@/types';
 
 const QUERY_KEY = ['transactions'];
+const CAT_QUERY_KEY = ['finance_categories'];
 
 // Ottieni tutte le transazioni dell'utente
 export function useTransactions() {
@@ -92,16 +92,16 @@ export function useRecategorizeContains() {
   });
 }
 
-// Ottieni transazioni non associate (categoria non presente in CAT_CONFIG o categoria 'other')
+// Ottieni transazioni non associate (categoria non presente nelle categorie utente)
 export function useUncategorizedTransactions() {
   const { data: transactions } = useTransactions();
+  const { data: categories } = useFinanceCategories();
 
-  const uncategorized = transactions?.filter(t => {
-    // Se non ci sono categorie configurate, considera tutte come associate
-    if (!CAT_CONFIG || CAT_CONFIG.length === 0) return false;
-    // Se la categoria è 'other' o non è in CAT_CONFIG, considerala non associata
-    return t.category === 'other' || !CAT_CONFIG.some((c: any) => c.id === t.category);
-  }) || [];
+  const knownIds = new Set((categories ?? []).map(c => c.id));
+
+  const uncategorized = transactions?.filter(t =>
+    t.category === 'other' || !knownIds.has(t.category)
+  ) || [];
 
   return { data: uncategorized };
 }
@@ -143,6 +143,45 @@ export function useDeleteTransaction() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEY });
     },
+  });
+}
+
+// Categorie personalizzate dell'utente
+export function useFinanceCategories() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: CAT_QUERY_KEY,
+    queryFn: async () => {
+      if (!user) throw new Error('Utente non autenticato');
+      const { data, error } = await supabase
+        .from('finance_categories')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return data as CategoryConfig[];
+    },
+    enabled: !!user,
+  });
+}
+
+// Crea una nuova categoria
+export function useAddCategory() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async (cat: Omit<CategoryConfig, 'user_id'>) => {
+      if (!user) throw new Error('Utente non autenticato');
+      const id = cat.id || cat.label.toLowerCase().trim().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+      const { error } = await supabase
+        .from('finance_categories')
+        .insert([{ id, user_id: user.id, label: cat.label, icon: cat.icon, color: cat.color }]);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: CAT_QUERY_KEY }),
   });
 }
 
