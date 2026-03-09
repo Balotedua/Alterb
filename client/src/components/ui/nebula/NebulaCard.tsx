@@ -1,41 +1,69 @@
 import { type ReactNode } from 'react';
 import { motion } from 'framer-motion';
+import { X } from 'lucide-react';
+import { useNebulaStore } from '@/store/nebulaStore';
 
 export type FragmentVariant = 'finance' | 'health' | 'psychology' | 'default';
 
 interface NebulaCardProps {
   children: ReactNode;
-  icon?: string;
+  icon?: ReactNode;
   title?: string;
   className?: string;
   variant?: FragmentVariant;
+  closable?: boolean;
 }
 
 export const FRAGMENT_ANIM = {
-  initial:    { opacity: 0, x: 36 },
-  animate:    { opacity: 1, x: 0  },
-  exit:       { opacity: 0, x: 36 },
+  initial:    { opacity: 0, x: 36, scale: 0.95 },
+  animate:    { opacity: 1, x: 0,  scale: 1    },
+  exit:       { opacity: 0, x: 36, scale: 0.95 },
   transition: {
     duration: 0.3,
     ease: [0.16, 1, 0.3, 1] as [number, number, number, number],
   },
 };
 
-export function NebulaCard({ children, icon, title, className, variant = 'default' }: NebulaCardProps) {
+export function NebulaCard({ 
+  children, 
+  icon, 
+  title, 
+  className, 
+  variant = 'default',
+  closable = true 
+}: NebulaCardProps) {
+  const clearFragment = useNebulaStore((state) => state.clearFragment);
   const variantClass = variant !== 'default' ? `fragment--${variant}` : '';
+
+  const handleClose = () => {
+    clearFragment();
+  };
 
   return (
     <motion.div
-      className={['fragment', variantClass, className].filter(Boolean).join(' ')}
+      className={['nebula-card', variantClass, className].filter(Boolean).join(' ')}
       {...FRAGMENT_ANIM}
     >
-      {(icon || title) && (
-        <div className="fragment-header">
-          {icon && <span className="fragment-icon">{icon}</span>}
-          {title && <span className="fragment-title">{title}</span>}
+      {(icon || title || closable) && (
+        <div className="nebula-card-header">
+          <div className="nebula-card-header-left">
+            {icon && <span className="nebula-card-icon">{icon}</span>}
+            {title && <h3 className="nebula-card-title">{title}</h3>}
+          </div>
+          {closable && (
+            <button 
+              className="nebula-card-close" 
+              onClick={handleClose}
+              aria-label="Chiudi"
+            >
+              <X size={18} />
+            </button>
+          )}
         </div>
       )}
-      {children}
+      <div className="nebula-card-content">
+        {children}
+      </div>
     </motion.div>
   );
 }

@@ -50,6 +50,7 @@ interface NebulaState {
     params: Record<string, unknown>,
     type: NebulaResponseType,
   ) => void;
+  clearFragment: () => void;
   setThinking: (v: boolean) => void;
   addMessage: (role: 'user' | 'assistant', content: string) => void;
   reset: () => void;
@@ -77,6 +78,9 @@ export const useNebulaStore = create<NebulaState>((set) => ({
 
   setFragment: (activeFragment, fragmentParams, responseType) =>
     set({ activeFragment, fragmentParams, responseType }),
+
+  clearFragment: () =>
+    set({ activeFragment: null, fragmentParams: {}, responseType: null }),
 
   setThinking: (isThinking) => set({ isThinking }),
 
