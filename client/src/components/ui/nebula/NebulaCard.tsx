@@ -15,12 +15,20 @@ interface NebulaCardProps {
 }
 
 export const FRAGMENT_ANIM = {
-  initial:    { opacity: 0, x: 36, scale: 0.95 },
-  animate:    { opacity: 1, x: 0,  scale: 1    },
-  exit:       { opacity: 0, x: 36, scale: 0.95 },
-  transition: {
-    duration: 0.3,
-    ease: [0.16, 1, 0.3, 1] as [number, number, number, number],
+  initial: { opacity: 0, y: 22, scale: 0.93, filter: 'blur(10px)' },
+  animate: {
+    opacity: 1, y: 0, scale: 1, filter: 'blur(0px)',
+    transition: {
+      duration: 0.52,
+      ease: [0.16, 1, 0.3, 1] as [number, number, number, number],
+    },
+  },
+  exit: {
+    opacity: 0, y: -10, scale: 0.97, filter: 'blur(6px)',
+    transition: {
+      duration: 0.32,
+      ease: [0.4, 0, 1, 1] as [number, number, number, number],
+    },
   },
 };
 

@@ -4,7 +4,6 @@ import { useNebulaStore } from '@/store/nebulaStore';
 import { NebulaEntity }    from './NebulaEntity';
 import { NebulaChatInput } from './NebulaChatInput';
 import { FRAGMENT_REGISTRY } from '@/modules/fragmentRegistry';
-import { NebulaCard } from '@/components/ui/nebula/NebulaCard';
 import './nebula.css';
 
 /** Tracks how many px the virtual keyboard has pushed the viewport up. */
@@ -42,21 +41,7 @@ function ActiveFragment() {
     return null;
   }
 
-  // Determine variant based on fragment name
-  let variant: 'finance' | 'health' | 'psychology' | 'default' = 'default';
-  if (activeFragment.toLowerCase().includes('finance')) variant = 'finance';
-  else if (activeFragment.toLowerCase().includes('health')) variant = 'health';
-  else if (activeFragment.toLowerCase().includes('psych')) variant = 'psychology';
-
-  return (
-    <NebulaCard 
-      title={activeFragment.replace(/([A-Z])/g, ' $1').trim()} 
-      variant={variant}
-      closable={true}
-    >
-      <Component params={fragmentParams} />
-    </NebulaCard>
-  );
+  return <Component params={fragmentParams} />;
 }
 
 export function NebulaCore() {

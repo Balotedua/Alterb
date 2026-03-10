@@ -3,6 +3,7 @@ import { useNebulaStore, type NebulaResponseType } from '@/store/nebulaStore';
 import { chatWithSystemPrompt } from '@/services/deepseek';
 import { NEBULA_SYSTEM_PROMPT } from '@/prompts/nebula';
 import { parseLocalIntent } from '@/utils/localIntentParser';
+import { haptics } from '@/utils/haptics';
 import { env } from '@/config/env';
 
 interface DeepSeekResponse {
@@ -21,7 +22,6 @@ const MODULE_TO_INTENT = {
   NONE:    'IDLE',
 } as const;
 
-/** Try to parse a DeepSeek raw response string into a structured result. */
 function parseDeepSeekRaw(raw: string): DeepSeekResponse {
   const jsonStr = raw
     .replace(/^```json\s*/i, '')
@@ -29,6 +29,34 @@ function parseDeepSeekRaw(raw: string): DeepSeekResponse {
     .replace(/\s*```$/, '')
     .trim();
   return JSON.parse(jsonStr) as DeepSeekResponse;
+}
+
+function applyResult(
+  result: DeepSeekResponse | ReturnType<typeof parseLocalIntent>,
+  setIntent: ReturnType<typeof useNebulaStore>['setIntent'],
+  setFragment: ReturnType<typeof useNebulaStore>['setFragment'],
+  addMessage: ReturnType<typeof useNebulaStore>['addMessage'],
+) {
+  const type      = result.type      ?? 'TALK';
+  const intensity = Math.max(0, Math.min(1, result.intensity ?? 0.5));
+  const message   = result.message   ?? '';
+  const fragment  = result.fragment  ?? '';
+  const params    = result.params    ?? {};
+
+  const moduleKey = (result as DeepSeekResponse).module ?? (result as ReturnType<typeof parseLocalIntent>).module;
+  const intent    = MODULE_TO_INTENT[moduleKey] ?? 'IDLE';
+
+  setIntent(intent, intensity, message);
+
+  // ACTION, VISUAL e HYBRID aprono tutti il fragment
+  const showFragment = (type === 'ACTION' || type === 'VISUAL' || type === 'HYBRID') && fragment !== '';
+  setFragment(showFragment ? fragment : null, params, type);
+
+  if (showFragment) haptics.fragment();
+
+  addMessage('assistant', message);
+  haptics.response();
+  useNebulaStore.getState().triggerResponseBurst();
 }
 
 export function useIntent() {
@@ -43,9 +71,17 @@ export function useIntent() {
       setThinking(true);
 
       try {
-        let result: DeepSeekResponse | ReturnType<typeof parseLocalIntent>;
+        // 1. Parser locale prima — veloce e affidabile per tutti gli intent di azione
+        const localResult = parseLocalIntent(trimmed);
+        const localHasAction = localResult.type !== 'TALK' || localResult.module !== 'NONE';
 
-        // ── Try DeepSeek only if API key is configured ───────────────────────
+        if (localHasAction) {
+          // Il parser locale ha riconosciuto un intent concreto → usalo direttamente
+          applyResult(localResult, setIntent, setFragment, addMessage);
+          return;
+        }
+
+        // 2. Input generico/conversazionale → usa DeepSeek se disponibile
         const hasKey = !!env.VITE_DEEPSEEK_API_KEY;
 
         if (hasKey) {
@@ -57,36 +93,16 @@ export function useIntent() {
             history.push({ role: 'user', content: trimmed });
 
             const raw = await chatWithSystemPrompt(NEBULA_SYSTEM_PROMPT, history);
-            result = parseDeepSeekRaw(raw);
+            const aiResult = parseDeepSeekRaw(raw);
+            applyResult(aiResult, setIntent, setFragment, addMessage);
           } catch (aiErr) {
-            // AI failed — fall back to local parser silently
             console.warn('[Nebula] DeepSeek fallback →', aiErr);
-            result = parseLocalIntent(trimmed);
+            applyResult(localResult, setIntent, setFragment, addMessage);
           }
         } else {
-          // No API key — use local parser directly
-          result = parseLocalIntent(trimmed);
+          applyResult(localResult, setIntent, setFragment, addMessage);
         }
-
-        // ── Apply result to store ────────────────────────────────────────────
-        const type      = result.type      ?? 'TALK';
-        const intensity = Math.max(0, Math.min(1, result.intensity ?? 0.5));
-        const message   = result.message   ?? '';
-        const fragment  = result.fragment  ?? '';
-        const params    = result.params    ?? {};
-
-        const moduleKey = (result as DeepSeekResponse).module ?? (result as ReturnType<typeof parseLocalIntent>).module;
-        const intent    = MODULE_TO_INTENT[moduleKey] ?? 'IDLE';
-
-        setIntent(intent, intensity, message);
-
-        const showFragment = (type === 'VISUAL' || type === 'HYBRID') && fragment !== '';
-        setFragment(showFragment ? fragment : null, params, type);
-
-        addMessage('assistant', message);
-        useNebulaStore.getState().triggerResponseBurst();
       } catch (err) {
-        // Should never reach here, but just in case
         const fallback = 'Qualcosa è andato storto. Riprova tra poco.';
         console.error('[Nebula] Unexpected error:', err);
         setIntent('IDLE', 0.3, fallback);

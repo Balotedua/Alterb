@@ -1,165 +1,109 @@
-import { useState } from 'react';
-import { useTransactions, useDeleteTransaction, useFinanceCategories } from '@/hooks/useFinance';
-import { useDeleteTransactions, type DeleteCriteria } from '@/hooks/useTransactions';
+import { useState, useMemo } from 'react';
+import { useTransactions, useDeleteTransaction, useDeleteTransactionsBulk } from '@/hooks/useFinance';
 import { formatCurrency } from '@/utils/formatters';
 import { NebulaCard } from '@/components/ui/nebula';
 import { useNebulaStore } from '@/store/nebulaStore';
-import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
 import type { Transaction } from '@/types';
 
 interface Props { params: Record<string, unknown> }
 
+const MONTH_NAMES: Record<string, string> = {
+  1:'gennaio', 2:'febbraio', 3:'marzo', 4:'aprile', 5:'maggio', 6:'giugno',
+  7:'luglio', 8:'agosto', 9:'settembre', 10:'ottobre', 11:'novembre', 12:'dicembre',
+};
+
 export function FinanceDeleteFragment({ params }: Props) {
-  const filterDays = typeof params.days === 'number' ? params.days : null;
-  const filterType = params.filterType as Transaction['type'] | null ?? null;
+  const filterDays    = typeof params.days      === 'number' ? params.days       : null;
+  const filterType    = (params.filterType ?? params.type) as Transaction['type'] | null ?? null;
+  const filterMonth   = typeof params.month     === 'number' ? params.month      : null;
+  const filterYear    = typeof params.year      === 'number' ? params.year       : null;
+  const filterLimit   = typeof params.limit     === 'number' ? params.limit      : null;
+  const deleteAll     = params.deleteAll === true;
 
   const { data: allTransactions } = useTransactions();
-  const { data: categories = [] } = useFinanceCategories();
-  const { mutate: delOne, isPending: delOnePending } = useDeleteTransaction();
-  const { mutate: deleteByCriteria, isPending: criteriaPending } = useDeleteTransactions();
+  const { mutate: delOne,  isPending: delOnePending  } = useDeleteTransaction();
+  const { mutate: delBulk, isPending: bulkPending    } = useDeleteTransactionsBulk();
   const { setFragment } = useNebulaStore();
-  const { user } = useAuth();
 
-  const [deleting, setDeleting] = useState<string | null>(null);
-  const [deleted, setDeleted] = useState<Set<string>>(new Set());
-  const [criteria, setCriteria] = useState<DeleteCriteria>({
-    category: '',
-    descriptionContains: '',
-    startDate: '',
-    endDate: '',
-    type: undefined,
-  });
+  const [deleting,  setDeleting]  = useState<string | null>(null);
+  const [removed,   setRemoved]   = useState<Set<string>>(new Set());
+  const [confirmed, setConfirmed] = useState(false);
 
-  // Filter list for display
-  const cutoff = filterDays
-    ? new Date(Date.now() - filterDays * 86400_000).toISOString().split('T')[0]
-    : null;
+  // Calcola la lista filtrata
+  const list = useMemo(() => {
+    let txs = (allTransactions ?? []).filter(t => !removed.has(t.id));
 
-  const list = (allTransactions ?? []).filter((t) => {
-    if (deleted.has(t.id)) return false;
-    if (cutoff && t.date < cutoff) return false;
-    if (filterType && t.type !== filterType) return false;
-    return true;
-  });
+    if (filterType) txs = txs.filter(t => t.type === filterType);
 
-  const handleDelete = (id: string) => {
+    if (filterMonth !== null) {
+      const yr = filterYear ?? new Date().getFullYear();
+      const pad = String(filterMonth).padStart(2, '0');
+      const prefix = `${yr}-${pad}`;
+      txs = txs.filter(t => t.date.startsWith(prefix));
+    } else if (filterDays !== null) {
+      const cutoff = new Date(Date.now() - filterDays * 86400_000)
+        .toISOString().split('T')[0];
+      txs = txs.filter(t => t.date >= cutoff);
+    }
+
+    if (filterLimit !== null) txs = txs.slice(0, filterLimit);
+
+    return txs;
+  }, [allTransactions, removed, filterType, filterMonth, filterYear, filterDays, filterLimit]);
+
+  const handleDeleteOne = (id: string) => {
     setDeleting(id);
     delOne(id, {
-      onSettled: () => {
-        setDeleted((prev) => new Set(prev).add(id));
+      onSuccess: () => {
+        setRemoved(prev => new Set(prev).add(id));
         setDeleting(null);
+      },
+      onError: (err) => {
+        setDeleting(null);
+        toast.error('Errore: ' + (err as Error).message);
       },
     });
   };
 
-  const handleDeleteByCriteria = () => {
-    if (!user) return;
-    deleteByCriteria(criteria, {
+  const handleDeleteAll = () => {
+    const ids = list.map(t => t.id);
+    if (ids.length === 0) return;
+    delBulk(ids, {
       onSuccess: () => {
-        // Aggiorna la lista locale marcando come eliminate quelle che corrispondono ai criteri
-        const toDelete = new Set<string>();
-        (allTransactions ?? []).forEach(t => {
-          if (criteria.category && t.category !== criteria.category) return;
-          if (criteria.descriptionContains && !t.description.toLowerCase().includes(criteria.descriptionContains.toLowerCase())) return;
-          if (criteria.startDate && t.date < criteria.startDate) return;
-          if (criteria.endDate && t.date > criteria.endDate) return;
-          if (criteria.type && t.type !== criteria.type) return;
-          toDelete.add(t.id);
-        });
-        setDeleted(prev => new Set([...prev, ...toDelete]));
-        // Reset criteria
-        setCriteria({
-          category: '',
-          descriptionContains: '',
-          startDate: '',
-          endDate: '',
-          type: undefined,
-        });
+        setRemoved(prev => new Set([...prev, ...ids]));
+        setConfirmed(false);
+        toast.success(`${ids.length} transazioni eliminate.`);
+      },
+      onError: (err) => {
+        setConfirmed(false);
+        toast.error('Errore: ' + (err as Error).message);
       },
     });
   };
 
   const close = () => setFragment(null, {}, 'TALK');
+  const isBusy = delOnePending || bulkPending;
 
-  const title =
-    filterDays ? `Elimina transazioni (ultimi ${filterDays} giorni)` :
-    filterType === 'expense' ? 'Elimina uscite'  :
-    filterType === 'income'  ? 'Elimina entrate' :
-                               'Elimina transazioni';
+  // Titolo contestuale
+  const title = filterMonth !== null
+    ? `Elimina transazioni · ${MONTH_NAMES[filterMonth] ?? filterMonth}${filterYear ? ` ${filterYear}` : ''}`
+    : filterLimit !== null
+      ? `Elimina ultime ${filterLimit} transazioni`
+      : deleteAll
+        ? 'Elimina tutte le transazioni'
+        : filterDays !== null
+          ? `Elimina transazioni · ultimi ${filterDays} giorni`
+          : filterType === 'expense'
+            ? 'Elimina uscite'
+            : filterType === 'income'
+              ? 'Elimina entrate'
+              : 'Elimina transazioni';
 
   return (
     <NebulaCard icon="🗑" title={title} variant="finance">
-      {/* Form per filtraggio avanzato */}
-      <div className="fragment-form" style={{ marginBottom: '1.5rem' }}>
-        <div className="fragment-field">
-          <label className="fragment-label">Categoria</label>
-          <select
-            className="fragment-input"
-            value={criteria.category}
-            onChange={(e) => setCriteria({...criteria, category: e.target.value})}
-          >
-            <option value="">Tutte le categorie</option>
-            {categories.map(cat => (
-              <option key={cat.id} value={cat.id}>{cat.label}</option>
-            ))}
-          </select>
-        </div>
-        <div className="fragment-field">
-          <label className="fragment-label">Descrizione contiene</label>
-          <input
-            type="text"
-            className="fragment-input"
-            placeholder="es. supermercato"
-            value={criteria.descriptionContains}
-            onChange={(e) => setCriteria({...criteria, descriptionContains: e.target.value})}
-          />
-        </div>
-        <div className="fragment-field">
-          <label className="fragment-label">Tipo</label>
-          <select
-            className="fragment-input"
-            value={criteria.type || ''}
-            onChange={(e) => setCriteria({...criteria, type: e.target.value as 'income' | 'expense' | undefined})}
-          >
-            <option value="">Tutti i tipi</option>
-            <option value="income">Entrata</option>
-            <option value="expense">Uscita</option>
-          </select>
-        </div>
-        <div className="fragment-field" style={{ display: 'flex', gap: '0.5rem' }}>
-          <div style={{ flex: 1 }}>
-            <label className="fragment-label">Da data</label>
-            <input
-              type="date"
-              className="fragment-input"
-              value={criteria.startDate}
-              onChange={(e) => setCriteria({...criteria, startDate: e.target.value})}
-            />
-          </div>
-          <div style={{ flex: 1 }}>
-            <label className="fragment-label">A data</label>
-            <input
-              type="date"
-              className="fragment-input"
-              value={criteria.endDate}
-              onChange={(e) => setCriteria({...criteria, endDate: e.target.value})}
-            />
-          </div>
-        </div>
-        <button
-          type="button"
-          className="fragment-btn fragment-btn--danger"
-          onClick={handleDeleteByCriteria}
-          disabled={criteriaPending}
-          style={{ marginTop: '0.5rem' }}
-        >
-          {criteriaPending ? 'Eliminazione...' : 'Elimina transazioni con questi filtri'}
-        </button>
-      </div>
-
-      {/* Lista transazioni */}
       {list.length === 0 ? (
-        <p className="fragment-empty">Nessuna transazione corrispondente.</p>
+        <p className="fragment-empty">Nessuna transazione da eliminare.</p>
       ) : (
         <>
           <div className="fragment-list">
@@ -174,10 +118,9 @@ export function FinanceDeleteFragment({ params }: Props) {
                 </span>
                 <button
                   className="fragment-delete-btn"
-                  onClick={() => handleDelete(t.id)}
-                  disabled={deleting === t.id || delOnePending || criteriaPending}
-                  title="Elimina"
-                  aria-label="Elimina transazione"
+                  onClick={() => handleDeleteOne(t.id)}
+                  disabled={isBusy}
+                  aria-label="Elimina"
                 >
                   {deleting === t.id ? '⏳' : '🗑'}
                 </button>
@@ -189,29 +132,27 @@ export function FinanceDeleteFragment({ params }: Props) {
       )}
 
       <div className="fragment-actions">
-        <button
-          type="button"
-          className="fragment-btn"
-          onClick={close}
-          disabled={criteriaPending}
-        >
+        <button className="fragment-btn" onClick={close} disabled={isBusy}>
           Chiudi
         </button>
-        {list.length > 1 && (
+
+        {list.length > 1 && !confirmed && (
           <button
-            type="button"
             className="fragment-btn fragment-btn--danger"
-            onClick={() => {
-              // Elimina tutte le transazioni visibili
-              const ids = list.map(t => t.id);
-              ids.forEach(id => {
-                delOne(id);
-              });
-              setDeleted(prev => new Set([...prev, ...ids]));
-            }}
-            disabled={delOnePending || criteriaPending}
+            onClick={() => setConfirmed(true)}
+            disabled={isBusy}
           >
-            {delOnePending ? '…' : `Elimina tutte visibili (${list.length})`}
+            Elimina tutte ({list.length})
+          </button>
+        )}
+
+        {list.length > 1 && confirmed && (
+          <button
+            className="fragment-btn fragment-btn--danger"
+            onClick={handleDeleteAll}
+            disabled={isBusy}
+          >
+            {bulkPending ? 'Eliminazione…' : `Conferma eliminazione (${list.length})`}
           </button>
         )}
       </div>

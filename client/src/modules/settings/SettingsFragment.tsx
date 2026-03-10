@@ -2,12 +2,10 @@ import { useState } from 'react';
 import { NebulaCard } from '@/components/ui/nebula/NebulaCard';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/services/supabase';
-import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
-export function SettingsFragment() {
+export function SettingsFragment(_: { params?: Record<string, unknown> }) {
   const { user } = useAuth();
-  const navigate = useNavigate();
 
   // Stato per l'eliminazione account
   const [deleteConfirm, setDeleteConfirm] = useState('');
@@ -25,7 +23,6 @@ export function SettingsFragment() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    navigate('/login');
   };
 
   const handleDeleteAccount = async () => {
@@ -40,7 +37,6 @@ export function SettingsFragment() {
       if (error) throw error;
       toast.success('Account eliminato con successo.');
       await supabase.auth.signOut();
-      navigate('/login');
     } catch (err) {
       console.error(err);
       toast.error('Errore durante l\'eliminazione dell\'account.');

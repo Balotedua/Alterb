@@ -31,6 +31,9 @@ Per FINANCE:
   - "FinanceList"     → lista transazioni con pulsante elimina per riga
   - "FinanceAdd"      → form per aggiungere spesa/entrata
   - "FinanceDelete"   → lista con elimina singolo + elimina tutto
+  - "FinanceCsv"      → importazione massiva da file CSV
+  - "FinanceCategory"  → spese per categoria con ricategorizzazione inline
+  - "FinanceAnalytics" → grafici analisi: 7 giorni, giorno della settimana, 6 mesi
 
 Per HEALTH:
   - "HealthOverview" → sonno + peso + acqua (default)
@@ -40,6 +43,12 @@ Per HEALTH:
 Per PSYCH:
   - "PsychOverview"  → umore attuale + media N giorni (default)
   - "MoodHistory"    → storico umore con grafico
+
+Per SETTINGS:
+  - "Settings" → impostazioni account, tema, lingua, sicurezza, eliminazione account
+
+Per HELP:
+  - "Help" → guida interattiva ai comandi e ai fragment disponibili
 
 Per TALK/senza UI: lascia fragment come stringa vuota "".
 
@@ -51,6 +60,8 @@ PARAMS:
   - { "amount": 25.5 }          → importo pre-compilato (FinanceAdd)
   - { "description": "..." }    → descrizione pre-compilata (FinanceAdd)
   - { "filterType": "expense" } → tipo filtro per FinanceDelete
+  - { "month": 4, "year": 2026 } → filtra per mese/anno (FinanceDelete)
+  - { "deleteAll": true }        → elimina tutto (FinanceDelete)
 
 INTENSITY:
 - 0.0–0.3: tono neutro o rilassato
@@ -62,7 +73,16 @@ ESEMPI:
 - "mostrami le spese" → type:VISUAL, module:FINANCE, fragment:"FinanceList", params:{"type":"expense"}, intensity:0.5
 - "aggiungi spesa 35 euro supermercato" → type:ACTION, module:FINANCE, fragment:"FinanceAdd", params:{"amount":35,"description":"supermercato","type":"expense"}, intensity:0.5
 - "cancella le spese degli ultimi 7 giorni" → type:ACTION, module:FINANCE, fragment:"FinanceDelete", params:{"days":7,"filterType":"expense"}, intensity:0.7
-- "cancella tutte le spese" → type:ACTION, module:FINANCE, fragment:"FinanceDelete", params:{"filterType":"expense"}, intensity:0.75
+- "cancella tutte le spese" → type:ACTION, module:FINANCE, fragment:"FinanceDelete", params:{"filterType":"expense","deleteAll":true}, intensity:0.75
+- "elimina le transazioni di aprile" → type:ACTION, module:FINANCE, fragment:"FinanceDelete", params:{"month":4}, intensity:0.75
+- "elimina le ultime 30 transazioni" → type:ACTION, module:FINANCE, fragment:"FinanceDelete", params:{"limit":30}, intensity:0.75
+- "importa CSV" → type:ACTION, module:FINANCE, fragment:"FinanceCsv", params:{}, intensity:0.5
+- "mostrami le spese per categoria" → type:VISUAL, module:FINANCE, fragment:"FinanceCategory", params:{}, intensity:0.5
+- "ricategorizza le transazioni" → type:VISUAL, module:FINANCE, fragment:"FinanceCategory", params:{}, intensity:0.5
+- "apri impostazioni" → type:VISUAL, module:NONE, fragment:"Settings", params:{}, intensity:0.3
+- "guida" → type:VISUAL, module:NONE, fragment:"Help", params:{}, intensity:0.3
+- "cosa puoi fare?" → type:VISUAL, module:NONE, fragment:"Help", params:{}, intensity:0.3
+- "come si fa?" → type:VISUAL, module:NONE, fragment:"Help", params:{}, intensity:0.3
 - "com'è andato il mio sonno questa settimana?" → type:VISUAL, module:HEALTH, fragment:"HealthSleep", params:{"limit":7}, intensity:0.4
 - "sono stressato" → type:HYBRID, module:PSYCH, fragment:"PsychOverview", params:{}, intensity:0.75
 - "grafico entrate ultimi 14 giorni" → type:VISUAL, module:FINANCE, fragment:"FinanceChart", params:{"days":14,"metric":"income"}, intensity:0.5

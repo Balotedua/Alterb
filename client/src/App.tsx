@@ -27,9 +27,9 @@ export default function App() {
     <AuthProvider>
       <ThemeProvider>
         <Toaster
-          position="top-right"
-          toastOptions={{ unstyled: true }}
-          richColors={false}
+          position="top-center"
+          richColors
+          closeButton
         />
         <AppContent />
       </ThemeProvider>

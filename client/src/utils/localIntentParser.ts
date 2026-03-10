@@ -42,35 +42,126 @@ function has(text: string, ...patterns: RegExp[]): boolean {
   return patterns.some((p) => p.test(text));
 }
 
+const MONTHS_IT: Record<string, number> = {
+  gennaio:1, febbraio:2, marzo:3, aprile:4, maggio:5, giugno:6,
+  luglio:7, agosto:8, settembre:9, ottobre:10, novembre:11, dicembre:12,
+};
+
+function parseMonth(text: string): { month: number; year: number | null } | null {
+  for (const [name, num] of Object.entries(MONTHS_IT)) {
+    const re = new RegExp(`\\b${name}\\b`, 'i');
+    if (re.test(text)) {
+      const yearMatch = text.match(/\b(20\d{2})\b/);
+      return { month: num, year: yearMatch ? parseInt(yearMatch[1]) : null };
+    }
+  }
+  return null;
+}
+
+function parseLimit(text: string): number | null {
+  const m = text.match(/\b(?:ultime?|prime?|ultim[oi])\s+(\d+)\s+transazioni?/i);
+  return m ? parseInt(m[1]) : null;
+}
+
 // ── main parser ───────────────────────────────────────────────────────────────
 
 export function parseLocalIntent(raw: string): LocalIntentResult {
   const t = raw.toLowerCase().trim();
 
-  const isDelete = has(t, /\b(cancella|elimina|rimuovi|togli)\b/);
-  const isAdd    = has(t, /\b(aggiungi|inserisci|registra|ho speso|ho guadagnato|nuova? spesa|nuova? entrata)\b/);
-  const isShow   = has(t, /\b(mostrami|mostra|vedi|visualizza|dammi|voglio vedere|elenco|lista)\b/);
+  const isDelete = has(t, /\b(cancella|elimina|rimuovi|togli|delete)\b/);
+  const isAdd    = has(t, /\b(aggiungi|inserisci|registra|ho speso|ho guadagnato|nuov[ae]? (spesa|entrata|transazione)|add)\b/);
+  const isShow   = has(t, /\b(mostrami|mostra|vedi|visualizza|dammi|voglio vedere|elenco|lista|apri)\b/);
   const isChart  = has(t, /\b(grafico|andamento|trend|storico|storia)\b/);
 
-  const isFinance  = has(t, /\b(spesa|spese|entrat[ae]|soldi|saldo|finanze?|budget|transazioni?|euro|€|conto|bonifico|pagamento)\b/);
+  const isFinance  = has(t, /\b(spesa|spese|entrat[ae]|soldi|saldo|finanze?|budget|transazion[ei]|euro|€|conto|bonifico|pagamento)\b/);
   const isIncome   = has(t, /\b(entrat[ae]|guadagn[oi]|stipendio|ricevuto|incassato)\b/);
   const isHealth   = has(t, /\b(sonno|dormito|dormi|peso|acqua|bevo|bevuto|salute|esercizio|allenamento|calorie|sport|attività)\b/);
   const isPsych    = has(t, /\b(umore|emozioni?|stress|ansia|ansioso|triste|felice|contento|come sto|mi sento|sento|benessere)\b/);
 
   // ── FINANCE ────────────────────────────────────────────────────────────────
 
-  if (isDelete && (isFinance || has(t, /\b(spese|transazioni?)\b/))) {
+  if (isDelete && (isFinance || has(t, /\b(spese|transazion[ei])\b/))) {
+    const filterType = isIncome ? 'income' : has(t, /\b(spese|uscite|pagamenti)\b/) ? 'expense' : null;
+
+    // "elimina tutte le transazioni / elimina tutto"
+    if (has(t, /\b(tutte?|tutto)\b/) && !has(t, /\b(ultim[oi]|giorni?)\b/)) {
+      return {
+        type: 'VISUAL', module: 'FINANCE', intent: 'FINANCE',
+        fragment: 'FinanceDelete',
+        params: { deleteAll: true, ...(filterType ? { filterType } : {}) },
+        intensity: 0.85,
+        message: filterType === 'expense'
+          ? 'Attenzione: stai per eliminare tutte le uscite. Conferma nella lista.'
+          : filterType === 'income'
+            ? 'Attenzione: stai per eliminare tutte le entrate. Conferma nella lista.'
+            : 'Attenzione: stai per eliminare tutte le transazioni. Conferma nella lista.',
+      };
+    }
+
+    // "elimina le ultime N transazioni"
+    const lim = parseLimit(t);
+    if (lim !== null) {
+      return {
+        type: 'VISUAL', module: 'FINANCE', intent: 'FINANCE',
+        fragment: 'FinanceDelete',
+        params: { limit: lim, ...(filterType ? { filterType } : {}) },
+        intensity: 0.75,
+        message: `Ecco le ultime ${lim} transazioni. Eliminale singolarmente o tutte insieme.`,
+      };
+    }
+
+    // "elimina le transazioni di aprile / marzo 2026"
+    const monthParsed = parseMonth(t);
+    if (monthParsed) {
+      const monthNames: Record<number, string> = {
+        1:'gennaio', 2:'febbraio', 3:'marzo', 4:'aprile', 5:'maggio', 6:'giugno',
+        7:'luglio', 8:'agosto', 9:'settembre', 10:'ottobre', 11:'novembre', 12:'dicembre',
+      };
+      return {
+        type: 'VISUAL', module: 'FINANCE', intent: 'FINANCE',
+        fragment: 'FinanceDelete',
+        params: {
+          month: monthParsed.month,
+          ...(monthParsed.year ? { year: monthParsed.year } : {}),
+          ...(filterType ? { filterType } : {}),
+        },
+        intensity: 0.75,
+        message: `Transazioni di ${monthNames[monthParsed.month]}${monthParsed.year ? ` ${monthParsed.year}` : ''}. Eliminale singolarmente o tutte insieme.`,
+      };
+    }
+
+    // "elimina spese ultimi N giorni"
     const d = days(t);
-    const amt = num(t);
-    const type = isIncome ? 'income' : has(t, /\b(spese|uscite|pagamenti)\b/) ? 'expense' : null;
     return {
       type: 'VISUAL', module: 'FINANCE', intent: 'FINANCE',
       fragment: 'FinanceDelete',
-      params: { days: d ?? null, amount: amt ?? null, filterType: type },
+      params: { ...(d ? { days: d } : {}), ...(filterType ? { filterType } : {}) },
       intensity: 0.7,
       message: d
-        ? `Ecco le transazioni degli ultimi ${d} giorni. Eliminale premendo 🗑.`
-        : 'Ecco le tue transazioni recenti. Eliminale premendo 🗑.',
+        ? `Transazioni degli ultimi ${d} giorni. Eliminale singolarmente o tutte insieme.`
+        : 'Le tue transazioni recenti. Eliminale singolarmente o tutte insieme.',
+    };
+  }
+
+  // "aggiungi transazione" generico senza dettagli → apri form vuoto
+  if (isAdd && has(t, /\btransazion[ei]\b/) && !isFinance && !isIncome) {
+    return {
+      type: 'ACTION', module: 'FINANCE', intent: 'FINANCE',
+      fragment: 'FinanceAdd',
+      params: {},
+      intensity: 0.5,
+      message: 'Inserisci i dettagli della transazione.',
+    };
+  }
+
+  // CSV import
+  if (has(t, /\b(csv|importa|importazione|carica|upload|massiva?)\b/) && has(t, /\b(transazion[ei]|spese|csv|dati|file)\b/)) {
+    return {
+      type: 'ACTION', module: 'FINANCE', intent: 'FINANCE',
+      fragment: 'FinanceCsv',
+      params: {},
+      intensity: 0.5,
+      message: 'Carica il tuo file CSV. Colonne attese: date, amount, type, description, category.',
     };
   }
 
@@ -88,6 +179,29 @@ export function parseLocalIntent(raw: string): LocalIntentResult {
       params: { amount, description: cleanDesc || null, type },
       intensity: 0.6,
       message: type === 'income' ? 'Registriamo questa entrata.' : 'Registriamo questa spesa.',
+    };
+  }
+
+  // Analisi / grafici
+  if (isFinance && has(t, /\b(analisi|analizza|statistiche?|grafico|grafici|andamento|trend|settimana|giorno|mensile|mesi|storico|quando spendo|spendo di più|picco)\b/)) {
+    return {
+      type: 'VISUAL', module: 'FINANCE', intent: 'FINANCE',
+      fragment: 'FinanceAnalytics',
+      params: {},
+      intensity: 0.5,
+      message: 'Ecco le tue analisi finanziarie. Tre viste: ultimi 7 giorni, spesa per giorno della settimana e confronto 6 mesi.',
+    };
+  }
+
+  // Spese per categoria
+  if (isFinance && has(t, /\b(categori[ae]|categoria|categorizzo|non categorizzat[eo]|raggruppa|per tipo)\b/)) {
+    const type = isIncome ? 'income' : has(t, /\bspese?\b/) ? 'expense' : null;
+    return {
+      type: 'VISUAL', module: 'FINANCE', intent: 'FINANCE',
+      fragment: 'FinanceCategory',
+      params: type ? { type } : {},
+      intensity: 0.5,
+      message: 'Ecco le tue spese raggruppate per categoria. Clicca su una per vedere le transazioni e ricategorizzarle.',
     };
   }
 
@@ -182,6 +296,30 @@ export function parseLocalIntent(raw: string): LocalIntentResult {
     };
   }
 
+  // ── HELP ───────────────────────────────────────────────────────────────────
+
+  if (has(t, /\b(guida|aiuto|help|cosa (puoi|sai) fare|come si fa|come funziona|comandi|istruzioni|tutorial|cosa posso (dire|scrivere|chiedere))\b/)) {
+    return {
+      type: 'VISUAL', module: 'NONE', intent: 'IDLE',
+      fragment: 'Help',
+      params: {},
+      intensity: 0.3,
+      message: 'Ecco la guida ai comandi disponibili. Clicca su una categoria per esplorare.',
+    };
+  }
+
+  // ── SETTINGS ───────────────────────────────────────────────────────────────
+
+  if (has(t, /\b(impostazioni?|settings?|profilo|account|tema|lingua|password|disconnetti|logout)\b/)) {
+    return {
+      type: 'VISUAL', module: 'NONE', intent: 'IDLE',
+      fragment: 'Settings',
+      params: {},
+      intensity: 0.3,
+      message: 'Ecco le impostazioni del tuo account.',
+    };
+  }
+
   // ── DEFAULT TALK ───────────────────────────────────────────────────────────
 
   return {
@@ -189,6 +327,6 @@ export function parseLocalIntent(raw: string): LocalIntentResult {
     fragment: '',
     params: {},
     intensity: 0.25,
-    message: 'Ciao! Puoi dirmi: "mostrami le spese", "aggiungi spesa 20€ caffè", "cancella spese ultimi 7 giorni", "come sto dormendo?"',
+    message: 'Ciao! Puoi dirmi: "mostrami le spese", "aggiungi spesa 20€ caffè", "cancella spese ultimi 7 giorni", "come sto dormendo?", "apri impostazioni". Scrivi "guida" per vedere tutti i comandi.',
   };
 }

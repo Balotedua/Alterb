@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNebulaStore } from '@/store/nebulaStore';
 import { useIntent } from '@/hooks/useIntent';
+import { haptics } from '@/utils/haptics';
 
 export function NebulaChatInput() {
   const [value, setValue] = useState('');
@@ -14,6 +15,7 @@ export function NebulaChatInput() {
 
   const handleSubmit = () => {
     if (!value.trim() || isThinking) return;
+    haptics.send();
     triggerBurst();           // explosion on send
     processInput(value);
     setValue('');

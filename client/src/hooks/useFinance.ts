@@ -56,6 +56,21 @@ export function useAddTransaction() {
   });
 }
 
+// Aggiorna la categoria di una singola transazione per ID
+export function useUpdateTransactionCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, category }: { id: string; category: string }) => {
+      const { error } = await supabase
+        .from('transactions')
+        .update({ category })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: QUERY_KEY }),
+  });
+}
+
 // Ricategorizza tutte le transazioni con una certa descrizione
 export function useRecategorize() {
   const qc = useQueryClient();
@@ -130,15 +145,60 @@ export function useBulkAddTransactions() {
 // Elimina una transazione
 export function useDeleteTransaction() {
   const qc = useQueryClient();
+  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      if (!user) throw new Error('Utente non autenticato');
+      console.log('[delete] auth user.id:', user.id);
+      console.log('[delete] transaction id to delete:', id);
+
+      // Prima verifica: la transazione esiste con quel user_id?
+      const { data: check } = await supabase
+        .from('transactions')
+        .select('id, user_id')
+        .eq('id', id)
+        .single();
+      console.log('[delete] pre-check row:', check);
+      console.log('[delete] user_id match:', check?.user_id === user.id);
+
+      const { data, error } = await supabase
         .from('transactions')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .select();
 
+      console.log('[delete] result data:', data, 'error:', error);
       if (error) throw error;
+      if (!data || data.length === 0) throw new Error(`RLS blocca il delete. user.id=${user.id} row.user_id=${check?.user_id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEY });
+    },
+  });
+}
+
+// Elimina più transazioni per ID (bulk)
+export function useDeleteTransactionsBulk() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (!user) throw new Error('Utente non autenticato');
+      if (ids.length === 0) return;
+      console.log('[bulk-delete] user.id:', user.id, 'ids:', ids);
+      const { data, error } = await supabase
+        .from('transactions')
+        .delete()
+        .in('id', ids)
+        .eq('user_id', user.id)
+        .select();
+
+      console.log('[bulk-delete] result:', { data, error });
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error('Nessuna transazione eliminata — permesso negato o ID non validi');
+      return data.length;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEY });

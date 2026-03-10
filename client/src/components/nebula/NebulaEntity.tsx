@@ -2,33 +2,39 @@ import { useRef, useEffect } from 'react';
 import { useNebulaStore } from '@/store/nebulaStore';
 
 const N          = 200;
-const BASE_SPEED = 0.50;
+const BASE_SPEED = 0.42; // slightly slower for calmer feel
 
-// ── Burst envelope helpers ────────────────────────────────────────────────────
-// Radius uses a slow sine-bell so the ring expands then returns gracefully.
-// Brightness peaks immediately (the "flash") then fades — this is what reads as explosion.
+// ── Burst envelopes ───────────────────────────────────────────────────────────
 
-/** Send burst — 1.0 s */
-const SEND_DUR = 1.0;
+const SEND_DUR = 0.9;
 function sendBright(t: number) {
   if (t >= SEND_DUR) return 0;
-  return t < 0.07 ? t / 0.07 : Math.max(0, 1 - (t - 0.07) / 0.93);
+  return t < 0.06 ? t / 0.06 : Math.max(0, 1 - (t - 0.06) / 0.84);
 }
 function sendRadius(t: number) {
   if (t >= SEND_DUR) return 0;
-  return Math.sin((t / SEND_DUR) * Math.PI) * 0.28; // peak +28 % radius at 0.5 s
+  return Math.sin((t / SEND_DUR) * Math.PI) * 0.22;
 }
 
-/** Response burst — 2.2 s, soft onset (no hard flash), wide expansion */
-const RESP_DUR = 2.2;
+const RESP_DUR = 2.6; // longer, more cinematic response
 function respBright(t: number) {
   if (t >= RESP_DUR) return 0;
-  // Gentle ease-in over 0.35 s, then long smooth fade — no abrupt flash
-  return t < 0.35 ? t / 0.35 : Math.max(0, 1 - (t - 0.35) / (RESP_DUR - 0.35));
+  return t < 0.4 ? t / 0.4 : Math.max(0, 1 - (t - 0.4) / (RESP_DUR - 0.4));
 }
 function respRadius(t: number) {
   if (t >= RESP_DUR) return 0;
-  return Math.sin((t / RESP_DUR) * Math.PI) * 0.50; // peak +50 % radius at 1.1 s
+  return Math.sin((t / RESP_DUR) * Math.PI) * 0.45;
+}
+
+// Smooth ease-out for fragment fade (no jerky random)
+function easeOutExpo(x: number) {
+  return x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
+}
+
+// Deterministic "random" from a seed (seeded per-particle, constant across frames)
+function seededRand(seed: number) {
+  const x = Math.sin(seed + 1) * 43758.5453123;
+  return x - Math.floor(x);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -57,18 +63,29 @@ export function NebulaEntity() {
     const onResize = () => { dim = setup(); };
     window.addEventListener('resize', onResize);
 
+    // Pre-compute per-particle seeds (deterministic, no per-frame random)
+    const PARTICLE_COUNT = 64;
+    const particleSeeds = Float32Array.from({ length: PARTICLE_COUNT }, (_, i) => i);
+    const particleAngles = Float32Array.from({ length: PARTICLE_COUNT }, (_, i) =>
+      (i / PARTICLE_COUNT) * Math.PI * 2
+    );
+    const particleSpeeds = Float32Array.from({ length: PARTICLE_COUNT }, (_, i) =>
+      0.6 + seededRand(i * 7.3) * 0.8
+    );
+    const particleSizes = Float32Array.from({ length: PARTICLE_COUNT }, (_, i) =>
+      1.5 + seededRand(i * 3.1) * 2.5
+    );
+
     const angles = Float32Array.from({ length: N }, (_, i) => (i / N) * Math.PI * 2);
 
     let t       = 0;
     let lastNow = performance.now();
 
-    // Local burst state — no React state, no re-renders
     let sActive = false; let sT = 0; let prevS = false;
     let rActive = false; let rT = 0; let prevR = false;
 
-    // Stato per la dissolvenza quando il fragment è attivo
-    let fragmentActive = false;
-    let fragmentFade = 0; // 0 = visibile, 1 = completamente dissolto
+    // Fragment fade — smooth lerp, no random
+    let fragmentFade = 0; // 0 = fully visible, 1 = fully dissolved
 
     const loop = (now: number) => {
       const delta = Math.min((now - lastNow) / 1000, 0.05);
@@ -84,75 +101,72 @@ export function NebulaEntity() {
       prevS = isBursting;
       prevR = isResponseBursting;
 
-      // Gestione transizione fragment attivo
-      const targetFragmentActive = !!activeFragment;
-      if (targetFragmentActive !== fragmentActive) {
-        // Inizia la transizione
-        fragmentActive = targetFragmentActive;
-      }
-      // Interpolazione smooth del fade
-      const targetFade = fragmentActive ? 1 : 0;
-      fragmentFade += (targetFade - fragmentFade) * delta * 4; // velocità di transizione
+      // Smooth fragment fade — expo ease toward target
+      const targetFade = activeFragment ? 1 : 0;
+      const fadeSpeed  = activeFragment ? 2.8 : 3.5; // dissolve slightly slower than appear
+      fragmentFade += (targetFade - fragmentFade) * Math.min(delta * fadeSpeed, 1);
+      const visibility = Math.max(0, 1 - easeOutExpo(fragmentFade));
 
       if (sActive) { sT += delta; if (sT >= SEND_DUR) sActive = false; }
       if (rActive) { rT += delta; if (rT >= RESP_DUR) rActive = false; }
 
-      const sB = sActive ? sendBright(sT) : 0;
-      const sR = sActive ? sendRadius(sT) : 0;
-      const rB = rActive ? respBright(rT) : 0;
-      const rRad = rActive ? respRadius(rT) : 0;
+      const sB   = sActive ? sendBright(sT)  : 0;
+      const sR   = sActive ? sendRadius(sT)  : 0;
+      const rB   = rActive ? respBright(rT)  : 0;
+      const rRad = rActive ? respRadius(rT)  : 0;
 
-      // Anxious breathing while waiting: faster wave + periodic radius throb
-      // Fade out throb smoothly as response burst kicks in (no jarring cut)
-      const anxious = isThinking ? Math.max(0, 1 - rT * 2.5) : 0;
-      const anxiousThrob = anxious * (Math.sin(t * Math.PI * 2.6) * 0.5 + 0.5); // ~1.3 Hz
+      // Gentle breathing while thinking — smooth sine
+      const anxious = isThinking ? Math.max(0, 1 - rT * 2.2) : 0;
+      const breathe  = anxious * (Math.sin(t * Math.PI * 2.4) * 0.5 + 0.5);
 
-      // Speed only grows with typing — bursts stay chill; thinking adds urgency
-      const speed = BASE_SPEED * (1 + typingIntensity * 0.55 + anxious * 0.38);
+      // Typing: subtle intensity boost (no speed change — keeps it calm)
+      const typingBoost = typingIntensity * 0.12;
+
+      const speed = BASE_SPEED * (1 + anxious * 0.22);
 
       const { s, cx, cy, r } = dim;
       ctx.clearRect(0, 0, s, s);
 
-      // ── Center glow ──────────────────────────────────────────────────────────
-      // Radius expands with burst; alpha spikes on flash then slowly fades
-      const glowR = r * (0.80 + sR * 0.6 + rRad * 1.1);
-      const glowA = 0.04 + typingIntensity * 0.06 + sB * 0.14 + rB * 0.28;
+      if (visibility < 0.005) {
+        rafRef.current = requestAnimationFrame(loop);
+        return; // fully dissolved, skip drawing
+      }
+
+      // ── Center glow ────────────────────────────────────────────────────────
+      const glowR = r * (0.82 + sR * 0.55 + rRad * 1.05);
+      const glowA = (0.05 + sB * 0.12 + rB * 0.25 + breathe * 0.04) * visibility;
       const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
-      grd.addColorStop(0,    `rgba(130,70,245,${glowA * (1 - fragmentFade)})`);
-      grd.addColorStop(0.5,  `rgba(95,50,205,${(glowA * 0.38 * (1 - fragmentFade)).toFixed(3)})`);
-      grd.addColorStop(1,    'rgba(0,0,0,0)');
+      grd.addColorStop(0,   `rgba(130,70,245,${glowA.toFixed(3)})`);
+      grd.addColorStop(0.45, `rgba(95,50,200,${(glowA * 0.3).toFixed(3)})`);
+      grd.addColorStop(1,   'rgba(0,0,0,0)');
       ctx.fillStyle = grd;
       ctx.beginPath();
       ctx.arc(cx, cy, glowR, 0, Math.PI * 2);
       ctx.fill();
 
-      // ── Particle ring ────────────────────────────────────────────────────────
+      // ── Particle ring ───────────────────────────────────────────────────────
       for (let i = 0; i < N; i++) {
-        const a    = angles[i];
-        const w1   = Math.cos(a - t * speed);
-        const w2   = Math.cos(a - t * speed * 0.62 + Math.PI);
-        const wave = Math.max(0, w1) * 0.75 + Math.max(0, w2) * 0.38;
+        const a  = angles[i];
+        const w1 = Math.cos(a - t * speed);
+        const w2 = Math.cos(a - t * speed * 0.6 + Math.PI);
+        const wave = Math.max(0, w1) * 0.72 + Math.max(0, w2) * 0.35;
 
-        // Radius: base pulse + typing swell + anxious throb + slow burst expansion
-        const waveAmp = 0.04 + typingIntensity * 0.08;
+        const waveAmp = 0.042;
         const rr = r
           + wave * r * waveAmp
-          + typingIntensity * r * 0.055
-          + anxiousThrob * r * 0.06  // restless throb while thinking
+          + breathe * r * 0.055
           + sR   * r
           + rRad * r;
 
         const x = cx + Math.cos(a) * rr;
         const y = cy + Math.sin(a) * rr;
 
-        // Brightness: flash from burst, gentle boost from typing/thinking
-        const brightMul = 1 + typingIntensity * 0.35 + anxiousThrob * 0.18 + sB * 1.0 + rB * 2.2;
-        const alpha = Math.min(0.97, (0.08 + wave * 0.84) * brightMul) * (1 - fragmentFade);
-        const dotR  = (1.4 + wave * 1.7) * (1 + sB * 0.35 + rB * 0.55) * (1 - fragmentFade * 0.5);
+        const brightMul = 1 + breathe * 0.15 + sB * 0.9 + rB * 2.0 + typingBoost;
+        const alpha = Math.min(0.95, (0.07 + wave * 0.82) * brightMul) * visibility;
+        const dotR  = (1.3 + wave * 1.6) * (1 + sB * 0.3 + rB * 0.5) * visibility;
 
-        // On flash: color warms toward white-lavender, then returns to violet
-        const red   = Math.round(148 + wave * 72 + sB * 30 + rB * 60);
-        const green = Math.round(115 + wave * 65 + sB * 20 + rB * 50);
+        const red   = Math.round(145 + wave * 68 + sB * 25 + rB * 55);
+        const green = Math.round(112 + wave * 60 + sB * 18 + rB * 45);
 
         ctx.beginPath();
         ctx.arc(x, y, dotR, 0, Math.PI * 2);
@@ -160,57 +174,29 @@ export function NebulaEntity() {
         ctx.fill();
       }
 
-      // ── Effetto esplosione (particelle che si disperdono) ──
-      if (fragmentFade > 0.01 && fragmentFade < 0.95) {
-        const particleCount = 80;
-        const explosionSpeed = 2.0;
-        const baseRadius = r * 0.5;
+      // ── Smooth dispersion on fragment open ─────────────────────────────────
+      // Deterministic particles drift outward — no Math.random() per frame
+      if (fragmentFade > 0.02 && fragmentFade < 0.98) {
+        const fade      = easeOutExpo(fragmentFade);
+        const driftAlpha = Math.sin(fragmentFade * Math.PI) * 0.5; // bell curve
 
-        // Calcola un fattore di visibilità che va da 1 a 0 quando fragmentFade si avvicina a 0.95
-        const visibility = 1 - (fragmentFade / 0.95);
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          const angle = particleAngles[i] + t * 0.08; // slow drift rotation
+          const dist  = r * (0.5 + fade * particleSpeeds[i] * 1.4);
+          const px    = cx + Math.cos(angle) * dist;
+          const py    = cy + Math.sin(angle) * dist;
+          const sz    = particleSizes[i] * (1 - fade * 0.7);
+          const a     = driftAlpha * (0.15 + seededRand(particleSeeds[i]) * 0.3);
 
-        for (let i = 0; i < particleCount; i++) {
-          // Angolo distribuito uniformemente
-          const angle = (i / particleCount) * Math.PI * 2;
-          // Distanza progressiva in base al tempo e al fade
-          const dist = baseRadius * (1 + fragmentFade * explosionSpeed * (0.5 + Math.random() * 1.5));
-          const x = cx + Math.cos(angle) * dist;
-          const y = cy + Math.sin(angle) * dist;
+          if (sz < 0.1 || a < 0.01) continue;
 
-          // Dimensione della particella che si riduce con il fade
-          const particleSize = (2 + Math.random() * 4) * (1 - fragmentFade * 0.7) * visibility;
-          // Opacità che diminuisce
-          const alpha = (0.3 + Math.random() * 0.5) * visibility;
-
+          // color: violet → pale lavender as they drift
+          const rC = Math.round(167 + fade * 60);
+          const gC = Math.round(139 + fade * 90);
           ctx.beginPath();
-          ctx.arc(x, y, particleSize, 0, Math.PI * 2);
-          // Colore che varia dal viola al bianco
-          const colorR = 167 + Math.floor(88 * fragmentFade);
-          const colorG = 139 + Math.floor(116 * fragmentFade);
-          const colorB = 250;
-          ctx.fillStyle = `rgba(${colorR}, ${colorG}, ${colorB}, ${alpha})`;
+          ctx.arc(px, py, sz, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${rC},${gC},250,${a.toFixed(3)})`;
           ctx.fill();
-        }
-
-        // Linee radiali che si allungano
-        const lineCount = 16;
-        const lineLength = r * (1.5 + fragmentFade * 3);
-        const lineWidth = 2 * (1 - fragmentFade) * visibility;
-        const lineAlpha = 0.2 * fragmentFade * visibility;
-
-        for (let i = 0; i < lineCount; i++) {
-          const angle = (i / lineCount) * Math.PI * 2 + t * 0.5;
-          const startX = cx + Math.cos(angle) * r * 0.3;
-          const startY = cy + Math.sin(angle) * r * 0.3;
-          const endX = cx + Math.cos(angle) * (r * 0.3 + lineLength);
-          const endY = cy + Math.sin(angle) * (r * 0.3 + lineLength);
-
-          ctx.beginPath();
-          ctx.moveTo(startX, startY);
-          ctx.lineTo(endX, endY);
-          ctx.strokeStyle = `rgba(255, 255, 255, ${lineAlpha})`;
-          ctx.lineWidth = lineWidth;
-          ctx.stroke();
         }
       }
 
