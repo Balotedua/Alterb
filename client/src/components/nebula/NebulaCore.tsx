@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useNebulaStore } from '@/store/nebulaStore';
-import { NebulaEntity }    from './NebulaEntity';
-import { NebulaChatInput } from './NebulaChatInput';
-import { FRAGMENT_REGISTRY } from '@/modules/fragmentRegistry';
+import { NebulaEntity }          from './NebulaEntity';
+import { NebulaChatInput }       from './NebulaChatInput';
+import { NebulaConfirmCard }     from './NebulaConfirmCard';
+import { FragmentErrorBoundary } from './FragmentErrorBoundary';
+import { FRAGMENT_REGISTRY }     from '@/modules/fragmentRegistry';
 import './nebula.css';
 
 /** Tracks how many px the virtual keyboard has pushed the viewport up. */
@@ -37,24 +39,31 @@ function ActiveFragment() {
 
   const Component = FRAGMENT_REGISTRY[activeFragment];
   if (!Component) {
-    console.warn(`Fragment "${activeFragment}" not found in registry`);
+    console.warn(`[Nebula] Fragment "${activeFragment}" not found in registry`);
     return null;
   }
 
-  return <Component params={fragmentParams} />;
+  return (
+    <FragmentErrorBoundary key={activeFragment}>
+      <Component params={fragmentParams} />
+    </FragmentErrorBoundary>
+  );
 }
 
 export function NebulaCore() {
-  const { activeFragment } = useNebulaStore();
+  const { activeFragment, pendingConfirmation } = useNebulaStore();
   const kbOffset = useKeyboardOffset();
   const kbOpen   = kbOffset > 80;
+
+  // The fragment area shows either a confirmation card or the active fragment
+  const hasContent = !!(activeFragment || pendingConfirmation);
 
   return (
     <div
       className={[
         'nebula-core',
-        kbOpen          ? 'nebula-core--kb'       : '',
-        activeFragment  ? 'nebula-core--fragment'  : '',
+        kbOpen      ? 'nebula-core--kb'       : '',
+        hasContent  ? 'nebula-core--fragment'  : '',
       ].filter(Boolean).join(' ')}
       style={{ '--kb-offset': `${kbOffset}px` } as React.CSSProperties}
     >
@@ -67,7 +76,11 @@ export function NebulaCore() {
 
       <div className="nb-fragment-area">
         <AnimatePresence mode="wait">
-          <ActiveFragment key={activeFragment ?? 'none'} />
+          {pendingConfirmation ? (
+            <NebulaConfirmCard key="confirm" />
+          ) : (
+            <ActiveFragment key={activeFragment ?? 'none'} />
+          )}
         </AnimatePresence>
       </div>
 

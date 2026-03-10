@@ -1,10 +1,13 @@
 import { useCallback } from 'react';
-import { useNebulaStore, type NebulaResponseType } from '@/store/nebulaStore';
+import { useNebulaStore, type NebulaIntent, type NebulaResponseType } from '@/store/nebulaStore';
 import { chatWithSystemPrompt } from '@/services/deepseek';
 import { NEBULA_SYSTEM_PROMPT } from '@/prompts/nebula';
 import { parseLocalIntent } from '@/utils/localIntentParser';
 import { haptics } from '@/utils/haptics';
 import { env } from '@/config/env';
+import type { NebulaConfirmation, NebulaModule } from '@/types/nebula';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface DeepSeekResponse {
   type: NebulaResponseType;
@@ -22,6 +25,8 @@ const MODULE_TO_INTENT = {
   NONE:    'IDLE',
 } as const;
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function parseDeepSeekRaw(raw: string): DeepSeekResponse {
   const jsonStr = raw
     .replace(/^```json\s*/i, '')
@@ -31,11 +36,51 @@ function parseDeepSeekRaw(raw: string): DeepSeekResponse {
   return JSON.parse(jsonStr) as DeepSeekResponse;
 }
 
+/**
+ * Returns true if the action requires explicit user confirmation before
+ * opening the fragment (i.e. irreversible bulk deletes).
+ */
+function needsConfirmation(fragment: string, params: Record<string, unknown>): boolean {
+  return fragment === 'FinanceDelete' && params.deleteAll === true;
+}
+
+/**
+ * Builds the NebulaConfirmation payload for a destructive action.
+ * Only called when needsConfirmation() is true.
+ */
+function buildConfirmation(
+  fragment: string,
+  params: Record<string, unknown>,
+  type: NebulaResponseType,
+  intent: NebulaIntent,
+  intensity: number,
+): NebulaConfirmation {
+  const filterType = params.filterType as string | undefined;
+  const question = filterType === 'expense'
+    ? 'Sei sicuro di voler eliminare tutte le uscite? L\'azione è irreversibile.'
+    : filterType === 'income'
+      ? 'Sei sicuro di voler eliminare tutte le entrate? L\'azione è irreversibile.'
+      : 'Sei sicuro di voler eliminare tutte le transazioni? L\'azione è irreversibile.';
+
+  return {
+    question,
+    confirmLabel: 'Sì, elimina tutto',
+    cancelLabel: 'Annulla',
+    fragment,
+    params,
+    responseType: type,
+    intent,
+    intensity,
+  };
+}
+
+// ── applyResult ───────────────────────────────────────────────────────────────
+
+type AnyResult = DeepSeekResponse | ReturnType<typeof parseLocalIntent>;
+
 function applyResult(
-  result: DeepSeekResponse | ReturnType<typeof parseLocalIntent>,
-  setIntent: ReturnType<typeof useNebulaStore>['setIntent'],
-  setFragment: ReturnType<typeof useNebulaStore>['setFragment'],
-  addMessage: ReturnType<typeof useNebulaStore>['addMessage'],
+  result: AnyResult,
+  store: ReturnType<typeof useNebulaStore.getState>,
 ) {
   const type      = result.type      ?? 'TALK';
   const intensity = Math.max(0, Math.min(1, result.intensity ?? 0.5));
@@ -43,24 +88,41 @@ function applyResult(
   const fragment  = result.fragment  ?? '';
   const params    = result.params    ?? {};
 
-  const moduleKey = (result as DeepSeekResponse).module ?? (result as ReturnType<typeof parseLocalIntent>).module;
+  const moduleKey = (result as DeepSeekResponse).module ??
+                    (result as ReturnType<typeof parseLocalIntent>).module;
   const intent    = MODULE_TO_INTENT[moduleKey] ?? 'IDLE';
 
-  setIntent(intent, intensity, message);
+  store.setIntent(intent, intensity, message);
+  store.addMessage('assistant', message);
 
-  // ACTION, VISUAL e HYBRID aprono tutti il fragment
   const showFragment = (type === 'ACTION' || type === 'VISUAL' || type === 'HYBRID') && fragment !== '';
-  setFragment(showFragment ? fragment : null, params, type);
 
-  if (showFragment) haptics.fragment();
+  if (showFragment && needsConfirmation(fragment, params)) {
+    // Gate destructive actions behind a confirmation step
+    store.setConfirmation(buildConfirmation(fragment, params, type, intent, intensity));
+    store.setFragment(null, {}, 'TALK');
+  } else if (showFragment) {
+    store.setFragment(fragment, params, type);
+    haptics.fragment();
+    // Save context snapshot for pronoun resolution in next turn
+    store.setLastContext({
+      intent,
+      module: moduleKey as NebulaModule,
+      fragment,
+      params,
+    });
+  } else {
+    store.setFragment(null, {}, 'TALK');
+  }
 
-  addMessage('assistant', message);
   haptics.response();
-  useNebulaStore.getState().triggerResponseBurst();
+  store.triggerResponseBurst();
 }
 
+// ── Hook ─────────────────────────────────────────────────────────────────────
+
 export function useIntent() {
-  const { setIntent, setFragment, setThinking, addMessage, chatHistory } = useNebulaStore();
+  const { setIntent, setFragment, setThinking, addMessage, chatHistory, lastContext } = useNebulaStore();
 
   const processInput = useCallback(
     async (text: string) => {
@@ -71,17 +133,16 @@ export function useIntent() {
       setThinking(true);
 
       try {
-        // 1. Parser locale prima — veloce e affidabile per tutti gli intent di azione
-        const localResult = parseLocalIntent(trimmed);
+        // 1. Local parser — fast, keyword-based, context-aware
+        const localResult = parseLocalIntent(trimmed, lastContext);
         const localHasAction = localResult.type !== 'TALK' || localResult.module !== 'NONE';
 
         if (localHasAction) {
-          // Il parser locale ha riconosciuto un intent concreto → usalo direttamente
-          applyResult(localResult, setIntent, setFragment, addMessage);
+          applyResult(localResult, useNebulaStore.getState());
           return;
         }
 
-        // 2. Input generico/conversazionale → usa DeepSeek se disponibile
+        // 2. Generic/conversational input → try DeepSeek if available
         const hasKey = !!env.VITE_DEEPSEEK_API_KEY;
 
         if (hasKey) {
@@ -94,13 +155,13 @@ export function useIntent() {
 
             const raw = await chatWithSystemPrompt(NEBULA_SYSTEM_PROMPT, history);
             const aiResult = parseDeepSeekRaw(raw);
-            applyResult(aiResult, setIntent, setFragment, addMessage);
+            applyResult(aiResult, useNebulaStore.getState());
           } catch (aiErr) {
             console.warn('[Nebula] DeepSeek fallback →', aiErr);
-            applyResult(localResult, setIntent, setFragment, addMessage);
+            applyResult(localResult, useNebulaStore.getState());
           }
         } else {
-          applyResult(localResult, setIntent, setFragment, addMessage);
+          applyResult(localResult, useNebulaStore.getState());
         }
       } catch (err) {
         const fallback = 'Qualcosa è andato storto. Riprova tra poco.';
@@ -114,7 +175,7 @@ export function useIntent() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chatHistory],
+    [chatHistory, lastContext],
   );
 
   return { processInput };

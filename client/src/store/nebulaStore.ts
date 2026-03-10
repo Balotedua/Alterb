@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { NebulaConfirmation, NebulaContext } from '@/types/nebula';
 
 export type NebulaIntent =
   | 'IDLE'
@@ -38,6 +39,11 @@ interface NebulaState {
   /** true for ~2300 ms after the AI responds */
   isResponseBursting: boolean;
 
+  /** Last meaningful intent — enables pronoun resolution in the parser */
+  lastContext: NebulaContext | null;
+  /** Pending destructive action waiting for user confirmation */
+  pendingConfirmation: NebulaConfirmation | null;
+
   setIntent: (
     intent: NebulaIntent,
     intensity: number,
@@ -57,6 +63,10 @@ interface NebulaState {
   setTypingIntensity: (v: number) => void;
   triggerBurst: () => void;
   triggerResponseBurst: () => void;
+  /** Save context snapshot for pronoun resolution ("cancellala") */
+  setLastContext: (ctx: NebulaContext) => void;
+  /** Set or clear a pending confirmation gate */
+  setConfirmation: (data: NebulaConfirmation | null) => void;
 }
 
 export const useNebulaStore = create<NebulaState>((set) => ({
@@ -72,6 +82,8 @@ export const useNebulaStore = create<NebulaState>((set) => ({
   typingIntensity: 0,
   isBursting: false,
   isResponseBursting: false,
+  lastContext: null,
+  pendingConfirmation: null,
 
   setIntent: (intent, intensity, message, data = {}) =>
     set({ intent, intensity, message, data }),
@@ -80,7 +92,7 @@ export const useNebulaStore = create<NebulaState>((set) => ({
     set({ activeFragment, fragmentParams, responseType }),
 
   clearFragment: () =>
-    set({ activeFragment: null, fragmentParams: {}, responseType: null }),
+    set({ activeFragment: null, fragmentParams: {}, responseType: null, pendingConfirmation: null }),
 
   setThinking: (isThinking) => set({ isThinking }),
 
@@ -104,6 +116,10 @@ export const useNebulaStore = create<NebulaState>((set) => ({
     }),
 
   setTypingIntensity: (typingIntensity) => set({ typingIntensity }),
+
+  setLastContext: (lastContext) => set({ lastContext }),
+
+  setConfirmation: (pendingConfirmation) => set({ pendingConfirmation }),
 
   triggerBurst: () => {
     set({ isBursting: true, typingIntensity: 0 });

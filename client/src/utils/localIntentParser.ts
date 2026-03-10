@@ -5,6 +5,7 @@
  */
 
 import type { NebulaIntent, NebulaResponseType } from '@/store/nebulaStore';
+import type { NebulaContext } from '@/types/nebula';
 
 export interface LocalIntentResult {
   type: NebulaResponseType;
@@ -65,7 +66,7 @@ function parseLimit(text: string): number | null {
 
 // ── main parser ───────────────────────────────────────────────────────────────
 
-export function parseLocalIntent(raw: string): LocalIntentResult {
+export function parseLocalIntent(raw: string, context?: NebulaContext | null): LocalIntentResult {
   const t = raw.toLowerCase().trim();
 
   const isDelete = has(t, /\b(cancella|elimina|rimuovi|togli|delete)\b/);
@@ -318,6 +319,37 @@ export function parseLocalIntent(raw: string): LocalIntentResult {
       intensity: 0.3,
       message: 'Ecco le impostazioni del tuo account.',
     };
+  }
+
+  // ── CONTEXT-AWARE PRONOUN RESOLUTION ───────────────────────────────────────
+  // Handles vague follow-ups like "cancellala", "mostrami quella", "riaprila"
+  // using the last meaningful intent stored in nebulaStore.lastContext.
+
+  if (context?.fragment) {
+    // "cancellala / cancellale / eliminali / rimuovila" → open FinanceDelete with same params
+    if (
+      context.module === 'FINANCE' &&
+      has(t, /\b(cancellala|cancellale|eliminali|eliminarla|rimuovila|rimuovile)\b/)
+    ) {
+      return {
+        type: 'VISUAL', module: 'FINANCE', intent: 'FINANCE',
+        fragment: 'FinanceDelete',
+        params: context.params,
+        intensity: 0.7,
+        message: 'Eccole. Eliminale singolarmente o tutte insieme.',
+      };
+    }
+
+    // "mostrala / riaprila / quella / di nuovo" → reopen last fragment
+    if (has(t, /\b(mostrala|riaprila|rimostrala|di nuovo|ancora|quella|quelle)\b/)) {
+      return {
+        type: 'VISUAL', module: context.module, intent: context.intent,
+        fragment: context.fragment,
+        params: context.params,
+        intensity: 0.4,
+        message: 'Eccola.',
+      };
+    }
   }
 
   // ── DEFAULT TALK ───────────────────────────────────────────────────────────

@@ -19,7 +19,9 @@
       "Bash(git rm:*)",
       "Bash(git:*)",
       "Bash(grep:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(find /c/Users/danie/Desktop/vercelesercizio/client/src -type f -name \"*action*\" 2>/dev/null | head -20)",
+      "Bash(find /c/Users/danie/Desktop/vercelesercizio/client/src -type f -name \"*handler*\" 2>/dev/null | head -20)"
     ]
   }
 }

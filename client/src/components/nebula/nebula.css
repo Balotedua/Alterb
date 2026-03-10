@@ -1493,3 +1493,107 @@ select.fragment-input option {
     bottom: calc(max(2.5rem, env(safe-area-inset-bottom) + 1rem) + var(--kb-offset, 0px));
   }
 }
+
+/* ─── Confirmation Card ──────────────────────────────────────────────────────── */
+
+.nebula-confirm-card {
+  background: #0d0d20;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-left: 3px solid #ef4444;
+  border-radius: 12px;
+  padding: 1.1rem 1.2rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.nebula-confirm-question {
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.nebula-confirm-actions {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: flex-end;
+}
+
+.nebula-confirm-btn {
+  padding: 0.45rem 1rem;
+  border-radius: 8px;
+  border: none;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.nebula-confirm-btn:active {
+  transform: scale(0.96);
+}
+
+.nebula-confirm-btn--cancel {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nebula-confirm-btn--cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.nebula-confirm-btn--confirm {
+  background: #ef4444;
+  color: #fff;
+}
+
+.nebula-confirm-btn--confirm:hover {
+  opacity: 0.85;
+}
+
+/* ─── Fragment Error Boundary ────────────────────────────────────────────────── */
+
+.nebula-error-card {
+  background: #0d0d20;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-left: 3px solid #f59e0b;
+  border-radius: 12px;
+  padding: 1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.nebula-error-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #f59e0b;
+  margin: 0;
+}
+
+.nebula-error-msg {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.55);
+  margin: 0;
+}
+
+.nebula-error-retry {
+  align-self: flex-start;
+  margin-top: 0.25rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 7px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.08);
+  color: #f59e0b;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.nebula-error-retry:hover {
+  background: rgba(245, 158, 11, 0.15);
+}

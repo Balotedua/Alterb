@@ -14,9 +14,15 @@ export default defineConfig({
     outDir: 'dist',
     assetsDir: 'assets',
     sourcemap: false,
+    chunkSizeWarningLimit: 800,
     rollupOptions: {
       output: {
-        manualChunks: undefined,
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          'framer':       ['framer-motion'],
+          'supabase':     ['@supabase/supabase-js'],
+          'zustand':      ['zustand'],
+        },
       },
     },
   },
