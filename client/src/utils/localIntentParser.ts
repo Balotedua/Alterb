@@ -76,7 +76,7 @@ export function parseLocalIntent(raw: string, context?: NebulaContext | null): L
 
   const isFinance  = has(t, /\b(spesa|spese|entrat[ae]|soldi|saldo|finanze?|budget|transazion[ei]|euro|€|conto|bonifico|pagamento)\b/);
   const isIncome   = has(t, /\b(entrat[ae]|guadagn[oi]|stipendio|ricevuto|incassato)\b/);
-  const isHealth   = has(t, /\b(sonno|dormito|dormi|peso|acqua|bevo|bevuto|salute|esercizio|allenamento|calorie|sport|attività)\b/);
+  const isHealth   = has(t, /\b(sonno|dormito|dormi|peso|acqua|bevo|bevuto|salute|esercizio|allenamento|calorie|sport|attività|passi|profilo salute|setup salute|recap salute)\b/);
   const isPsych    = has(t, /\b(umore|emozioni?|stress|ansia|ansioso|triste|felice|contento|come sto|mi sento|sento|benessere)\b/);
 
   // ── FINANCE ────────────────────────────────────────────────────────────────
@@ -241,6 +241,66 @@ export function parseLocalIntent(raw: string, context?: NebulaContext | null): L
   }
 
   // ── HEALTH ─────────────────────────────────────────────────────────────────
+
+  const isHealthSetup = (
+    (has(t, /\b(setup|profilo|configurazione|onboarding|prima volta|completa profilo|anagrafica)\b/) && isHealth) ||
+    has(t, /\b(setup salute|profilo salute|configura salute)\b/)
+  );
+
+  const isHealthDaily = (
+    (has(t, /\b(oggi|giornata|recap|giornaliero|come.è andata|resoconto|riepilogo di oggi)\b/) && isHealth) ||
+    has(t, /\b(quanti passi|calorie oggi|recap salute)\b/)
+  );
+
+  const isHealthGoals = (
+    (has(t, /\b(obiettiv[io]|target|massimal[ei]|goal)\b/) && isHealth) ||
+    has(t, /\b(obiettivi salute|target salute)\b/)
+  );
+
+  const isHealthSteps = has(t, /\b(passi|camminat[oa]|percorso|steps)\b/) && isHealth;
+
+  if (isHealthSetup) {
+    return {
+      type: 'VISUAL', module: 'HEALTH', intent: 'HEALTH',
+      fragment: 'HealthSetup',
+      params: {},
+      intensity: 0.45,
+      message: 'Configura il tuo profilo salute in pochi passi.',
+    };
+  }
+
+  if (isHealthGoals) {
+    return {
+      type: 'VISUAL', module: 'HEALTH', intent: 'HEALTH',
+      fragment: 'HealthGoals',
+      params: {},
+      intensity: 0.4,
+      message: 'Ecco i tuoi obiettivi salute.',
+    };
+  }
+
+  if (isHealthSteps) {
+    const stepsNum = num(t);
+    return {
+      type: 'VISUAL', module: 'HEALTH', intent: 'HEALTH',
+      fragment: 'HealthDaily',
+      params: { logKey: 'steps', logAmount: stepsNum ?? null },
+      intensity: 0.4,
+      message: stepsNum
+        ? `Registro ${stepsNum.toLocaleString('it')} passi nel riepilogo di oggi.`
+        : 'Ecco il tuo riepilogo passi di oggi.',
+    };
+  }
+
+  if (isHealthDaily) {
+    return {
+      type: 'VISUAL', module: 'HEALTH', intent: 'HEALTH',
+      fragment: 'HealthDaily',
+      params: {},
+      intensity: 0.4,
+      message: 'Ecco il tuo riepilogo di oggi.',
+    };
+  }
 
   if (isHealth && has(t, /\b(sonno|dormito|dormi|letto)\b/)) {
     const d = days(t) ?? 7;

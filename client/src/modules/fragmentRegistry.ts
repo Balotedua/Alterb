@@ -10,6 +10,9 @@ import { FinanceAnalyticsFragment } from './finance/FinanceAnalyticsFragment';
 import { HealthOverviewFragment }  from './health/HealthOverviewFragment';
 import { HealthSleepFragment }     from './health/HealthSleepFragment';
 import { HealthWaterFragment }     from './health/HealthWaterFragment';
+import { HealthSetupFragment }     from './health/HealthSetupFragment';
+import { HealthDailyFragment }     from './health/HealthDailyFragment';
+import { HealthGoalsFragment }     from './health/HealthGoalsFragment';
 import { MoodHistoryFragment }     from './psychology/MoodHistoryFragment';
 import { PsychOverviewFragment }   from './psychology/PsychOverviewFragment';
 import { SettingsFragment }        from './settings/SettingsFragment';
@@ -32,6 +35,9 @@ export const FRAGMENT_REGISTRY: Record<string, FragmentComponent> = {
   HealthOverview: HealthOverviewFragment,
   HealthSleep:    HealthSleepFragment,
   HealthWater:    HealthWaterFragment,
+  HealthSetup:    HealthSetupFragment,
+  HealthDaily:    HealthDailyFragment,
+  HealthGoals:    HealthGoalsFragment,
 
   // Psychology
   PsychOverview:  PsychOverviewFragment,

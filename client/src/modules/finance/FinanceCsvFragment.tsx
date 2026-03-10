@@ -214,7 +214,7 @@ export function FinanceCsvFragment(_: Props) {
       {/* Format hint */}
       <p className="csv-hint">
         Supporta Revolut e qualsiasi CSV con colonne: data, importo, descrizione.
-        Separatore <code>,</code> o <code>;</code> · Data con o senza orario · Importo negativo = spesa.
+        Separatore <code>,</code> o <code>;</code>
       </p>
 
       {/* Stats + preview */}

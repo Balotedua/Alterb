@@ -105,3 +105,112 @@ alter table public.water_log enable row level security;
 create policy "water_log: select own"  on public.water_log for select  using (auth.uid() = user_id);
 create policy "water_log: insert own"  on public.water_log for insert  with check (auth.uid() = user_id);
 create policy "water_log: update own"  on public.water_log for update  using (auth.uid() = user_id);
+
+
+-- ── TRIGGER HELPER ───────────────────────────────────────────────────────────
+--    Funzione riutilizzata dai trigger updated_at su tutte le nuove tabelle.
+
+create or replace function public.update_updated_at_column()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+
+-- ── 5. HEALTH PROFILES ───────────────────────────────────────────────────────
+--    Un solo profilo per utente (UNIQUE su user_id).
+--    Raccoglie dati anagrafici, composizione corporea e stile di vita.
+
+create table if not exists public.health_profiles (
+  id                  uuid        primary key default gen_random_uuid(),
+  user_id             uuid        not null references auth.users(id) on delete cascade,
+  height_cm           smallint,
+  sex                 text        check (sex in ('M', 'F', 'X')),
+  blood_type          text        check (blood_type in ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', '0+', '0-')),
+  birth_year          smallint,
+  weight_kg           numeric(5, 2),
+  body_fat_pct        numeric(4, 1),
+  is_smoker           boolean     not null default false,
+  activity_level      text        not null default 'sedentary'
+                                  check (activity_level in ('sedentary', 'light', 'active', 'very_active')),
+  allergies           text[]      not null default '{}',
+  conditions          text[]      not null default '{}',
+  is_setup_completed  boolean     not null default false,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now(),
+
+  unique (user_id)
+);
+
+alter table public.health_profiles enable row level security;
+
+create policy "health_profiles: select own"  on public.health_profiles for select  using (auth.uid() = user_id);
+create policy "health_profiles: insert own"  on public.health_profiles for insert  with check (auth.uid() = user_id);
+create policy "health_profiles: update own"  on public.health_profiles for update  using (auth.uid() = user_id);
+create policy "health_profiles: delete own"  on public.health_profiles for delete  using (auth.uid() = user_id);
+
+create trigger health_profiles_updated_at
+  before update on public.health_profiles
+  for each row execute function public.update_updated_at_column();
+
+
+-- ── 6. DAILY HEALTH LOGS ─────────────────────────────────────────────────────
+--    Una riga per utente + data + chiave metrica (steps, calorie, ecc.).
+--    Usa JSONB per il valore così da supportare qualsiasi tipo di payload.
+
+create table if not exists public.daily_health_logs (
+  id          uuid        primary key default gen_random_uuid(),
+  user_id     uuid        not null references auth.users(id) on delete cascade,
+  date        date        not null default current_date,
+  category    text        not null
+              check (category in ('activity', 'nutrition', 'hydration', 'sleep', 'biometric')),
+  key         text        not null,   -- steps | calories_burned | calories_in | water_ml | sleep_minutes | weight_kg | body_fat_pct
+  value       jsonb       not null,   -- es. {"amount": 8000}
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+
+  unique (user_id, date, key)
+);
+
+create index if not exists daily_health_logs_user_date_idx
+  on public.daily_health_logs (user_id, date desc);
+
+alter table public.daily_health_logs enable row level security;
+
+create policy "daily_health_logs: select own"  on public.daily_health_logs for select  using (auth.uid() = user_id);
+create policy "daily_health_logs: insert own"  on public.daily_health_logs for insert  with check (auth.uid() = user_id);
+create policy "daily_health_logs: update own"  on public.daily_health_logs for update  using (auth.uid() = user_id);
+create policy "daily_health_logs: delete own"  on public.daily_health_logs for delete  using (auth.uid() = user_id);
+
+create trigger daily_health_logs_updated_at
+  before update on public.daily_health_logs
+  for each row execute function public.update_updated_at_column();
+
+
+-- ── 7. HEALTH GOALS ──────────────────────────────────────────────────────────
+--    Una riga per utente + chiave obiettivo (steps_target, ecc.).
+
+create table if not exists public.health_goals (
+  id          uuid        primary key default gen_random_uuid(),
+  user_id     uuid        not null references auth.users(id) on delete cascade,
+  key         text        not null,   -- steps_target | water_ml_target | calories_target | sleep_minutes_target
+  value       jsonb       not null,   -- es. {"amount": 10000}
+  updated_at  timestamptz not null default now(),
+
+  unique (user_id, key)
+);
+
+alter table public.health_goals enable row level security;
+
+create policy "health_goals: select own"  on public.health_goals for select  using (auth.uid() = user_id);
+create policy "health_goals: insert own"  on public.health_goals for insert  with check (auth.uid() = user_id);
+create policy "health_goals: update own"  on public.health_goals for update  using (auth.uid() = user_id);
+create policy "health_goals: delete own"  on public.health_goals for delete  using (auth.uid() = user_id);
+
+create trigger health_goals_updated_at
+  before update on public.health_goals
+  for each row execute function public.update_updated_at_column();

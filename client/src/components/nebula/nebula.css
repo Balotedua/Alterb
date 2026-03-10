@@ -141,8 +141,7 @@
 @media (max-width: 860px) {
   .nb-fragment-area {
     width: min(420px, 92vw);
-    /* Push fragment up enough to clear the chat bar (~130px) */
-    top: calc(50% - 8vh);
+    top: 50%;
     pointer-events: auto;
   }
 
@@ -1415,68 +1414,553 @@ select.fragment-input option {
 .csv-row--error { opacity: 0.6; }
 .csv-error-msg  { color: #f87171; font-size: 0.75rem; }
 
-/* ─── Help Fragment ──────────────────────────────────────────────────────────── */
-.help-tabs {
+/* ─── Health Setup Fragment ─────────────────────────────────────────────────── */
+.setup-step {
+  /* animated step container — dimensions driven by content */
+}
+.setup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.75rem;
+}
+.setup-label {
+  font-size: 0.73rem;
+  font-weight: 500;
+  color: rgba(255,255,255,0.55);
+  letter-spacing: 0.02em;
+}
+.setup-input {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 0.5rem;
+  padding: 0.48rem 0.65rem;
+  color: rgba(255,255,255,0.9);
+  font-size: 0.85rem;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+.setup-input:focus {
+  border-color: rgba(52,211,153,0.5);
+}
+.setup-select {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 0.5rem;
+  padding: 0.48rem 0.65rem;
+  color: rgba(255,255,255,0.9);
+  font-size: 0.85rem;
+  width: 100%;
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.setup-btn-group {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
-  margin-bottom: 1rem;
 }
-
-.help-tab {
-  padding: 0.3rem 0.75rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.12);
+.setup-option {
+  padding: 0.35rem 0.8rem;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(255,255,255,0.1);
   background: rgba(255,255,255,0.04);
   color: rgba(255,255,255,0.55);
   font-size: 0.78rem;
   cursor: pointer;
-  transition: background 0.18s, color 0.18s, border-color 0.18s;
+  transition: all 0.15s;
+}
+.setup-option:hover {
+  border-color: rgba(52,211,153,0.35);
+  color: rgba(255,255,255,0.8);
+}
+.setup-option--active {
+  border-color: #34d399;
+  background: rgba(52,211,153,0.15);
+  color: #6ee7b7;
+  font-weight: 600;
+}
+.setup-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.85rem;
+  gap: 0.5rem;
+}
+.setup-progress {
+  display: flex;
+  gap: 0.3rem;
+  justify-content: center;
+  margin-bottom: 0.6rem;
+}
+.setup-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  transition: background 0.2s;
+}
+.setup-dot--active {
+  background: #34d399;
+}
+.setup-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.setup-save-btn {
+  width: 100%;
+  padding: 0.6rem;
+  border-radius: 0.55rem;
+  background: rgba(52,211,153,0.18);
+  border: 1px solid rgba(52,211,153,0.35);
+  color: #6ee7b7;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.setup-save-btn:hover {
+  background: rgba(52,211,153,0.28);
+}
+.setup-save-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.setup-btn-secondary {
+  padding: 0.45rem 0.9rem;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: transparent;
+  color: rgba(255,255,255,0.45);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.setup-btn-primary {
+  padding: 0.45rem 1rem;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(52,211,153,0.35);
+  background: rgba(52,211,153,0.15);
+  color: #6ee7b7;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.setup-step-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(52,211,153,0.8);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 0.65rem;
+}
+.setup-optional {
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.3);
+  margin-left: 0.3rem;
 }
 
-.help-tab--active,
-.help-tab:hover {
-  background: rgba(139,92,246,0.22);
-  border-color: rgba(139,92,246,0.5);
-  color: #c4b5fd;
+/* ─── Health Daily Fragment ──────────────────────────────────────────────────── */
+.health-daily-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+}
+.health-daily-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.health-daily-metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.health-daily-metric-label {
+  font-size: 0.73rem;
+  color: rgba(255,255,255,0.45);
+}
+.health-daily-metric-value {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.85);
+}
+.health-daily-metric-target {
+  font-size: 0.68rem;
+  color: rgba(255,255,255,0.3);
+}
+.health-daily-bar-track {
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.07);
+  overflow: hidden;
+}
+.health-daily-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+.health-daily-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.health-daily-action-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 0.42rem 0.5rem;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.7);
+  font-size: 0.73rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+  white-space: nowrap;
+}
+.health-daily-action-btn:hover {
+  background: rgba(52,211,153,0.1);
+  border-color: rgba(52,211,153,0.3);
+  color: #a7f3d0;
+}
+.health-daily-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.5rem;
+  background: rgba(52,211,153,0.08);
+  border: 1px solid rgba(52,211,153,0.2);
+  margin-bottom: 0.65rem;
+  gap: 0.5rem;
+}
+.health-daily-cta-text {
+  font-size: 0.78rem;
+  color: rgba(255,255,255,0.75);
+}
+.health-daily-cta-btn {
+  padding: 0.3rem 0.75rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(52,211,153,0.4);
+  background: rgba(52,211,153,0.15);
+  color: #6ee7b7;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
 }
 
-.help-list {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 0.75rem;
+/* ─── Health Goals Fragment ──────────────────────────────────────────────────── */
+.health-goals-list {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.health-goal-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.5rem;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+}
+.health-goal-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+.health-goal-info {
+  flex: 1;
+  min-width: 0;
+}
+.health-goal-name {
+  font-size: 0.78rem;
+  color: rgba(255,255,255,0.7);
+  font-weight: 500;
+}
+.health-goal-unit {
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.3);
+}
+.health-goal-value-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.health-goal-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #6ee7b7;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.3rem;
+  transition: background 0.15s;
+  min-width: 50px;
+  text-align: right;
+}
+.health-goal-value:hover {
+  background: rgba(52,211,153,0.1);
+}
+.health-goal-input {
+  width: 72px;
+  padding: 0.2rem 0.35rem;
+  border-radius: 0.3rem;
+  border: 1px solid rgba(52,211,153,0.4);
+  background: rgba(52,211,153,0.08);
+  color: #6ee7b7;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-align: right;
+  outline: none;
+}
+.health-goal-saving {
+  font-size: 0.65rem;
+  color: rgba(52,211,153,0.5);
 }
 
-.help-item {
+/* ─── Help Fragment ──────────────────────────────────────────────────────────── */
+
+/* Filter chips */
+.help-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.help-filter {
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.48);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.help-filter:hover {
+  border-color: rgba(255,255,255,0.2);
+  color: rgba(255,255,255,0.7);
+}
+
+.help-filter--active {
+  background: rgba(129,140,248,0.18);
+  border-color: rgba(129,140,248,0.5);
+  color: #a5b4fc;
+  font-weight: 600;
+}
+
+/* Tap hint */
+.help-tap-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.38rem 0.6rem;
+  border-radius: 0.45rem;
+  background: rgba(129,140,248,0.07);
+  border: 1px solid rgba(129,140,248,0.15);
+  font-size: 0.7rem;
+  color: rgba(165,180,252,0.65);
+  margin-bottom: 0.6rem;
+  line-height: 1.3;
+}
+
+.help-tap-icon {
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  filter: grayscale(0.3);
+}
+
+/* Accordion sections */
+.help-sections {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.55rem 0.75rem;
-  border-radius: 0.5rem;
-  background: rgba(255,255,255,0.04);
+  gap: 0.3rem;
+  margin-bottom: 0.6rem;
+}
+
+.help-section {
+  border-radius: 0.55rem;
+  overflow: hidden;
   border: 1px solid rgba(255,255,255,0.07);
 }
 
-.help-cmd {
-  font-size: 0.82rem;
+/* Section toggle button */
+.help-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  background: rgba(255,255,255,0.03);
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s;
+  text-align: left;
+}
+
+.help-section-toggle:hover {
+  background: rgba(255,255,255,0.055);
+}
+
+.help-section-toggle--open {
+  background: rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.help-section-icon {
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.help-section-name {
+  flex: 1;
+  font-size: 0.8rem;
   font-weight: 600;
-  color: #a78bfa;
-  font-family: 'Fira Code', 'Cascadia Code', monospace;
+  color: rgba(255,255,255,0.75);
+  letter-spacing: 0.01em;
 }
 
-.help-desc {
+.help-section-toggle--open .help-section-name {
+  color: var(--s-glow, rgba(255,255,255,0.9));
+}
+
+.help-section-soon {
+  font-size: 0.55rem;
+  font-weight: 600;
+  color: rgba(255,200,80,0.55);
+  background: rgba(255,200,80,0.08);
+  border: 1px solid rgba(255,200,80,0.15);
+  padding: 1px 5px;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.help-section-count {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.07);
+  padding: 1px 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.help-section-arrow {
+  font-size: 1rem;
+  color: rgba(255,255,255,0.3);
+  transition: transform 0.2s ease, color 0.15s;
+  line-height: 1;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.help-section-arrow--open {
+  transform: rotate(90deg);
+  color: var(--s-glow, rgba(255,255,255,0.5));
+}
+
+/* Command list */
+.help-cmd-list {
+  list-style: none;
+  padding: 0.3rem 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.help-cmd-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.65rem;
+  cursor: pointer;
+  transition: background 0.13s;
+}
+
+.help-cmd-item:hover {
+  background: rgba(255,255,255,0.05);
+}
+
+.help-cmd-item:hover .help-cmd-go {
+  color: rgba(255,255,255,0.6);
+  transform: translateX(3px);
+}
+
+.help-cmd-item--soon {
+  opacity: 0.6;
+}
+
+.help-cmd-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.help-cmd-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.help-cmd-text {
+  font-size: 0.79rem;
+  font-weight: 500;
+  color: rgba(255,255,255,0.8);
+  font-family: 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.help-cmd-desc {
+  font-size: 0.68rem;
+  color: rgba(255,255,255,0.35);
+  line-height: 1.3;
+}
+
+.help-cmd-go {
+  font-size: 0.8rem;
+  color: rgba(255,255,255,0.22);
+  flex-shrink: 0;
+  opacity: 1;
+  transition: color 0.13s, transform 0.13s;
+}
+
+/* Empty state */
+.help-empty {
   font-size: 0.75rem;
-  color: rgba(255,255,255,0.5);
-}
-
-.help-footer {
-  font-size: 0.72rem;
   color: rgba(255,255,255,0.3);
   text-align: center;
+  padding: 1rem 0;
   margin: 0;
+}
+
+/* Footer legend */
+.help-footer {
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.2);
+  text-align: center;
+  margin: 0;
+  letter-spacing: 0.03em;
 }
 
 /* ─── Mobile small ──────────────────────────────────────────────────────────── */
@@ -1486,16 +1970,15 @@ select.fragment-input option {
     height: min(220px, 62vw);
   }
 
-  /* Anchor fragment from top on small screens — avoids overlap with chat bar */
   .nb-fragment-area {
-    top: max(env(safe-area-inset-top) + 10px, 10px);
-    transform: translateX(-50%);
-    max-height: calc(100dvh - max(env(safe-area-inset-top), 20px) - 130px - env(safe-area-inset-bottom));
+    top: 50%;
+    transform: translate(-50%, -50%);
+    max-height: 78dvh;
   }
 
   .nebula-card,
   .fragment {
-    max-height: calc(100dvh - max(env(safe-area-inset-top), 20px) - 130px - env(safe-area-inset-bottom));
+    max-height: 78dvh;
   }
 
   .nebula-chat-wrapper {
@@ -1647,7 +2130,7 @@ select.fragment-input option {
 .nebula-send-btn:active:not(:disabled),
 .nebula-confirm-btn:active,
 .nebula-card-close:active,
-.help-tab:active,
+.help-module:active,
 .an-tab:active {
   transform: scale(0.95);
   transition: transform 0.08s ease;

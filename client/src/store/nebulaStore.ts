@@ -43,6 +43,8 @@ interface NebulaState {
   lastContext: NebulaContext | null;
   /** Pending destructive action waiting for user confirmation */
   pendingConfirmation: NebulaConfirmation | null;
+  /** Controls whether the reply bubble is visible — hidden after fragment close */
+  replyVisible: boolean;
 
   setIntent: (
     intent: NebulaIntent,
@@ -67,6 +69,13 @@ interface NebulaState {
   setLastContext: (ctx: NebulaContext) => void;
   /** Set or clear a pending confirmation gate */
   setConfirmation: (data: NebulaConfirmation | null) => void;
+  /** Text to prefill in the chat input (set from HelpFragment clicks) */
+  prefillInput: string | null;
+  setPrefillInput: (v: string | null) => void;
+  /** Fragment to reopen when the user presses X (back navigation from Help) */
+  returnFragment: string | null;
+  /** Open a fragment keeping track of the caller so X navigates back */
+  openFromReturn: (fragment: string, params: Record<string, unknown>, returnTo: string) => void;
 }
 
 export const useNebulaStore = create<NebulaState>((set) => ({
@@ -84,15 +93,33 @@ export const useNebulaStore = create<NebulaState>((set) => ({
   isResponseBursting: false,
   lastContext: null,
   pendingConfirmation: null,
+  replyVisible: true,
+  prefillInput: null,
+  returnFragment: null,
 
   setIntent: (intent, intensity, message, data = {}) =>
     set({ intent, intensity, message, data }),
 
   setFragment: (activeFragment, fragmentParams, responseType) =>
-    set({ activeFragment, fragmentParams, responseType }),
+    set({ activeFragment, fragmentParams, responseType, returnFragment: null }),
 
   clearFragment: () =>
-    set({ activeFragment: null, fragmentParams: {}, responseType: null, pendingConfirmation: null }),
+    set((s) => {
+      if (s.returnFragment) {
+        return {
+          activeFragment: s.returnFragment,
+          fragmentParams: {},
+          responseType: 'VISUAL' as NebulaResponseType,
+          pendingConfirmation: null,
+          returnFragment: null,
+          replyVisible: false,
+        };
+      }
+      return { activeFragment: null, fragmentParams: {}, responseType: null, pendingConfirmation: null, replyVisible: false };
+    }),
+
+  openFromReturn: (fragment, params, returnTo) =>
+    set({ activeFragment: fragment, fragmentParams: params, responseType: 'VISUAL', returnFragment: returnTo }),
 
   setThinking: (isThinking) => set({ isThinking }),
 
@@ -102,6 +129,7 @@ export const useNebulaStore = create<NebulaState>((set) => ({
         ...s.chatHistory.slice(-20),
         { role, content, timestamp: Date.now() },
       ],
+      ...(role === 'assistant' ? { replyVisible: true } : {}),
     })),
 
   reset: () =>
@@ -120,6 +148,7 @@ export const useNebulaStore = create<NebulaState>((set) => ({
   setLastContext: (lastContext) => set({ lastContext }),
 
   setConfirmation: (pendingConfirmation) => set({ pendingConfirmation }),
+  setPrefillInput: (prefillInput) => set({ prefillInput }),
 
   triggerBurst: () => {
     set({ isBursting: true, typingIntensity: 0 });

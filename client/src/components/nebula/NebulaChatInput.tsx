@@ -7,7 +7,7 @@ export function NebulaChatInput() {
   const [value, setValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { isThinking, message, chatHistory, setTypingIntensity, triggerBurst } =
+  const { isThinking, message, chatHistory, replyVisible, prefillInput, setPrefillInput, setTypingIntensity, triggerBurst } =
     useNebulaStore();
   const { processInput } = useIntent();
 
@@ -40,6 +40,17 @@ export function NebulaChatInput() {
     if (value === '') setTypingIntensity(0);
   }, [value, setTypingIntensity]);
 
+  // React to prefill requests from HelpFragment
+  useEffect(() => {
+    if (prefillInput !== null) {
+      setValue(prefillInput);
+      setTypingIntensity(Math.min(prefillInput.length * 0.07, 1));
+      setPrefillInput(null);
+      const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      if (!isTouch) inputRef.current?.focus();
+    }
+  }, [prefillInput, setPrefillInput, setTypingIntensity]);
+
   // Keep focused after thinking — skip on touch devices to avoid reopening keyboard
   useEffect(() => {
     const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
@@ -50,15 +61,17 @@ export function NebulaChatInput() {
 
   return (
     <div className="nebula-chat-wrapper">
-      <div className={`nebula-reply ${isThinking ? 'nebula-reply--thinking' : ''}`}>
-        {isThinking ? (
-          <span className="nebula-dots">
-            <span /><span /><span />
-          </span>
-        ) : (
-          <span>{displayMessage}</span>
-        )}
-      </div>
+      {(isThinking || replyVisible) && (
+        <div className={`nebula-reply ${isThinking ? 'nebula-reply--thinking' : ''}`}>
+          {isThinking ? (
+            <span className="nebula-dots">
+              <span /><span /><span />
+            </span>
+          ) : (
+            <span>{displayMessage}</span>
+          )}
+        </div>
+      )}
 
       <div className="nebula-input-bar">
         <input

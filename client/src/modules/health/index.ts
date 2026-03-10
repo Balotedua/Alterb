@@ -1,3 +1,6 @@
 export { HealthOverviewFragment } from './HealthOverviewFragment';
 export { HealthSleepFragment }    from './HealthSleepFragment';
 export { HealthWaterFragment }    from './HealthWaterFragment';
+export { HealthSetupFragment }    from './HealthSetupFragment';
+export { HealthDailyFragment }    from './HealthDailyFragment';
+export { HealthGoalsFragment }    from './HealthGoalsFragment';
