@@ -87,6 +87,13 @@
   height: 100% !important;
 }
 
+/* When keyboard is open the container itself shrinks — no bottom transition needed */
+.nebula-core--kb .nebula-chat-wrapper {
+  transition:
+    opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 /* Hide entity when keyboard is open */
 .nebula-core--kb .nb-entity-wrapper {
   opacity: 0;
@@ -113,25 +120,37 @@
   pointer-events: auto;
 }
 
-/* Hide fragment when keyboard is open */
-.nebula-core--kb .nb-fragment-area {
+/* Keyboard open, no fragment: hide fragment area */
+.nebula-core--kb:not(.nebula-core--fragment) .nb-fragment-area {
   display: none;
+}
+
+/* Keyboard open + fragment active: anchor to top, fill available height (container = visual viewport) */
+.nebula-core--kb.nebula-core--fragment .nb-fragment-area {
+  top: max(env(safe-area-inset-top) + 8px, 8px);
+  transform: translateX(-50%);
+  max-height: calc(100% - 5rem);
+  overflow: hidden;
+}
+
+.nebula-core--kb.nebula-core--fragment .nebula-card {
+  max-height: calc(100% - 6rem);
 }
 
 /* ─── Mobile layout ─────────────────────────────────────────────────────────── */
 @media (max-width: 860px) {
   .nb-fragment-area {
     width: min(420px, 92vw);
-    /* Push fragment up slightly so chat input is reachable */
-    top: calc(50% - 2vh);
+    /* Push fragment up enough to clear the chat bar (~130px) */
+    top: calc(50% - 8vh);
     pointer-events: auto;
   }
 
   .nebula-card {
     padding: 18px 16px;
     border-radius: 18px;
-    /* Account for iPhone home bar */
-    max-height: calc(72vh - env(safe-area-inset-bottom));
+    /* Limit height to leave room for chat bar + safe area */
+    max-height: calc(72dvh - env(safe-area-inset-bottom));
     backdrop-filter: blur(22px) saturate(180%);
     -webkit-backdrop-filter: blur(22px) saturate(180%);
     pointer-events: auto;
@@ -199,6 +218,7 @@
   color: #e2e0f0;
   pointer-events: auto;
   max-height: 72vh;
+  max-height: 72dvh;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
@@ -253,6 +273,7 @@
   color: #f0edff;
   pointer-events: auto;
   max-height: 75vh;
+  max-height: 75dvh;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -360,7 +381,7 @@
   .nebula-card {
     padding: 20px;
     border-radius: 18px;
-    max-height: 70vh;
+    max-height: 70dvh;
     backdrop-filter: blur(20px) saturate(180%);
   }
   .nebula-card-title {
@@ -675,9 +696,8 @@ select.fragment-input option {
 /* ─── Chat input ─────────────────────────────────────────────────────────────── */
 .nebula-chat-wrapper {
   position: absolute;
-  bottom: calc(2rem + var(--kb-offset, 0px));
-  /* Account for iPhone home bar */
-  bottom: calc(max(2rem, env(safe-area-inset-bottom) + 0.75rem) + var(--kb-offset, 0px));
+  /* Account for iPhone home bar. No kb-offset needed: container height = visual viewport */
+  bottom: calc(max(2rem, env(safe-area-inset-bottom) + 0.75rem));
   left: 50%;
   transform: translateX(-50%);
   width: min(540px, 90vw);
@@ -695,7 +715,7 @@ select.fragment-input option {
 
 /* Fragment active: chat fades and slides down subtly */
 .nebula-core--fragment .nebula-chat-wrapper {
-  bottom: calc(max(0.5rem, env(safe-area-inset-bottom) + 0.25rem) + var(--kb-offset, 0px));
+  bottom: calc(max(0.5rem, env(safe-area-inset-bottom) + 0.25rem));
   opacity: 0.22;
   pointer-events: none;
   transform: translateX(-50%) translateY(6px);
@@ -1462,19 +1482,31 @@ select.fragment-input option {
 /* ─── Mobile small ──────────────────────────────────────────────────────────── */
 @media (max-width: 600px) {
   .nb-entity-wrapper {
-    width: min(250px, 70vw);
-    height: min(250px, 70vw);
+    width: min(220px, 62vw);
+    height: min(220px, 62vw);
+  }
+
+  /* Anchor fragment from top on small screens — avoids overlap with chat bar */
+  .nb-fragment-area {
+    top: max(env(safe-area-inset-top) + 10px, 10px);
+    transform: translateX(-50%);
+    max-height: calc(100dvh - max(env(safe-area-inset-top), 20px) - 130px - env(safe-area-inset-bottom));
+  }
+
+  .nebula-card,
+  .fragment {
+    max-height: calc(100dvh - max(env(safe-area-inset-top), 20px) - 130px - env(safe-area-inset-bottom));
   }
 
   .nebula-chat-wrapper {
     width: 92vw;
     /* Safe area bottom + extra breathing room */
-    bottom: calc(max(1.5rem, env(safe-area-inset-bottom) + 0.6rem) + var(--kb-offset, 0px));
+    bottom: calc(max(1.5rem, env(safe-area-inset-bottom) + 0.6rem));
   }
 
   /* Reduce orbs on small screens */
-  .nb-orb--1 { width: 320px; height: 320px; }
-  .nb-orb--2 { width: 240px; height: 240px; }
+  .nb-orb--1 { width: 280px; height: 280px; }
+  .nb-orb--2 { width: 200px; height: 200px; }
 
   /* Prevent iOS Safari auto-zoom on input focus (font-size must be ≥ 16px) */
   .fragment-input,
@@ -1490,7 +1522,7 @@ select.fragment-input option {
 /* ─── iOS PWA / standalone mode ─────────────────────────────────────────────── */
 @media (display-mode: standalone) {
   .nebula-chat-wrapper {
-    bottom: calc(max(2.5rem, env(safe-area-inset-bottom) + 1rem) + var(--kb-offset, 0px));
+    bottom: calc(max(2.5rem, env(safe-area-inset-bottom) + 1rem));
   }
 }
 
@@ -1596,4 +1628,47 @@ select.fragment-input option {
 
 .nebula-error-retry:hover {
   background: rgba(245, 158, 11, 0.15);
+}
+
+/* ─── Touch UX ───────────────────────────────────────────────────────────────── */
+
+/* Eliminate 300ms tap delay on all interactive elements */
+.nebula-core button,
+.nebula-core input,
+.nebula-core select,
+.nebula-core [role="button"] {
+  touch-action: manipulation;
+}
+
+/* Active (tap) feedback — immediate visual response on touch */
+.fragment-btn:active:not(:disabled),
+.fragment-toggle-btn:active,
+.nebula-water-btn:active:not(:disabled),
+.nebula-send-btn:active:not(:disabled),
+.nebula-confirm-btn:active,
+.nebula-card-close:active,
+.help-tab:active,
+.an-tab:active {
+  transform: scale(0.95);
+  transition: transform 0.08s ease;
+}
+
+.fragment-list-row:active {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.cat-row:active {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+/* Delete buttons: always visible on touch-only devices (no hover available) */
+@media (hover: none) {
+  .fragment-delete-btn {
+    color: rgba(248, 113, 113, 0.4);
+  }
+  .fragment-delete-btn:active {
+    color: #f87171;
+    background: rgba(248, 113, 113, 0.12);
+    transform: scale(0.93);
+  }
 }

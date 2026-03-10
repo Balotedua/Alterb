@@ -40,9 +40,10 @@ export function NebulaChatInput() {
     if (value === '') setTypingIntensity(0);
   }, [value, setTypingIntensity]);
 
-  // Keep focused after thinking
+  // Keep focused after thinking — skip on touch devices to avoid reopening keyboard
   useEffect(() => {
-    if (!isThinking) inputRef.current?.focus();
+    const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    if (!isThinking && !isTouch) inputRef.current?.focus();
   }, [isThinking]);
 
   const displayMessage = lastAssistant?.content ?? message;

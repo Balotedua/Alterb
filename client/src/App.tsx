@@ -4,6 +4,7 @@ import { ThemeProvider } from '@/context/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
 import { NebulaCore } from '@/components/nebula/NebulaCore';
 import LoginScreen from '@/components/auth/LoginScreen';
+import { InstallBanner } from '@/components/pwa/InstallBanner';
 
 function PageLoader() {
   return (
@@ -32,6 +33,7 @@ export default function App() {
           closeButton
         />
         <AppContent />
+        <InstallBanner />
       </ThemeProvider>
     </AuthProvider>
   );
