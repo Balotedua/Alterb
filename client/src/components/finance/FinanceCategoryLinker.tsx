@@ -43,7 +43,7 @@ export function FinanceCategoryLinker() {
     if (!pattern || !newCatName.trim()) return;
     setLinkErr('');
     try {
-      const id = await addCategory.mutateAsync({ id: '', label: newCatName.trim(), icon: '📦', color: '#6b7280' });
+      const id = await addCategory.mutateAsync({ id: '', label: newCatName.trim(), icon: '🏷️', color: '#6b7280' });
       handleLink(pattern, id);
       setNewCatName('');
       setShowNewInput(false);

@@ -226,6 +226,37 @@ export function useFinanceCategories() {
   });
 }
 
+// Aggiorna nome e icona di una categoria (update se esiste, insert se è una DEFAULT_CAT)
+export function useUpdateCategory() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({ id, label, icon }: { id: string; label: string; icon: string }) => {
+      if (!user) throw new Error('Utente non autenticato');
+
+      // Prova aggiornamento (categoria già in DB)
+      const { data: updated, error: updErr } = await supabase
+        .from('finance_categories')
+        .update({ label, icon })
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select();
+
+      if (updErr) throw updErr;
+
+      // Se nessuna riga aggiornata (categoria di default non ancora in DB), inseriscila
+      if (!updated || updated.length === 0) {
+        const { error: insErr } = await supabase
+          .from('finance_categories')
+          .insert({ id, user_id: user.id, label, icon, color: '#6b7280' });
+        if (insErr) throw insErr;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: CAT_QUERY_KEY }),
+  });
+}
+
 // Crea una nuova categoria
 export function useAddCategory() {
   const qc = useQueryClient();

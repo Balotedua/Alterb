@@ -129,7 +129,7 @@ export function FinanceAnalytics() {
                     <div className="fan-cat-top">
                       <div className="fan-cat-left">
                         <span className="fan-cat-num">{i + 1}</span>
-                        <span className="fan-cat-icon">{cat?.icon ?? '📦'}</span>
+                        <span className="fan-cat-icon">{cat?.icon ?? '🏷️'}</span>
                         <span className="fan-cat-name">{cat?.label ?? catId}</span>
                       </div>
                       <div className="fan-cat-right">

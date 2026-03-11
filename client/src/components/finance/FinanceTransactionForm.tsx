@@ -27,6 +27,19 @@ export function FinanceTransactionForm() {
     if (!description.trim()) { setError('Inserisci una descrizione'); return; }
     if (!category) { setError('Seleziona una categoria'); return; }
 
+    // Controllo doppioni: stessa data + stesso importo + stessa descrizione
+    const descNorm = description.trim().toLowerCase();
+    const duplicate = (txns ?? []).find(
+      (t) =>
+        t.date.slice(0, 10) === date &&
+        Math.abs(t.amount - amt) < 0.001 &&
+        t.description.trim().toLowerCase() === descNorm
+    );
+    if (duplicate) {
+      setError(`Duplicato: esiste già "${duplicate.description}" del ${duplicate.date.slice(0, 10)} per €${duplicate.amount.toFixed(2)}.`);
+      return;
+    }
+
     try {
       await addMutation.mutateAsync({ amount: amt, type, category, description: description.trim(), date });
 

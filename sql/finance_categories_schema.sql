@@ -18,5 +18,9 @@ create policy "select_own" on finance_categories
 create policy "insert_own" on finance_categories
   for insert with check (auth.uid() = user_id);
 
+create policy "update_own" on finance_categories
+  for update using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
 create policy "delete_own" on finance_categories
   for delete using (auth.uid() = user_id);

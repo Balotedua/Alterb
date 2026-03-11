@@ -17,6 +17,8 @@ import { MoodHistoryFragment }     from './psychology/MoodHistoryFragment';
 import { PsychOverviewFragment }   from './psychology/PsychOverviewFragment';
 import { SettingsFragment }        from './settings/SettingsFragment';
 import { HelpFragment }            from './help/HelpFragment';
+import { BugReportFragment }       from './bug/BugReportFragment';
+import { AdminFragment }           from './admin/AdminFragment';
 
 type FragmentComponent = ComponentType<{ params: Record<string, unknown> }>;
 
@@ -48,6 +50,12 @@ export const FRAGMENT_REGISTRY: Record<string, FragmentComponent> = {
 
   // Help
   Help:           HelpFragment,
+
+  // Bug report
+  BugReport:      BugReportFragment,
+
+  // Admin
+  Admin:          AdminFragment,
 };
 
 export type FragmentName = keyof typeof FRAGMENT_REGISTRY;

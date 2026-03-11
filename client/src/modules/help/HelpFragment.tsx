@@ -55,6 +55,7 @@ const SECTIONS: Section[] = [
       { cmd: 'elimina transazioni marzo',   desc: 'Elimina per mese/anno',           action: 'delete', prefill: 'elimina transazioni di marzo' },
       { cmd: 'elimina tutte le spese',      desc: 'Elimina tutto (con conferma)',    action: 'delete', prefill: 'elimina tutte le spese' },
       { cmd: 'importa CSV',                 desc: 'Carica transazioni da file',      action: 'import', fragment: 'FinanceCsv',      fragmentParams: {} },
+      { cmd: 'spese per categoria',         desc: 'Raggruppa e ricategorizza',       action: 'show',   fragment: 'FinanceCategory', fragmentParams: {} },
     ],
   },
   {
@@ -153,6 +154,27 @@ const SECTIONS: Section[] = [
     commands: [
       { cmd: 'i miei badge',                desc: 'Collezione badge e XP',           action: 'show', prefill: 'i miei badge' },
       { cmd: 'quanto XP ho?',               desc: 'Livello e punti esperienza',      action: 'show', prefill: 'quanto XP ho' },
+    ],
+  },
+  {
+    id: 'bug',
+    label: 'Segnala',
+    icon: '🐛',
+    glow: '#f87171',
+    available: true,
+    commands: [
+      { cmd: 'segnala un bug',              desc: 'Apri il form di segnalazione',    action: 'add',    fragment: 'BugReport',       fragmentParams: {} },
+      { cmd: 'proponi miglioria',           desc: 'Suggerisci un miglioramento',     action: 'add',    fragment: 'BugReport',       fragmentParams: { tab: 'improvement' } },
+    ],
+  },
+  {
+    id: 'admin',
+    label: 'Sviluppatore',
+    icon: '🔐',
+    glow: '#c4b5fd',
+    available: true,
+    commands: [
+      { cmd: 'accedi alla sezione admin',   desc: 'Pannello ticket (password)',      action: 'show',   fragment: 'Admin',           fragmentParams: {} },
     ],
   },
   {

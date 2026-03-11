@@ -41,7 +41,7 @@ export function FinanceCategories() {
             <div key={catId} className="fin-cat-item" style={{ animationDelay: `${i * 60}ms` }}>
               <div className="fin-cat-header">
                 <div className="fin-cat-left">
-                  <span className="fin-cat-icon">{cat?.icon ?? '📦'}</span>
+                  <span className="fin-cat-icon">{cat?.icon ?? '🏷️'}</span>
                   <span>{cat?.label ?? catId}</span>
                 </div>
                 <span className="fin-cat-amount">{formatCurrency(amount)}</span>

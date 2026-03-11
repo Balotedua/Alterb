@@ -61,7 +61,7 @@ export function FinanceTransactionList() {
               style={{ animationDelay: `${i * 25}ms` }}
             >
               <div className={`fin-item-avatar ${t.type}`}>
-                {cat?.icon ?? '📦'}
+                {cat?.icon ?? '🏷️'}
               </div>
 
               <div className="fin-item-body">

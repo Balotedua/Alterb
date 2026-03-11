@@ -17,6 +17,17 @@ export interface ChatEntry {
   timestamp: number;
 }
 
+/** One item in the interaction ring-buffer (max 5, auto-overwrites) */
+export interface InteractionEntry {
+  /** 'msg_user' | 'msg_ai' | 'fragment' */
+  type: 'msg_user' | 'msg_ai' | 'fragment';
+  content: string;
+  module?: string;
+  timestamp: number;
+}
+
+const INTERACTION_LIMIT = 5;
+
 interface NebulaState {
   intent: NebulaIntent;
   intensity: number;
@@ -76,6 +87,10 @@ interface NebulaState {
   returnFragment: string | null;
   /** Open a fragment keeping track of the caller so X navigates back */
   openFromReturn: (fragment: string, params: Record<string, unknown>, returnTo: string) => void;
+
+  /** Ring-buffer of last INTERACTION_LIMIT interactions (auto-overwrites) */
+  interactionHistory: InteractionEntry[];
+  addInteraction: (entry: Omit<InteractionEntry, 'timestamp'>) => void;
 }
 
 export const useNebulaStore = create<NebulaState>((set) => ({
@@ -96,6 +111,7 @@ export const useNebulaStore = create<NebulaState>((set) => ({
   replyVisible: true,
   prefillInput: null,
   returnFragment: null,
+  interactionHistory: [],
 
   setIntent: (intent, intensity, message, data = {}) =>
     set({ intent, intensity, message, data }),
@@ -149,6 +165,14 @@ export const useNebulaStore = create<NebulaState>((set) => ({
 
   setConfirmation: (pendingConfirmation) => set({ pendingConfirmation }),
   setPrefillInput: (prefillInput) => set({ prefillInput }),
+
+  addInteraction: (entry) =>
+    set((s) => ({
+      interactionHistory: [
+        ...s.interactionHistory.slice(-(INTERACTION_LIMIT - 1)),
+        { ...entry, timestamp: Date.now() },
+      ],
+    })),
 
   triggerBurst: () => {
     set({ isBursting: true, typingIntensity: 0 });

@@ -23,7 +23,11 @@
       "Bash(find /c/Users/danie/Desktop/vercelesercizio/client/src -type f -name \"*action*\" 2>/dev/null | head -20)",
       "Bash(find /c/Users/danie/Desktop/vercelesercizio/client/src -type f -name \"*handler*\" 2>/dev/null | head -20)",
       "WebFetch(domain:vercel.com)",
-      "Bash(npx vercel:*)"
+      "Bash(npx vercel:*)",
+      "Bash(find /c/Users/danie/Desktop/vercelesercizio -name \"*sw*\" -o -name \"*service*worker*\" 2>/dev/null | grep -v node_modules)",
+      "Bash(python3 \"C:\\\\Users\\\\danie\\\\Desktop\\\\vercelesercizio\\\\_append_admin_css.py\")",
+      "Bash(python \"C:\\\\Users\\\\danie\\\\Desktop\\\\vercelesercizio\\\\_append_admin_css.py\")",
+      "Bash(python \"C:\\\\Users\\\\danie\\\\Desktop\\\\vercelesercizio\\\\_append_admin2.py\" && rm \"C:\\\\Users\\\\danie\\\\Desktop\\\\vercelesercizio\\\\_append_admin2.py\")"
     ]
   }
 }

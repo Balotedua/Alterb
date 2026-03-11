@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { useBulkAddTransactions } from '@/hooks/useFinance';
+import { useState, useRef, useMemo } from 'react';
+import { useBulkAddTransactions, useTransactions } from '@/hooks/useFinance';
 import { NebulaCard } from '@/components/ui/nebula';
 import { useNebulaStore } from '@/store/nebulaStore';
 import { formatCurrency } from '@/utils/formatters';
@@ -7,19 +7,22 @@ import type { TransactionInput, TransactionType } from '@/types';
 
 interface Props { params: Record<string, unknown> }
 
-interface ParsedRow extends TransactionInput { _raw: string; _error?: string }
+interface ParsedRow extends TransactionInput {
+  _raw:   string;
+  _error?: string;
+  _isDup: boolean;
+}
 
-// ── Date normalizer ───────────────────────────────────────────────────────────
-// Handles: YYYY-MM-DD, YYYY-MM-DD HH:MM:SS, DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY
+// ── Date normalizer ────────────────────────────────────────────────────────────
 function normalizeDate(raw: string): string | null {
-  const s = raw.trim().split(' ')[0]; // strip time if present
+  const s = raw.trim().split(' ')[0];
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   const m = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
   if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
   return null;
 }
 
-// ── Type from amount sign (Revolut style: negative = expense) ─────────────────
+// ── Amount parser ──────────────────────────────────────────────────────────────
 function typeFromAmount(raw: string): { amount: number; type: TransactionType } | null {
   const cleaned = raw.trim().replace(/\s/g, '').replace(',', '.');
   const val = parseFloat(cleaned);
@@ -27,7 +30,7 @@ function typeFromAmount(raw: string): { amount: number; type: TransactionType } 
   return { amount: Math.abs(val), type: val < 0 ? 'expense' : 'income' };
 }
 
-// ── Explicit type column normalizer ──────────────────────────────────────────
+// ── Explicit type normalizer ───────────────────────────────────────────────────
 function normalizeType(raw: string): TransactionType | null {
   const s = raw.trim().toLowerCase();
   if (['expense','spesa','uscita','out','-','addebito','pagamento','prelievo'].includes(s)) return 'expense';
@@ -35,57 +38,31 @@ function normalizeType(raw: string): TransactionType | null {
   return null;
 }
 
-// ── Find column index by list of aliases (case-insensitive, trimmed) ─────────
+// ── Column finder ──────────────────────────────────────────────────────────────
 function findCol(headers: string[], ...aliases: string[]): number {
   const lower = aliases.map(a => a.toLowerCase().trim());
   return headers.findIndex(h => lower.includes(h.toLowerCase().trim()));
 }
 
-// ── CSV parser ───────────────────────────────────────────────────────────────
-function parseCsv(text: string): ParsedRow[] {
+// ── CSV parser (senza controllo doppioni — quello è separato) ─────────────────
+function parseCsv(text: string): Omit<ParsedRow, '_isDup'>[] {
   const lines = text.split(/\r?\n/).filter(l => l.trim());
   if (lines.length < 2) return [];
 
-  // Auto-detect separator: ; or ,
   const firstLine = lines[0];
   const sep = (firstLine.match(/;/g) ?? []).length >= (firstLine.match(/,/g) ?? []).length ? ';' : ',';
-
-  const splitLine = (l: string) =>
-    l.split(sep).map(c => c.trim().replace(/^["']|["']$/g, ''));
+  const splitLine = (l: string) => l.split(sep).map(c => c.trim().replace(/^["']|["']$/g, ''));
 
   const headers = splitLine(firstLine);
 
-  // ── Map columns by aliases ──────────────────────────────────────────────
-  // Date: try "data inizio", "started date", "data", "date", "data fine", "completed date"
-  const iDate = findCol(headers,
-    'data di inizio','data inizio','started date',
-    'data di completamento','data fine','completed date',
-    'data','date','data operazione','data valuta','transaction date','booking date'
-  );
-  // Amount: "importo","amount","valore","somma","importo eur"
-  const iAmt = findCol(headers,
-    'importo','amount','valore','somma','importo eur','amount (eur)','importo (eur)',
-    'transaction amount','net amount'
-  );
-  // Description
-  const iDesc = findCol(headers,
-    'descrizione','description','riferimento','beneficiario','merchant',
-    'merchant name','causale','note','memo','details'
-  );
-  // Type (optional explicit column)
-  const iType = findCol(headers,
-    'tipo','type','transaction type','tipo transazione','movimento'
-  );
-  // Category (optional)
-  const iCat = findCol(headers,
-    'categoria','category','tag'
-  );
-  // State (Revolut: filter COMPLETED only)
-  const iState = findCol(headers,
-    'stato','state','status','stato transazione'
-  );
+  const iDate  = findCol(headers, 'data di inizio','data inizio','started date','data di completamento','data fine','completed date','data','date','data operazione','data valuta','transaction date','booking date');
+  const iAmt   = findCol(headers, 'importo','amount','valore','somma','importo eur','amount (eur)','importo (eur)','transaction amount','net amount');
+  const iDesc  = findCol(headers, 'descrizione','description','riferimento','beneficiario','merchant','merchant name','causale','note','memo','details');
+  const iType  = findCol(headers, 'tipo','type','transaction type','tipo transazione','movimento');
+  const iCat   = findCol(headers, 'categoria','category','tag');
+  const iState = findCol(headers, 'stato','state','status','stato transazione');
 
-  const rows: ParsedRow[] = [];
+  const rows: Omit<ParsedRow, '_isDup'>[] = [];
 
   for (const line of lines.slice(1)) {
     if (!line.trim()) continue;
@@ -98,30 +75,24 @@ function parseCsv(text: string): ParsedRow[] {
     const rawCat   = iCat   >= 0 ? cols[iCat]   ?? '' : '';
     const rawState = iState >= 0 ? cols[iState] ?? '' : '';
 
-    // Skip non-completed Revolut transactions
     const stateLower = rawState.toLowerCase();
-    if (rawState && !['completed','completato',''].includes(stateLower) &&
-        !stateLower.includes('complet')) {
-      continue;
-    }
+    if (rawState && !['completed','completato',''].includes(stateLower) && !stateLower.includes('complet')) continue;
 
-    const date = normalizeDate(rawDate);
+    const date      = normalizeDate(rawDate);
     const amtParsed = typeFromAmount(rawAmt);
     const errors: string[] = [];
 
-    if (!date) errors.push(`data non riconosciuta: "${rawDate}"`);
+    if (!date)      errors.push(`data non riconosciuta: "${rawDate}"`);
     if (!amtParsed) errors.push(`importo non valido: "${rawAmt}"`);
 
-    // Type: prefer explicit column, fallback to sign of amount
     const explicitType = rawType ? normalizeType(rawType) : null;
     const type: TransactionType = explicitType ?? amtParsed?.type ?? 'expense';
-
     const description = rawDesc || rawCat || rawType || 'Importato';
-    const category = rawCat || 'other';
+    const category    = rawCat || 'other';
 
     rows.push({
-      _raw: line,
-      _error: errors.length ? errors.join(' · ') : undefined,
+      _raw:        line,
+      _error:      errors.length ? errors.join(' · ') : undefined,
       date:        date        ?? '',
       amount:      amtParsed?.amount ?? 0,
       type,
@@ -133,7 +104,12 @@ function parseCsv(text: string): ParsedRow[] {
   return rows;
 }
 
-// ── Fragment ─────────────────────────────────────────────────────────────────
+// ── Duplicate key: data + importo + descrizione ────────────────────────────────
+function dupKey(date: string, amount: number, description: string): string {
+  return `${date.slice(0,10)}|${amount.toFixed(2)}|${description.trim().toLowerCase()}`;
+}
+
+// ── Fragment ───────────────────────────────────────────────────────────────────
 export function FinanceCsvFragment(_: Props) {
   const [rows, setRows]         = useState<ParsedRow[]>([]);
   const [fileName, setFileName] = useState('');
@@ -142,16 +118,31 @@ export function FinanceCsvFragment(_: Props) {
 
   const { mutate: bulkAdd, isPending } = useBulkAddTransactions();
   const { setFragment } = useNebulaStore();
+  const { data: existingTxns = [] } = useTransactions();
+
+  // Set di chiavi già presenti nel DB
+  const existingKeys = useMemo(
+    () => new Set(existingTxns.map(t => dupKey(t.date, t.amount, t.description))),
+    [existingTxns]
+  );
 
   const validRows   = rows.filter(r => !r._error);
   const invalidRows = rows.filter(r =>  r._error);
+  const dupRows     = validRows.filter(r =>  r._isDup);
+  const newRows     = validRows.filter(r => !r._isDup);
 
   const handleFile = (file: File) => {
     setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
-      setRows(parseCsv(text));
+      const parsed = parseCsv(text);
+      // Marca i doppioni subito dopo il parse
+      const withDup: ParsedRow[] = parsed.map(r => ({
+        ...r,
+        _isDup: !r._error && existingKeys.has(dupKey(r.date, r.amount, r.description)),
+      }));
+      setRows(withDup);
       setDone(false);
     };
     reader.readAsText(file, 'UTF-8');
@@ -163,15 +154,25 @@ export function FinanceCsvFragment(_: Props) {
     if (file) handleFile(file);
   };
 
-  const handleImport = () => {
-    if (validRows.length === 0) return;
-    const inputs = validRows.map(({ _raw: _r, _error: _e, ...rest }) => rest);
+  const doImport = (inputs: TransactionInput[]) => {
     bulkAdd(inputs, {
       onSuccess: () => {
         setDone(true);
-        setTimeout(() => setFragment(null, {}, 'TALK'), 2000);
+        setTimeout(() => setFragment(null, {}, 'TALK'), 2500);
       },
     });
+  };
+
+  // Importa solo le nuove (salta doppioni)
+  const handleImportNew = () => {
+    const inputs = newRows.map(({ _raw: _r, _error: _e, _isDup: _d, ...rest }) => rest);
+    doImport(inputs);
+  };
+
+  // Importa tutto inclusi doppioni
+  const handleImportAll = () => {
+    const inputs = validRows.map(({ _raw: _r, _error: _e, _isDup: _d, ...rest }) => rest);
+    doImport(inputs);
   };
 
   const close = () => setFragment(null, {}, 'TALK');
@@ -180,7 +181,7 @@ export function FinanceCsvFragment(_: Props) {
     return (
       <NebulaCard icon="✅" title="Importazione completata" variant="finance">
         <p className="fragment-empty" style={{ color: '#4ade80' }}>
-          {validRows.length} transazioni importate correttamente.
+          {newRows.length} transazioni importate correttamente.
         </p>
       </NebulaCard>
     );
@@ -188,6 +189,7 @@ export function FinanceCsvFragment(_: Props) {
 
   return (
     <NebulaCard icon="📂" title="Importa da CSV" variant="finance">
+
       {/* Drop zone */}
       <div
         className="csv-dropzone"
@@ -200,7 +202,7 @@ export function FinanceCsvFragment(_: Props) {
           type="file"
           accept=".csv,text/csv"
           style={{ display: 'none' }}
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }}
         />
         {fileName
           ? <span className="csv-filename">📄 {fileName}</span>
@@ -211,31 +213,58 @@ export function FinanceCsvFragment(_: Props) {
         }
       </div>
 
-      {/* Format hint */}
       <p className="csv-hint">
         Supporta Revolut e qualsiasi CSV con colonne: data, importo, descrizione.
         Separatore <code>,</code> o <code>;</code>
       </p>
 
-      {/* Stats + preview */}
+      {/* Anteprima con statistiche doppioni */}
       {rows.length > 0 && (
         <>
           <div className="csv-stats">
             <span className="csv-stat csv-stat--ok">✓ {validRows.length} valide</span>
+            {dupRows.length > 0 && (
+              <span className="csv-stat csv-stat--dup">
+                ⚠ {dupRows.length} già presenti
+              </span>
+            )}
+            {newRows.length > 0 && (
+              <span className="csv-stat csv-stat--new">
+                + {newRows.length} nuove
+              </span>
+            )}
             {invalidRows.length > 0 && (
               <span className="csv-stat csv-stat--err">✗ {invalidRows.length} ignorate</span>
             )}
           </div>
 
+          {/* Banner doppioni */}
+          {dupRows.length > 0 && (
+            <div className="csv-dup-banner">
+              <strong>⚠ {dupRows.length} doppion{dupRows.length === 1 ? 'e' : 'i'} rilevat{dupRows.length === 1 ? 'o' : 'i'}</strong>
+              {' '}— {dupRows.length === 1 ? 'ha' : 'hanno'} stessa data, importo e descrizione di transazioni già presenti.
+            </div>
+          )}
+
           <div className="fragment-list">
             {rows.slice(0, 60).map((r, i) => (
-              <div key={i} className={`fragment-list-row ${r._error ? 'csv-row--error' : ''}`}>
+              <div
+                key={i}
+                className={[
+                  'fragment-list-row',
+                  r._error  ? 'csv-row--error' : '',
+                  r._isDup  ? 'csv-row--dup'   : '',
+                ].filter(Boolean).join(' ')}
+              >
                 {r._error ? (
                   <span className="csv-error-msg">⚠ {r._error}</span>
                 ) : (
                   <>
                     <div className="fragment-list-left">
-                      <span className="fragment-list-desc">{r.description}</span>
+                      <span className="fragment-list-desc">
+                        {r._isDup && <span className="csv-dup-badge">DUP</span>}
+                        {r.description}
+                      </span>
                       <span className="fragment-list-sub">{r.date}</span>
                     </div>
                     <span className={`fragment-list-amt ${r.type === 'income' ? 'fkv--green' : 'fkv--red'}`}>
@@ -258,13 +287,41 @@ export function FinanceCsvFragment(_: Props) {
         <button className="fragment-btn" onClick={close} disabled={isPending}>
           Annulla
         </button>
+
+        {/* Se ci sono doppioni: due opzioni */}
+        {dupRows.length > 0 && newRows.length > 0 && (
+          <button
+            className="fragment-btn"
+            onClick={handleImportNew}
+            disabled={isPending}
+          >
+            {isPending ? '…' : `Salta doppioni (${newRows.length})`}
+          </button>
+        )}
+
         {validRows.length > 0 && (
           <button
             className="fragment-btn fragment-btn--primary"
-            onClick={handleImport}
+            onClick={handleImportAll}
             disabled={isPending}
           >
-            {isPending ? 'Importazione…' : `Importa ${validRows.length} transazioni`}
+            {isPending
+              ? 'Importazione…'
+              : dupRows.length > 0
+                ? `Importa tutto (${validRows.length})`
+                : `Importa ${validRows.length} transazion${validRows.length === 1 ? 'e' : 'i'}`
+            }
+          </button>
+        )}
+
+        {/* Solo doppioni, niente nuove */}
+        {newRows.length === 0 && dupRows.length > 0 && (
+          <button
+            className="fragment-btn fragment-btn--primary"
+            onClick={handleImportAll}
+            disabled={isPending}
+          >
+            {isPending ? 'Importazione…' : `Importa comunque (${validRows.length})`}
           </button>
         )}
       </div>

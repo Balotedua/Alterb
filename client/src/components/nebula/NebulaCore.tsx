@@ -5,6 +5,7 @@ import { NebulaEntity }          from './NebulaEntity';
 import { NebulaChatInput }       from './NebulaChatInput';
 import { NebulaConfirmCard }     from './NebulaConfirmCard';
 import { FragmentErrorBoundary } from './FragmentErrorBoundary';
+import { BugReportButton }       from './BugReportButton';
 import { FRAGMENT_REGISTRY }     from '@/modules/fragmentRegistry';
 import './nebula.css';
 
@@ -108,6 +109,7 @@ export function NebulaCore() {
       </div>
 
       <NebulaChatInput />
+      <BugReportButton />
     </div>
   );
 }
