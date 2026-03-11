@@ -7,11 +7,9 @@ export function NebulaChatInput() {
   const [value, setValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { isThinking, message, chatHistory, replyVisible, prefillInput, setPrefillInput, setTypingIntensity, triggerBurst } =
+  const { isThinking, prefillInput, setPrefillInput, setTypingIntensity, triggerBurst } =
     useNebulaStore();
   const { processInput } = useIntent();
-
-  const lastAssistant = [...chatHistory].reverse().find((m) => m.role === 'assistant');
 
   const handleSubmit = () => {
     if (!value.trim() || isThinking) return;
@@ -57,22 +55,8 @@ export function NebulaChatInput() {
     if (!isThinking && !isTouch) inputRef.current?.focus();
   }, [isThinking]);
 
-  const displayMessage = lastAssistant?.content ?? message;
-
   return (
     <div className="nebula-chat-wrapper">
-      {(isThinking || replyVisible) && (
-        <div className={`nebula-reply ${isThinking ? 'nebula-reply--thinking' : ''}`}>
-          {isThinking ? (
-            <span className="nebula-dots">
-              <span /><span /><span />
-            </span>
-          ) : (
-            <span>{displayMessage}</span>
-          )}
-        </div>
-      )}
-
       <div className="nebula-input-bar">
         <input
           ref={inputRef}

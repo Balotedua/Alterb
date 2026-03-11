@@ -5,4 +5,5 @@ export { FinanceAddFragment }      from './FinanceAddFragment';
 export { FinanceDeleteFragment }   from './FinanceDeleteFragment';
 export { FinanceCsvFragment }      from './FinanceCsvFragment';
 export { FinanceCategoryFragment }  from './FinanceCategoryFragment';
+export { FinanceLinkFragment }      from './FinanceLinkFragment';
 export { FinanceAnalyticsFragment } from './FinanceAnalyticsFragment';

@@ -85,6 +85,7 @@ export function BugReportFragment({ params }: { params?: Record<string, unknown>
         user_description:    description.trim(),
         page_path:           window.location.pathname,
         type:                activeTab,
+        status:              'pending_review',
       });
       if (dbErr) throw dbErr;
       setSubmitted(true);

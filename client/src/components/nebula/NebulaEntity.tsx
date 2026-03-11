@@ -1,40 +1,24 @@
 import { useRef, useEffect } from 'react';
 import { useNebulaStore } from '@/store/nebulaStore';
+import { getTheme } from '@/config/nebulaThemes';
 
-const N          = 200;
-const BASE_SPEED = 0.42; // slightly slower for calmer feel
+const N          = 180;   // fewer points → cleaner ring
+const BASE_SPEED = 0.28;  // slower base rotation
 
-// ── Burst envelopes ───────────────────────────────────────────────────────────
-
-const SEND_DUR = 0.9;
-function sendBright(t: number) {
-  if (t >= SEND_DUR) return 0;
-  return t < 0.06 ? t / 0.06 : Math.max(0, 1 - (t - 0.06) / 0.84);
-}
-function sendRadius(t: number) {
-  if (t >= SEND_DUR) return 0;
-  return Math.sin((t / SEND_DUR) * Math.PI) * 0.22;
-}
-
-const RESP_DUR = 2.6; // longer, more cinematic response
-function respBright(t: number) {
-  if (t >= RESP_DUR) return 0;
-  return t < 0.4 ? t / 0.4 : Math.max(0, 1 - (t - 0.4) / (RESP_DUR - 0.4));
-}
-function respRadius(t: number) {
-  if (t >= RESP_DUR) return 0;
-  return Math.sin((t / RESP_DUR) * Math.PI) * 0.45;
-}
-
-// Smooth ease-out for fragment fade (no jerky random)
+// Smooth ease-out for fragment fade
 function easeOutExpo(x: number) {
   return x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
 }
 
-// Deterministic "random" from a seed (seeded per-particle, constant across frames)
+// Deterministic seed-based "random" (constant across frames)
 function seededRand(seed: number) {
   const x = Math.sin(seed + 1) * 43758.5453123;
   return x - Math.floor(x);
+}
+
+// Lerp helper
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -63,17 +47,16 @@ export function NebulaEntity() {
     const onResize = () => { dim = setup(); };
     window.addEventListener('resize', onResize);
 
-    // Pre-compute per-particle seeds (deterministic, no per-frame random)
-    const PARTICLE_COUNT = 64;
-    const particleSeeds = Float32Array.from({ length: PARTICLE_COUNT }, (_, i) => i);
+    // Pre-compute per-particle data (deterministic, no per-frame random)
+    const PARTICLE_COUNT = 48;
     const particleAngles = Float32Array.from({ length: PARTICLE_COUNT }, (_, i) =>
       (i / PARTICLE_COUNT) * Math.PI * 2
     );
     const particleSpeeds = Float32Array.from({ length: PARTICLE_COUNT }, (_, i) =>
-      0.6 + seededRand(i * 7.3) * 0.8
+      0.5 + seededRand(i * 7.3) * 0.7
     );
     const particleSizes = Float32Array.from({ length: PARTICLE_COUNT }, (_, i) =>
-      1.5 + seededRand(i * 3.1) * 2.5
+      1.2 + seededRand(i * 3.1) * 2.2
     );
 
     const angles = Float32Array.from({ length: N }, (_, i) => (i / N) * Math.PI * 2);
@@ -81,121 +64,141 @@ export function NebulaEntity() {
     let t       = 0;
     let lastNow = performance.now();
 
-    let sActive = false; let sT = 0; let prevS = false;
-    let rActive = false; let rT = 0; let prevR = false;
+    // ── Smooth state targets (no sudden jumps) ────────────────────────────────
 
-    // Fragment fade — smooth lerp, no random
-    let fragmentFade = 0; // 0 = fully visible, 1 = fully dissolved
+    // glowExtra: 0 = idle, 1 = max active state
+    let glowExtra  = 0;  // current smoothed glow boost
+    // speedExtra multiplier: 1 = base speed
+    let speedMul   = 1;
+    // fragmentFade: 0 = visible, 1 = dissolved
+    let fragmentFade = 0;
+
+    // Slow continuous breath: drives a gentle idle pulse
+    // Computed in loop from t — no extra state needed
 
     const loop = (now: number) => {
       const delta = Math.min((now - lastNow) / 1000, 0.05);
       lastNow = now;
       t += delta;
 
-      const { typingIntensity, isBursting, isResponseBursting, isThinking, activeFragment } =
-        useNebulaStore.getState();
+      const {
+        typingIntensity,
+        isBursting,
+        isResponseBursting,
+        isThinking,
+        activeFragment,
+        nebulaTheme,
+      } = useNebulaStore.getState();
+      const th = getTheme(nebulaTheme);
 
-      // Leading-edge detection
-      if (isBursting         && !prevS) { sActive = true; sT = 0; }
-      if (isResponseBursting && !prevR) { rActive = true; rT = 0; }
-      prevS = isBursting;
-      prevR = isResponseBursting;
+      // ── Target glow: based on state, no sudden jumps ──────────────────────
+      let glowTarget = 0;
+      if (isThinking || isResponseBursting) glowTarget = 0.65;
+      else if (isBursting)                  glowTarget = 0.38;
+      else if (typingIntensity > 0.1)       glowTarget = typingIntensity * 0.18;
 
-      // Smooth fragment fade — expo ease toward target
-      const targetFade = activeFragment ? 1 : 0;
-      const fadeSpeed  = activeFragment ? 2.8 : 3.5; // dissolve slightly slower than appear
-      fragmentFade += (targetFade - fragmentFade) * Math.min(delta * fadeSpeed, 1);
+      // Fast rise, slow gentle decay — premium feel
+      const glowLerp = glowTarget > glowExtra ? delta * 2.2 : delta * 0.55;
+      glowExtra = lerp(glowExtra, glowTarget, Math.min(glowLerp, 1));
+
+      // ── Target rotation speed ─────────────────────────────────────────────
+      const speedTarget = isThinking ? 1.18 : 1.0;
+      speedMul = lerp(speedMul, speedTarget, Math.min(delta * 1.2, 1));
+
+      // ── Fragment dissolve (smooth expo ease) ──────────────────────────────
+      const fadeLerp = activeFragment ? delta * 2.8 : delta * 3.5;
+      fragmentFade   = lerp(fragmentFade, activeFragment ? 1 : 0, Math.min(fadeLerp, 1));
       const visibility = Math.max(0, 1 - easeOutExpo(fragmentFade));
-
-      if (sActive) { sT += delta; if (sT >= SEND_DUR) sActive = false; }
-      if (rActive) { rT += delta; if (rT >= RESP_DUR) rActive = false; }
-
-      const sB   = sActive ? sendBright(sT)  : 0;
-      const sR   = sActive ? sendRadius(sT)  : 0;
-      const rB   = rActive ? respBright(rT)  : 0;
-      const rRad = rActive ? respRadius(rT)  : 0;
-
-      // Gentle breathing while thinking — smooth sine
-      const anxious = isThinking ? Math.max(0, 1 - rT * 2.2) : 0;
-      const breathe  = anxious * (Math.sin(t * Math.PI * 2.4) * 0.5 + 0.5);
-
-      // Typing: subtle intensity boost (no speed change — keeps it calm)
-      const typingBoost = typingIntensity * 0.12;
-
-      const speed = BASE_SPEED * (1 + anxious * 0.22);
 
       const { s, cx, cy, r } = dim;
       ctx.clearRect(0, 0, s, s);
 
       if (visibility < 0.005) {
         rafRef.current = requestAnimationFrame(loop);
-        return; // fully dissolved, skip drawing
+        return;
       }
 
-      // ── Center glow ────────────────────────────────────────────────────────
-      const glowR = r * (0.82 + sR * 0.55 + rRad * 1.05);
-      const glowA = (0.05 + sB * 0.12 + rB * 0.25 + breathe * 0.04) * visibility;
+      // ── Continuous slow breathing (always present, very subtle) ───────────
+      // Two overlapping sines at different periods → organic, never mechanical
+      const breathe = (
+        Math.sin(t * 0.55 * Math.PI) * 0.55 +
+        Math.sin(t * 0.23 * Math.PI + 1.2) * 0.45
+      ) * 0.5 + 0.5; // 0→1
+
+      // ── Center glow ───────────────────────────────────────────────────────
+      const baseGlowA = 0.045 + breathe * 0.022;
+      const glowA     = Math.min(0.22, (baseGlowA + glowExtra * 0.14)) * visibility;
+      const glowR     = r * (0.88 + breathe * 0.08 + glowExtra * 0.12);
+
+      const [gi0, gi1, gi2] = th.glowInner;
+      const [go0, go1, go2] = th.glowOuter;
       const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
-      grd.addColorStop(0,   `rgba(130,70,245,${glowA.toFixed(3)})`);
-      grd.addColorStop(0.45, `rgba(95,50,200,${(glowA * 0.3).toFixed(3)})`);
-      grd.addColorStop(1,   'rgba(0,0,0,0)');
+      grd.addColorStop(0,    `rgba(${gi0},${gi1},${gi2},${glowA.toFixed(3)})`);
+      grd.addColorStop(0.5,  `rgba(${go0},${go1},${go2},${(glowA * 0.28).toFixed(3)})`);
+      grd.addColorStop(1,    'rgba(0,0,0,0)');
       ctx.fillStyle = grd;
       ctx.beginPath();
       ctx.arc(cx, cy, glowR, 0, Math.PI * 2);
       ctx.fill();
 
-      // ── Particle ring ───────────────────────────────────────────────────────
+      // ── Particle ring ─────────────────────────────────────────────────────
+      const [pb0, pb1, pb2] = th.particleBase;
+      const [pw0, pw1]      = th.particleWave;
+
+      const speed = BASE_SPEED * speedMul;
+
       for (let i = 0; i < N; i++) {
         const a  = angles[i];
+        // Two wave harmonics for organic shape variation
         const w1 = Math.cos(a - t * speed);
-        const w2 = Math.cos(a - t * speed * 0.6 + Math.PI);
-        const wave = Math.max(0, w1) * 0.72 + Math.max(0, w2) * 0.35;
+        const w2 = Math.cos(a - t * speed * 0.55 + Math.PI * 0.7);
+        const wave = Math.max(0, w1) * 0.68 + Math.max(0, w2) * 0.32;
 
-        const waveAmp = 0.042;
+        // Ring radius: only breathing, no burst expansion
+        const waveAmp = 0.036;
         const rr = r
           + wave * r * waveAmp
-          + breathe * r * 0.055
-          + sR   * r
-          + rRad * r;
+          + breathe * r * 0.038;
 
         const x = cx + Math.cos(a) * rr;
         const y = cy + Math.sin(a) * rr;
 
-        const brightMul = 1 + breathe * 0.15 + sB * 0.9 + rB * 2.0 + typingBoost;
-        const alpha = Math.min(0.95, (0.07 + wave * 0.82) * brightMul) * visibility;
-        const dotR  = (1.3 + wave * 1.6) * (1 + sB * 0.3 + rB * 0.5) * visibility;
+        // Brightness: base wave + smooth glow state (no harsh flash)
+        const brightMul = 1 + breathe * 0.12 + glowExtra * 0.55;
+        const alpha = Math.min(0.90, (0.05 + wave * 0.78) * brightMul) * visibility;
+        const dotR  = (1.1 + wave * 1.4) * (1 + glowExtra * 0.12) * visibility;
 
-        const red   = Math.round(145 + wave * 68 + sB * 25 + rB * 55);
-        const green = Math.round(112 + wave * 60 + sB * 18 + rB * 45);
+        // Color: base + wave shift, no burst color spike
+        const red   = Math.round(pb0 + wave * pw0);
+        const green = Math.round(pb1 + wave * pw1);
+        const blue  = Math.min(255, pb2);
 
         ctx.beginPath();
         ctx.arc(x, y, dotR, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${red},${green},250,${alpha.toFixed(3)})`;
+        ctx.fillStyle = `rgba(${red},${green},${blue},${alpha.toFixed(3)})`;
         ctx.fill();
       }
 
-      // ── Smooth dispersion on fragment open ─────────────────────────────────
-      // Deterministic particles drift outward — no Math.random() per frame
+      // ── Fragment dissolve: particles drift outward smoothly ───────────────
       if (fragmentFade > 0.02 && fragmentFade < 0.98) {
-        const fade      = easeOutExpo(fragmentFade);
-        const driftAlpha = Math.sin(fragmentFade * Math.PI) * 0.5; // bell curve
+        const fade       = easeOutExpo(fragmentFade);
+        const driftAlpha = Math.sin(fragmentFade * Math.PI) * 0.4; // bell curve
 
         for (let i = 0; i < PARTICLE_COUNT; i++) {
-          const angle = particleAngles[i] + t * 0.08; // slow drift rotation
-          const dist  = r * (0.5 + fade * particleSpeeds[i] * 1.4);
+          const angle = particleAngles[i] + t * 0.06;
+          const dist  = r * (0.45 + fade * particleSpeeds[i] * 1.2);
           const px    = cx + Math.cos(angle) * dist;
           const py    = cy + Math.sin(angle) * dist;
-          const sz    = particleSizes[i] * (1 - fade * 0.7);
-          const a     = driftAlpha * (0.15 + seededRand(particleSeeds[i]) * 0.3);
+          const sz    = particleSizes[i] * (1 - fade * 0.75);
+          const a     = driftAlpha * (0.10 + seededRand(i) * 0.22);
 
           if (sz < 0.1 || a < 0.01) continue;
 
-          // color: violet → pale lavender as they drift
-          const rC = Math.round(167 + fade * 60);
-          const gC = Math.round(139 + fade * 90);
+          const rC = Math.round(pb0 + fade * 55);
+          const gC = Math.round(pb1 + fade * 80);
           ctx.beginPath();
           ctx.arc(px, py, sz, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(${rC},${gC},250,${a.toFixed(3)})`;
+          ctx.fillStyle = `rgba(${rC},${gC},${pb2},${a.toFixed(3)})`;
           ctx.fill();
         }
       }

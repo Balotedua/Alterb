@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
 import { useAuth } from './useAuth';
+import { FINANCE_DEFAULT_CAT_IDS } from '@/utils/constants';
 import type { Transaction, TransactionInput, CategoryConfig } from '@/types';
 
 const QUERY_KEY = ['transactions'];
@@ -107,16 +108,23 @@ export function useRecategorizeContains() {
   });
 }
 
-// Ottieni transazioni non associate (categoria non presente nelle categorie utente)
+// Ottieni transazioni non associate:
+// - NON in categorie di default (food, transport, ecc.)
+// - NON in categorie custom dell'utente su Supabase
+// - 'other' è inclusa perché è la scelta "libera" → va associata
 export function useUncategorizedTransactions() {
   const { data: transactions } = useTransactions();
   const { data: categories } = useFinanceCategories();
 
-  const knownIds = new Set((categories ?? []).map(c => c.id));
+  const userCatIds = new Set((categories ?? []).map(c => c.id));
 
-  const uncategorized = transactions?.filter(t =>
-    t.category === 'other' || !knownIds.has(t.category)
-  ) || [];
+  const uncategorized = transactions?.filter(t => {
+    const cat = t.category;
+    if (!cat || cat === 'other') return true;          // non categorizzata o "altro" generico
+    if (FINANCE_DEFAULT_CAT_IDS.has(cat)) return false; // già in una default → ok
+    if (userCatIds.has(cat)) return false;              // in una custom utente → ok
+    return true;                                         // categoria sconosciuta
+  }) || [];
 
   return { data: uncategorized };
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useUncategorizedTransactions, useRecategorizeContains, useFinanceCategories, useAddCategory } from '@/hooks/useFinance';
+import { FINANCE_DEFAULT_CATS } from '@/utils/constants';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 
 export function FinanceCategoryLinker() {
@@ -57,21 +58,16 @@ export function FinanceCategoryLinker() {
   const total = transactions?.reduce((s, t) => s + t.amount, 0) ?? 0;
 
   if (entries.length === 0) {
-    if (categories.length > 0) {
-      return (
-        <div className="fin-card fin-cl-wrap">
-          <div className="fin-cl-all-done">✅ Tutte le transazioni sono categorizzate</div>
-        </div>
-      );
-    }
-    return null;
+    return (
+      <div className="fin-cl-all-done">✅ Tutte le transazioni sono categorizzate</div>
+    );
   }
 
   return (
-    <div className="fin-card fin-cl-wrap">
+    <div className="fin-cl-wrap">
       <div className="fin-cl-section">
         <div className="fin-cl-section-title">
-          Collega non associate
+          Da associare
           <span className="fin-card-count">{entries.length}</span>
         </div>
 
@@ -98,10 +94,6 @@ export function FinanceCategoryLinker() {
 
           {linkErr && <p className="fin-cl-err">{linkErr}</p>}
 
-          {categories.length === 0 ? (
-            <p className="fin-cl-hint">Nessuna categoria disponibile — creane una dal menù Budget o seleziona "Nuova categoria" qui sotto.</p>
-          ) : null}
-
           <div className="fin-cl-link-row">
             <select
               className="fin-cl-select"
@@ -113,10 +105,17 @@ export function FinanceCategoryLinker() {
               }}
             >
               <option value="">Categoria…</option>
-              {categories.map(c => (
+              {FINANCE_DEFAULT_CATS.map(c => (
                 <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
               ))}
-              <option value="__new__">+ Nuova categoria</option>
+              {categories.length > 0 && (
+                <optgroup label="Le tue categorie">
+                  {categories.map(c => (
+                    <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
+                  ))}
+                </optgroup>
+              )}
+              <option value="__new__">✏️ Altra (crea nuova)</option>
             </select>
             {!showNewInput && (
               <button
@@ -172,3 +171,4 @@ export function FinanceCategoryLinker() {
     </div>
   );
 }
+

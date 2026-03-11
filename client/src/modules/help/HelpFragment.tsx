@@ -206,7 +206,7 @@ type FilterId = typeof FILTERS[number]['id'];
 
 export function HelpFragment(_: { params?: Record<string, unknown> }) {
   const [filter, setFilter]           = useState<FilterId>('all');
-  const [openSections, setOpenSections] = useState<Set<string>>(new Set(['finance']));
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set());
 
   const { openFromReturn, clearFragment, setPrefillInput } = useNebulaStore();
 

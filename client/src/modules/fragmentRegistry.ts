@@ -6,6 +6,7 @@ import { FinanceAddFragment }      from './finance/FinanceAddFragment';
 import { FinanceDeleteFragment }   from './finance/FinanceDeleteFragment';
 import { FinanceCsvFragment }      from './finance/FinanceCsvFragment';
 import { FinanceCategoryFragment }  from './finance/FinanceCategoryFragment';
+import { FinanceLinkFragment }      from './finance/FinanceLinkFragment';
 import { FinanceAnalyticsFragment } from './finance/FinanceAnalyticsFragment';
 import { HealthOverviewFragment }  from './health/HealthOverviewFragment';
 import { HealthSleepFragment }     from './health/HealthSleepFragment';
@@ -19,6 +20,7 @@ import { SettingsFragment }        from './settings/SettingsFragment';
 import { HelpFragment }            from './help/HelpFragment';
 import { BugReportFragment }       from './bug/BugReportFragment';
 import { AdminFragment }           from './admin/AdminFragment';
+import { RoutineFragment }         from './routine/RoutineFragment';
 
 type FragmentComponent = ComponentType<{ params: Record<string, unknown> }>;
 
@@ -31,6 +33,7 @@ export const FRAGMENT_REGISTRY: Record<string, FragmentComponent> = {
   FinanceDelete:   FinanceDeleteFragment,
   FinanceCsv:      FinanceCsvFragment,
   FinanceCategory:  FinanceCategoryFragment,
+  FinanceLink:      FinanceLinkFragment,
   FinanceAnalytics: FinanceAnalyticsFragment,
 
   // Health
@@ -56,6 +59,9 @@ export const FRAGMENT_REGISTRY: Record<string, FragmentComponent> = {
 
   // Admin
   Admin:          AdminFragment,
+
+  // Routine & Appuntamenti
+  Routine:        RoutineFragment,
 };
 
 export type FragmentName = keyof typeof FRAGMENT_REGISTRY;

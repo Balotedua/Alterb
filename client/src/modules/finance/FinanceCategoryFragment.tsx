@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Tag, ChevronDown, ChevronUp, Plus, ArrowRight, Pencil, Check, X } from 'lucide-react';
 import {
@@ -9,6 +9,7 @@ import {
   useUpdateTransactionCategory,
   useRecategorize,
 } from '@/hooks/useFinance';
+import { FINANCE_DEFAULT_CATS } from '@/utils/constants';
 import { NebulaCard } from '@/components/ui/nebula';
 import { formatCurrency } from '@/utils/formatters';
 import { toast } from 'sonner';
@@ -29,18 +30,31 @@ const ICON_GROUPS: { label: string; icons: string[] }[] = [
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
+// Mappa di lookup per catInfo (include anche 'other')
 const DEFAULT_CATS: Record<string, { label: string; icon: string }> = {
-  food:          { label: 'Cibo',        icon: '🍽️' },
-  transport:     { label: 'Trasporti',   icon: '🚌' },
-  shopping:      { label: 'Shopping',    icon: '🛍️' },
-  health:        { label: 'Salute',      icon: '💊' },
-  entertainment: { label: 'Svago',       icon: '🎬' },
-  utilities:     { label: 'Bollette',    icon: '💡' },
-  salary:        { label: 'Stipendio',   icon: '💼' },
-  other:         { label: 'Altro',       icon: '📂' },
+  ...Object.fromEntries(FINANCE_DEFAULT_CATS.map(c => [c.id, { label: c.label, icon: c.icon }])),
+  other: { label: 'Altro', icon: '📂' },
 };
 
 const DEFAULT_ICON = '◦';
+
+// ── Mobile scroll guard ───────────────────────────────────────────────────────
+// Prevents scroll gestures from firing as tap/click on mobile browsers.
+function useTouchScroll(threshold = 6) {
+  const startY = useRef(0);
+  const moved  = useRef(false);
+  return {
+    onTouchStart: (e: React.TouchEvent) => {
+      startY.current = e.touches[0].clientY;
+      moved.current  = false;
+    },
+    onTouchMove: (e: React.TouchEvent) => {
+      if (Math.abs(e.touches[0].clientY - startY.current) > threshold)
+        moved.current = true;
+    },
+    scrolled: () => moved.current,
+  };
+}
 
 function catInfo(id: string, userCats: { id: string; label: string; icon?: string }[]) {
   const user = userCats.find(c => c.id === id);
@@ -268,6 +282,32 @@ function RecatSheet({ tx, allTxsCount, userCats, onDone }: RecatSheetProps) {
   );
 }
 
+// ── Transaction row ───────────────────────────────────────────────────────────
+
+function TxRow({ t, onRecat }: { t: Transaction; onRecat: (t: Transaction) => void }) {
+  const touch = useTouchScroll();
+  return (
+    <div className="cat2-tx-row">
+      <div className="cat2-tx-left">
+        <span className="cat2-tx-desc">{t.description}</span>
+        <span className="cat2-tx-date">{t.date}</span>
+      </div>
+      <span className={['cat2-tx-amt', t.type === 'income' ? 'cat2-tx-amt--inc' : 'cat2-tx-amt--exp'].filter(Boolean).join(' ')}>
+        {t.type === 'income' ? '+' : '−'}{formatCurrency(t.amount)}
+      </span>
+      <button
+        className="cat2-tx-recat"
+        title="Cambia categoria"
+        onTouchStart={touch.onTouchStart}
+        onTouchMove={touch.onTouchMove}
+        onClick={() => { if (!touch.scrolled()) onRecat(t); }}
+      >
+        <Tag size={11} />
+      </button>
+    </div>
+  );
+}
+
 // ── Category row ──────────────────────────────────────────────────────────────
 
 interface CatRowProps {
@@ -284,8 +324,10 @@ interface CatRowProps {
 function CatRow({ catId, total, count, txs, pct, userCats, isActive, onToggle }: CatRowProps) {
   const [recatTx, setRecatTx]   = useState<Transaction | null>(null);
   const [editing, setEditing]    = useState(false);
-  const info = catInfo(catId, userCats);
+  const info      = catInfo(catId, userCats);
   const isExpense = total > 0;
+  const headerTouch = useTouchScroll();
+  const editTouch   = useTouchScroll();
 
   const sameDescCount = (tx: Transaction) =>
     txs.filter(t => t.description === tx.description).length;
@@ -294,7 +336,12 @@ function CatRow({ catId, total, count, txs, pct, userCats, isActive, onToggle }:
     <div className={['cat2-row', isActive ? 'cat2-row--open' : ''].filter(Boolean).join(' ')}>
       {/* ── Summary bar ── */}
       <div className="cat2-header-wrap">
-        <button className="cat2-header" onClick={onToggle}>
+        <button
+          className="cat2-header"
+          onTouchStart={headerTouch.onTouchStart}
+          onTouchMove={headerTouch.onTouchMove}
+          onClick={() => { if (!headerTouch.scrolled()) onToggle(); }}
+        >
           <span className="cat2-icon">{info.icon}</span>
           <span className="cat2-label">{info.label}</span>
           <span className="cat2-count">{count}</span>
@@ -306,7 +353,14 @@ function CatRow({ catId, total, count, txs, pct, userCats, isActive, onToggle }:
         </button>
         <button
           className="cat2-edit-btn"
-          onClick={(e) => { e.stopPropagation(); setEditing(v => !v); setRecatTx(null); }}
+          onTouchStart={editTouch.onTouchStart}
+          onTouchMove={editTouch.onTouchMove}
+          onClick={(e) => {
+            if (editTouch.scrolled()) return;
+            e.stopPropagation();
+            setEditing(v => !v);
+            setRecatTx(null);
+          }}
           title="Modifica categoria"
           type="button"
         >
@@ -364,22 +418,7 @@ function CatRow({ catId, total, count, txs, pct, userCats, isActive, onToggle }:
             ) : (
               <div className="cat2-txlist">
                 {txs.slice(0, 30).map(t => (
-                  <div key={t.id} className="cat2-tx-row">
-                    <div className="cat2-tx-left">
-                      <span className="cat2-tx-desc">{t.description}</span>
-                      <span className="cat2-tx-date">{t.date}</span>
-                    </div>
-                    <span className={['cat2-tx-amt', t.type === 'income' ? 'cat2-tx-amt--inc' : 'cat2-tx-amt--exp'].filter(Boolean).join(' ')}>
-                      {t.type === 'income' ? '+' : '−'}{formatCurrency(t.amount)}
-                    </span>
-                    <button
-                      className="cat2-tx-recat"
-                      title="Cambia categoria"
-                      onClick={() => setRecatTx(t)}
-                    >
-                      <Tag size={11} />
-                    </button>
-                  </div>
+                  <TxRow key={t.id} t={t} onRecat={setRecatTx} />
                 ))}
                 {txs.length > 30 && (
                   <p className="cat2-more">+{txs.length - 30} altre</p>

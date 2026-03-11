@@ -194,6 +194,17 @@ export function parseLocalIntent(raw: string, context?: NebulaContext | null): L
     };
   }
 
+  // Associa / collega transazioni non categorizzate
+  if (has(t, /\b(associa|collega|linka?|categorizza)\b/) && has(t, /\b(transazion[ei]|spese?|moviment[io]|non categ|non assoc|da assoc)\b/)) {
+    return {
+      type: 'ACTION', module: 'FINANCE', intent: 'FINANCE',
+      fragment: 'FinanceLink',
+      params: {},
+      intensity: 0.55,
+      message: 'Ecco le transazioni non ancora categorizzate. Seleziona una categoria di default o scegline un\'altra.',
+    };
+  }
+
   // Spese per categoria
   if (isFinance && has(t, /\b(categori[ae]|categoria|categorizzo|non categorizzat[eo]|raggruppa|per tipo)\b/)) {
     const type = isIncome ? 'income' : has(t, /\bspese?\b/) ? 'expense' : null;
@@ -354,6 +365,24 @@ export function parseLocalIntent(raw: string, context?: NebulaContext | null): L
       params: {},
       intensity: isNeg ? 0.75 : 0.55,
       message: isNeg ? 'Capisco. Vediamo com\'è stato il tuo umore di recente.' : 'Ecco il tuo umore recente.',
+    };
+  }
+
+  // ── ROUTINE & APPUNTAMENTI ─────────────────────────────────────────────────
+
+  const isRoutine     = has(t, /\b(routine|abitudini?|habit|promemoria|reminder|pastiglia|farmaco|medicinale|esercizio quotidiano|ricorrente|giornaliero|ogni giorno)\b/);
+  const isAppointment = has(t, /\b(appuntamento|colloquio|riunione|visita|agenda|calendario|evento|impegno|ricordami|ricorda|to.?do|todo|cosa da fare)\b/);
+
+  if (isRoutine || isAppointment) {
+    const tab = isAppointment && !isRoutine ? 'appointments' : 'routine';
+    return {
+      type: 'VISUAL', module: 'NONE', intent: 'IDLE',
+      fragment: 'Routine',
+      params: { tab },
+      intensity: 0.35,
+      message: tab === 'appointments'
+        ? 'Ecco la tua agenda appuntamenti.'
+        : 'Ecco le tue routine giornaliere.',
     };
   }
 

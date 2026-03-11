@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { NebulaConfirmation, NebulaContext } from '@/types/nebula';
+import { DEFAULT_THEME_ID, NB_THEME_KEY } from '@/config/nebulaThemes';
 
 export type NebulaIntent =
   | 'IDLE'
@@ -83,6 +84,10 @@ interface NebulaState {
   /** Text to prefill in the chat input (set from HelpFragment clicks) */
   prefillInput: string | null;
   setPrefillInput: (v: string | null) => void;
+
+  /** Active Nebula color theme — persisted in localStorage */
+  nebulaTheme: string;
+  setNebulaTheme: (id: string) => void;
   /** Fragment to reopen when the user presses X (back navigation from Help) */
   returnFragment: string | null;
   /** Open a fragment keeping track of the caller so X navigates back */
@@ -112,6 +117,7 @@ export const useNebulaStore = create<NebulaState>((set) => ({
   prefillInput: null,
   returnFragment: null,
   interactionHistory: [],
+  nebulaTheme: localStorage.getItem(NB_THEME_KEY) ?? DEFAULT_THEME_ID,
 
   setIntent: (intent, intensity, message, data = {}) =>
     set({ intent, intensity, message, data }),
@@ -165,6 +171,11 @@ export const useNebulaStore = create<NebulaState>((set) => ({
 
   setConfirmation: (pendingConfirmation) => set({ pendingConfirmation }),
   setPrefillInput: (prefillInput) => set({ prefillInput }),
+
+  setNebulaTheme: (id) => {
+    localStorage.setItem(NB_THEME_KEY, id);
+    set({ nebulaTheme: id });
+  },
 
   addInteraction: (entry) =>
     set((s) => ({

@@ -33,6 +33,7 @@ Per FINANCE:
   - "FinanceDelete"   → lista con elimina singolo + elimina tutto
   - "FinanceCsv"      → importazione massiva da file CSV
   - "FinanceCategory"  → spese per categoria con ricategorizzazione inline
+  - "FinanceLink"      → associa transazioni non categorizzate alle categorie di default
   - "FinanceAnalytics" → grafici analisi: 7 giorni, giorno della settimana, 6 mesi
 
 Per HEALTH:

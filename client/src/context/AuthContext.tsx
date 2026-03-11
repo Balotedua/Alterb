@@ -19,14 +19,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser((session?.user as User) ?? null);
+      const u = (session?.user as User) ?? null;
+      setUser(u);
       setLoading(false);
+      if (u) {
+        supabase.rpc('update_last_seen').then(({ error }) => {
+          if (error) console.warn('[Nebula] update_last_seen:', error.message);
+        });
+      }
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser((session?.user as User) ?? null);
+      const u = (session?.user as User) ?? null;
+      setUser(u);
+      if (u) {
+        supabase.rpc('update_last_seen').then(({ error }) => {
+          if (error) console.warn('[Nebula] update_last_seen:', error.message);
+        });
+      }
     });
 
     return () => subscription.unsubscribe();

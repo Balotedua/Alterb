@@ -10,6 +10,23 @@ export const MOOD_CONFIG: MoodConfig[] = [
 
 export const CAT_CONFIG: CategoryConfig[] = [];
 
+// Categorie di default finanza (hardcoded, non salvate su Supabase)
+export const FINANCE_DEFAULT_CATS: { id: string; label: string; icon: string }[] = [
+  { id: 'food',          label: 'Cibo',       icon: '🍽️' },
+  { id: 'transport',     label: 'Trasporti',  icon: '🚌' },
+  { id: 'shopping',      label: 'Shopping',   icon: '🛍️' },
+  { id: 'health',        label: 'Salute',     icon: '💊' },
+  { id: 'entertainment', label: 'Svago',      icon: '🎬' },
+  { id: 'utilities',     label: 'Bollette',   icon: '💡' },
+  { id: 'salary',        label: 'Stipendio',  icon: '💼' },
+];
+
+// IDs di tutte le categorie di default (incluso 'other' che è la scelta libera dell'utente)
+export const FINANCE_DEFAULT_CAT_IDS = new Set([
+  ...FINANCE_DEFAULT_CATS.map(c => c.id),
+  'other',
+]);
+
 export const ACT_CONFIG: ActivityConfig[] = [
   { id: 'run', label: 'Corsa', icon: '🏃' },
   { id: 'gym', label: 'Palestra', icon: '🏋️' },

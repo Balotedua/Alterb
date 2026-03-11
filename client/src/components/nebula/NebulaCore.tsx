@@ -6,6 +6,8 @@ import { NebulaChatInput }       from './NebulaChatInput';
 import { NebulaConfirmCard }     from './NebulaConfirmCard';
 import { FragmentErrorBoundary } from './FragmentErrorBoundary';
 import { BugReportButton }       from './BugReportButton';
+import { NebulaWelcome }         from './NebulaWelcome';
+import { NebulaChatHistory }     from './NebulaChatHistory';
 import { FRAGMENT_REGISTRY }     from '@/modules/fragmentRegistry';
 import './nebula.css';
 
@@ -69,7 +71,7 @@ function ActiveFragment() {
 }
 
 export function NebulaCore() {
-  const { activeFragment, pendingConfirmation } = useNebulaStore();
+  const { activeFragment, pendingConfirmation, clearFragment, nebulaTheme } = useNebulaStore();
   const { height: vvHeight, offsetTop: vvTop, kbOpen } = useVisualViewport();
 
   const hasContent = !!(activeFragment || pendingConfirmation);
@@ -81,6 +83,7 @@ export function NebulaCore() {
         kbOpen     ? 'nebula-core--kb'      : '',
         hasContent ? 'nebula-core--fragment' : '',
       ].filter(Boolean).join(' ')}
+      data-nb-theme={nebulaTheme}
       style={{
         // Pin the container exactly to the visual viewport.
         // When the keyboard opens, height shrinks and the input at bottom:2rem
@@ -98,6 +101,10 @@ export function NebulaCore() {
         <NebulaEntity />
       </div>
 
+      {activeFragment && !pendingConfirmation && (
+        <div className="nb-backdrop" onClick={clearFragment} />
+      )}
+
       <div className="nb-fragment-area">
         <AnimatePresence mode="wait">
           {pendingConfirmation ? (
@@ -108,6 +115,8 @@ export function NebulaCore() {
         </AnimatePresence>
       </div>
 
+      <NebulaWelcome />
+      <NebulaChatHistory />
       <NebulaChatInput />
       <BugReportButton />
     </div>
