@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
 import { useAuth } from './useAuth';
 import { FINANCE_DEFAULT_CAT_IDS } from '@/utils/constants';
-import type { Transaction, TransactionInput, CategoryConfig } from '@/types';
+import type { Transaction, TransactionInput, CategoryConfig, FinanceBudget } from '@/types';
 
 const QUERY_KEY = ['transactions'];
 const CAT_QUERY_KEY = ['finance_categories'];
@@ -349,4 +349,54 @@ export function useMonthlyStats() {
     monthlyData: dailyData,
     transactionCount: monthlyTransactions.length,
   };
+}
+
+// ── Budget hooks ───────────────────────────────────────────────────────────────
+
+const BUDGET_KEY = ['finance_budgets'];
+
+export function useFinanceBudgets() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: BUDGET_KEY,
+    queryFn: async () => {
+      if (!user) throw new Error('Utente non autenticato');
+      const { data, error } = await supabase
+        .from('finance_budgets')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return data as FinanceBudget[];
+    },
+    enabled: !!user,
+  });
+}
+
+export function useUpsertBudget() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ category, monthly_limit }: { category: string; monthly_limit: number }) => {
+      if (!user) throw new Error('Utente non autenticato');
+      const { error } = await supabase
+        .from('finance_budgets')
+        .upsert({ user_id: user.id, category, monthly_limit }, { onConflict: 'user_id,category' });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: BUDGET_KEY }),
+  });
+}
+
+export function useDeleteBudget() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      if (!user) throw new Error('Utente non autenticato');
+      const { error } = await supabase.from('finance_budgets').delete().eq('id', id).eq('user_id', user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: BUDGET_KEY }),
+  });
 }

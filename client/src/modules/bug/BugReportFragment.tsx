@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bug, Send, CheckCircle2, Lightbulb, Clock, MessageSquare, Layers } from 'lucide-react';
+import { AlertTriangle, Send, CheckCircle2, Lightbulb, Clock, MessageSquare, Layers } from 'lucide-react';
 import { NebulaCard } from '@/components/ui/nebula/NebulaCard';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/services/supabase';
@@ -33,8 +33,8 @@ type TabId = 'bug' | 'improvement';
 
 const TAB_CONFIG = {
   bug: {
-    icon: <Bug size={15} />,
-    tabIcon: <Bug size={11} />,
+    icon: <AlertTriangle size={15} />,
+    tabIcon: <AlertTriangle size={11} />,
     title: 'Segnala bug',
     label: 'Descrivi il problema',
     placeholder: 'Es. "Ho premuto aggiungi e nulla è successo…"',

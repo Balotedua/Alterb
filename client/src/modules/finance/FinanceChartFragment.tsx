@@ -6,7 +6,7 @@ import type { Transaction } from '@/types';
 
 interface Props { params: Record<string, unknown> }
 
-const MONTHS_IT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+export const MONTHS_IT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
 
 function sumAmt(txs: Transaction[]) { return txs.reduce((s, t) => s + t.amount, 0); }
 
@@ -15,7 +15,7 @@ interface BarChartProps {
   months: { label: string; inc: number; exp: number; isCurrent: boolean }[];
 }
 
-function GroupedBarChart({ months }: BarChartProps) {
+export function GroupedBarChart({ months }: BarChartProps) {
   const uid = useId().replace(/:/g, 'x');
 
   const W = 280; const H = 120;

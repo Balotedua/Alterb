@@ -1,4 +1,4 @@
-import { Bug } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { useNebulaStore } from '@/store/nebulaStore';
 
 export function BugReportButton() {
@@ -14,7 +14,7 @@ export function BugReportButton() {
       title="Segnala bug"
       onClick={() => setFragment('BugReport', {}, 'ACTION')}
     >
-      <Bug size={14} />
+      <AlertTriangle size={14} />
     </button>
   );
 }

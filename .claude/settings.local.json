@@ -27,7 +27,9 @@
       "Bash(find /c/Users/danie/Desktop/vercelesercizio -name \"*sw*\" -o -name \"*service*worker*\" 2>/dev/null | grep -v node_modules)",
       "Bash(python3 \"C:\\\\Users\\\\danie\\\\Desktop\\\\vercelesercizio\\\\_append_admin_css.py\")",
       "Bash(python \"C:\\\\Users\\\\danie\\\\Desktop\\\\vercelesercizio\\\\_append_admin_css.py\")",
-      "Bash(python \"C:\\\\Users\\\\danie\\\\Desktop\\\\vercelesercizio\\\\_append_admin2.py\" && rm \"C:\\\\Users\\\\danie\\\\Desktop\\\\vercelesercizio\\\\_append_admin2.py\")"
+      "Bash(python \"C:\\\\Users\\\\danie\\\\Desktop\\\\vercelesercizio\\\\_append_admin2.py\" && rm \"C:\\\\Users\\\\danie\\\\Desktop\\\\vercelesercizio\\\\_append_admin2.py\")",
+      "Bash(find \"C:/Users/danie/Desktop/vercelesercizio/client/src/modules\" -name \"*.css\" 2>/dev/null | head -10)",
+      "Bash(find \"C:/Users/danie/Desktop/vercelesercizio/client/src\" -type f -name \"*Page*.tsx\" -o -type f -name \"*page*.tsx\" 2>/dev/null | head -30)"
     ]
   }
 }

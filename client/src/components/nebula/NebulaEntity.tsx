@@ -72,6 +72,8 @@ export function NebulaEntity() {
     let speedMul   = 1;
     // fragmentFade: 0 = visible, 1 = dissolved
     let fragmentFade = 0;
+    // thinkPulse: 0 = idle, 1 = full explosive thinking state
+    let thinkPulse = 0;
 
     // Slow continuous breath: drives a gentle idle pulse
     // Computed in loop from t — no extra state needed
@@ -101,9 +103,12 @@ export function NebulaEntity() {
       const glowLerp = glowTarget > glowExtra ? delta * 2.2 : delta * 0.55;
       glowExtra = lerp(glowExtra, glowTarget, Math.min(glowLerp, 1));
 
-      // ── Target rotation speed ─────────────────────────────────────────────
-      const speedTarget = isThinking ? 1.18 : 1.0;
-      speedMul = lerp(speedMul, speedTarget, Math.min(delta * 1.2, 1));
+      // ── Think pulse — sale/scende lentamente per transizioni morbide ────────
+      thinkPulse = lerp(thinkPulse, isThinking ? 1 : 0, Math.min(delta * 1.2, 1));
+
+      // ── Target rotation speed — leggermente più veloce, mai frenetico ────────
+      const speedTarget = isThinking ? 1.35 : 1.0;
+      speedMul = lerp(speedMul, speedTarget, Math.min(delta * 0.8, 1));
 
       // ── Fragment dissolve (smooth expo ease) ──────────────────────────────
       const fadeLerp = activeFragment ? delta * 2.8 : delta * 3.5;
@@ -147,15 +152,19 @@ export function NebulaEntity() {
 
       const speed = BASE_SPEED * speedMul;
 
+      // ── Thinking: ondulazione lenta e fluida, come acqua che respira ────────
+      const thinkFlow  = thinkPulse * Math.sin(t * 1.4) * 0.45;   // onda lenta principale
+      const thinkDrift = thinkPulse * Math.sin(t * 0.7 + 1.1) * 0.2; // deriva secondaria
+
       for (let i = 0; i < N; i++) {
         const a  = angles[i];
-        // Two wave harmonics for organic shape variation
-        const w1 = Math.cos(a - t * speed);
-        const w2 = Math.cos(a - t * speed * 0.55 + Math.PI * 0.7);
+        // Due armoniche con modulazione dolce durante il thinking
+        const w1 = Math.cos(a - t * speed + thinkFlow * Math.sin(a * 0.5));
+        const w2 = Math.cos(a - t * speed * 0.55 + Math.PI * 0.7 + thinkDrift * Math.cos(a * 0.8));
         const wave = Math.max(0, w1) * 0.68 + Math.max(0, w2) * 0.32;
 
-        // Ring radius: only breathing, no burst expansion
-        const waveAmp = 0.036;
+        // Ampiezza leggermente maggiore durante thinking, mai aggressiva
+        const waveAmp = 0.036 + thinkPulse * 0.055;
         const rr = r
           + wave * r * waveAmp
           + breathe * r * 0.038;

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Lock, ShieldCheck, RefreshCw, ChevronDown, ChevronUp,
-  Clock, MessageSquare, Layers, AlertTriangle, Bug,
+  Clock, MessageSquare, Layers, AlertTriangle,
   BarChart2, Settings2, TrendingUp, Zap, Trash2, Download,
   Flag, Pencil, Check, X, Copy, CopyCheck,
   Users, Database, HardDrive, Activity, Wifi, WifiOff,
@@ -59,7 +59,7 @@ const ADMIN_PASSWORD = 'provaqwerty';
 type TabId = 'bugs' | 'stats' | 'consumi' | 'sistema';
 
 const TABS: { id: TabId; icon: React.ReactNode; label: string }[] = [
-  { id: 'bugs',     icon: <Bug size={12} />,      label: 'Ticket'      },
+  { id: 'bugs',     icon: <AlertTriangle size={12} />, label: 'Ticket'      },
   { id: 'stats',    icon: <BarChart2 size={12} />, label: 'Statistiche' },
   { id: 'consumi',  icon: <Zap size={12} />,       label: 'Consumi'     },
   { id: 'sistema',  icon: <Settings2 size={12} />, label: 'Sistema'     },
@@ -160,7 +160,7 @@ function exportTicketsPDF(reports: BugReport[], filterLabel: string) {
   const rows = reports.map(r => {
     const d        = new Date(r.created_at).toLocaleString('it-IT');
     const status   = STATUS_CONFIG[r.status]?.label ?? r.status;
-    const type     = r.type === 'improvement' ? '💡 Miglioria' : '🐛 Bug';
+    const type     = r.type === 'improvement' ? '💡 Miglioria' : '⚠️ Bug';
     const priority = PRIORITY_CONFIG[r.priority ?? 'low']?.label ?? '—';
     const desc     = r.user_description.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     return `<tr>
@@ -299,7 +299,7 @@ function TicketRow({ report, onStatusChange, onPriorityChange, onComplexityChang
         <span className="admin-ticket-type-badge" style={{
           color: report.type === 'improvement' ? '#fbbf24' : '#f87171',
         }}>
-          {report.type === 'improvement' ? '💡' : '🐛'}
+          {report.type === 'improvement' ? '💡' : '⚠️'}
         </span>
         <span className="admin-priority-badge" style={{ color: pCfg.color, background: pCfg.bg }}>
           <Flag size={8} />{pCfg.label}
@@ -506,7 +506,7 @@ function ReviewCard({ report, index, total, onAccept, onReject }: {
       >
         <div className="review-card-top">
           <span className="review-card-type">
-            {report.type === 'improvement' ? '💡' : '🐛'}
+            {report.type === 'improvement' ? '💡' : '⚠️'}
           </span>
           <span className="review-card-priority" style={{ color: pCfg.color, background: pCfg.bg }}>
             <Flag size={8} />{pCfg.label}
@@ -862,7 +862,7 @@ function TabStats() {
       {/* Bug vs Improvement */}
       <div className="astat-kpi-row" style={{ marginTop: '-4px' }}>
         <div className="astat-kpi">
-          <span className="astat-kpi-val" style={{ color: '#f87171' }}>🐛 {bugCount}</span>
+          <span className="astat-kpi-val" style={{ color: '#f87171' }}>⚠️ {bugCount}</span>
           <span className="astat-kpi-label">Bug</span>
         </div>
         <div className="astat-kpi">

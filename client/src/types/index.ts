@@ -135,6 +135,14 @@ export interface CategoryConfig {
   color: string;
 }
 
+export interface FinanceBudget {
+  id: string;
+  user_id: string;
+  category: string;
+  monthly_limit: number;
+  created_at: string;
+}
+
 export interface ActivityConfig {
   id: string;
   label: string;

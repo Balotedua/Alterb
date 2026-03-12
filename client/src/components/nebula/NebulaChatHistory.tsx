@@ -6,24 +6,22 @@ const ease = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
 export function NebulaChatHistory() {
   const { chatHistory, isThinking, activeFragment, pendingConfirmation } = useNebulaStore();
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom on new message or thinking state change
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = innerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [chatHistory.length, isThinking]);
 
   // Only in pure chat mode
   if (activeFragment || pendingConfirmation || chatHistory.length === 0) return null;
 
-  // Show last 10 messages
-  const visible = chatHistory.slice(-10);
-
   return (
     <div className="nch-root">
-      <div className="nch-inner" ref={undefined}>
+      <div className="nch-inner" ref={innerRef}>
         <AnimatePresence initial={false}>
-          {visible.map((msg) => (
+          {chatHistory.map((msg) => (
             <motion.div
               key={msg.timestamp}
               className={`nch-row nch-row--${msg.role}`}
@@ -55,8 +53,6 @@ export function NebulaChatHistory() {
             </span>
           </motion.div>
         )}
-
-        <div ref={bottomRef} />
       </div>
     </div>
   );

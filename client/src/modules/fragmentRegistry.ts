@@ -8,6 +8,7 @@ import { FinanceCsvFragment }      from './finance/FinanceCsvFragment';
 import { FinanceCategoryFragment }  from './finance/FinanceCategoryFragment';
 import { FinanceLinkFragment }      from './finance/FinanceLinkFragment';
 import { FinanceAnalyticsFragment } from './finance/FinanceAnalyticsFragment';
+import { FinancePanoramaFragment }  from './finance/FinancePanoramaFragment';
 import { HealthOverviewFragment }  from './health/HealthOverviewFragment';
 import { HealthSleepFragment }     from './health/HealthSleepFragment';
 import { HealthWaterFragment }     from './health/HealthWaterFragment';
@@ -34,7 +35,8 @@ export const FRAGMENT_REGISTRY: Record<string, FragmentComponent> = {
   FinanceCsv:      FinanceCsvFragment,
   FinanceCategory:  FinanceCategoryFragment,
   FinanceLink:      FinanceLinkFragment,
-  FinanceAnalytics: FinanceAnalyticsFragment,
+  FinanceAnalytics:  FinanceAnalyticsFragment,
+  FinancePanorama:   FinancePanoramaFragment,
 
   // Health
   HealthOverview: HealthOverviewFragment,

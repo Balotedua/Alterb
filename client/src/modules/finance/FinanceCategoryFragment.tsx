@@ -432,11 +432,9 @@ function CatRow({ catId, total, count, txs, pct, userCats, isActive, onToggle }:
   );
 }
 
-// ── Main fragment ──────────────────────────────────────────────────────────────
+// ── Shared inner content (no NebulaCard wrapper) ──────────────────────────────
 
-export function FinanceCategoryFragment({ params }: { params: Record<string, unknown> }) {
-  const filterType = (params.type as Transaction['type']) ?? null;
-
+export function FinanceCategoryContent({ filterType }: { filterType?: Transaction['type'] | null }) {
   const { data: transactions = [] } = useTransactions();
   const { data: userCats = [] }     = useFinanceCategories();
   const [activeCat, setActiveCat]   = useState<string | null>(null);
@@ -446,7 +444,6 @@ export function FinanceCategoryFragment({ params }: { params: Record<string, unk
     [transactions, filterType]
   );
 
-  // Group by category
   const grouped = useMemo(() => {
     const map = new Map<string, { total: number; count: number; txs: Transaction[] }>();
     for (const t of txs) {
@@ -466,15 +463,11 @@ export function FinanceCategoryFragment({ params }: { params: Record<string, unk
   }, [txs]);
 
   const totalAbs = grouped.reduce((s, [, { total }]) => s + Math.abs(total), 0);
-
-  // Summary: separate expense / income
   const totalExp = txs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const totalInc = txs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
 
   return (
-    <NebulaCard icon={<Tag size={15} />} title="Spese per categoria" variant="finance" closable>
-
-      {/* ── Summary header ── */}
+    <>
       <div className="cat2-summary">
         <div className="cat2-summary-item cat2-summary-item--exp">
           <span className="cat2-summary-label">Uscite</span>
@@ -492,7 +485,6 @@ export function FinanceCategoryFragment({ params }: { params: Record<string, unk
         </div>
       </div>
 
-      {/* ── Category rows ── */}
       {grouped.length === 0 ? (
         <p className="cat2-empty">Nessuna transazione trovata.</p>
       ) : (
@@ -515,6 +507,18 @@ export function FinanceCategoryFragment({ params }: { params: Record<string, unk
           })}
         </div>
       )}
+    </>
+  );
+}
+
+// ── Main fragment ──────────────────────────────────────────────────────────────
+
+export function FinanceCategoryFragment({ params }: { params: Record<string, unknown> }) {
+  const filterType = (params.type as Transaction['type']) ?? null;
+
+  return (
+    <NebulaCard icon={<Tag size={15} />} title="Spese per categoria" variant="finance" closable>
+      <FinanceCategoryContent filterType={filterType} />
     </NebulaCard>
   );
 }

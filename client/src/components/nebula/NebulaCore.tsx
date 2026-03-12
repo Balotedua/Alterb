@@ -7,7 +7,7 @@ import { NebulaConfirmCard }     from './NebulaConfirmCard';
 import { FragmentErrorBoundary } from './FragmentErrorBoundary';
 import { BugReportButton }       from './BugReportButton';
 import { NebulaWelcome }         from './NebulaWelcome';
-import { NebulaChatHistory }     from './NebulaChatHistory';
+import { NebulaMessageDisplay }  from './NebulaMessageDisplay';
 import { FRAGMENT_REGISTRY }     from '@/modules/fragmentRegistry';
 import './nebula.css';
 
@@ -116,7 +116,7 @@ export function NebulaCore() {
       </div>
 
       <NebulaWelcome />
-      <NebulaChatHistory />
+      <NebulaMessageDisplay />
       <NebulaChatInput />
       <BugReportButton />
     </div>

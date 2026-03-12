@@ -43,6 +43,140 @@ function parseCSV(text: string): { headers: string[]; rows: Record<string, strin
   return { headers, rows };
 }
 
+// ── XLSX parser (SheetJS) ────────────────────────────────────────────────────
+
+async function parseXLSXBuffer(
+  buffer: ArrayBuffer,
+): Promise<{ headers: string[]; rows: Record<string, string>[] }> {
+  const XLSX = await import('xlsx');
+  const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  if (!ws) return { headers: [], rows: [] };
+
+  const data = XLSX.utils.sheet_to_json<unknown[]>(ws, {
+    header: 1,
+    raw: false,
+    dateNF: 'YYYY-MM-DD',
+    defval: '',
+  });
+
+  if (data.length < 2) return { headers: [], rows: [] };
+
+  // Find first non-empty row as headers
+  let headerIdx = 0;
+  for (let i = 0; i < Math.min(data.length, 10); i++) {
+    if ((data[i] as string[]).some((v) => String(v).trim())) { headerIdx = i; break; }
+  }
+
+  const headers = (data[headerIdx] as unknown[]).map((h, i) =>
+    String(h).trim() || `Col${i + 1}`,
+  );
+  const rows = (data.slice(headerIdx + 1) as unknown[][])
+    .map((r) => Object.fromEntries(headers.map((h, i) => [h, String(r[i] ?? '').trim()])))
+    .filter((r) => Object.values(r).some((v) => v));
+
+  return { headers, rows };
+}
+
+// ── PDF parser (pdfjs-dist) ──────────────────────────────────────────────────
+
+async function parsePDFBuffer(
+  buffer: ArrayBuffer,
+): Promise<{ headers: string[]; rows: Record<string, string>[] }> {
+  const pdfjsLib = await import('pdfjs-dist');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.mjs',
+    import.meta.url,
+  ).href;
+
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+
+  interface Item { x: number; y: number; w: number; str: string; }
+  const allItems: Item[] = [];
+  let pageOffsetY = 0;
+
+  for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
+    const page = await doc.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 1 });
+    const textContent = await page.getTextContent();
+
+    for (const item of textContent.items) {
+      if (!('str' in item) || !item.str.trim()) continue;
+      const x = item.transform[4];
+      const y = viewport.height - item.transform[5] + pageOffsetY;
+      const w = (item as { width?: number }).width ?? item.str.length * 5;
+      allItems.push({ x, y, w, str: item.str.trim() });
+    }
+    pageOffsetY += viewport.height + 20;
+  }
+
+  if (!allItems.length) return { headers: [], rows: [] };
+
+  allItems.sort((a, b) => a.y - b.y || a.x - b.x);
+
+  // Cluster items by Y coordinate (same line = within 4pt)
+  const lineMap: Map<number, Item[]> = new Map();
+  for (const item of allItems) {
+    let placed = false;
+    for (const [lineY, items] of lineMap) {
+      if (Math.abs(item.y - lineY) <= 4) { items.push(item); placed = true; break; }
+    }
+    if (!placed) lineMap.set(item.y, [item]);
+  }
+
+  const lines = [...lineMap.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, items]) => items.sort((a, b) => a.x - b.x));
+
+  // Convert each line to cells by detecting X gaps
+  const textRows = lines
+    .map((items) => {
+      if (!items.length) return [];
+      const cells: string[] = [];
+      let cell = items[0].str;
+      let lastEndX = items[0].x + items[0].w;
+      for (let i = 1; i < items.length; i++) {
+        const gap = items[i].x - lastEndX;
+        if (gap > 15) { cells.push(cell.trim()); cell = items[i].str; }
+        else { cell += ' ' + items[i].str; }
+        lastEndX = items[i].x + items[i].w;
+      }
+      cells.push(cell.trim());
+      return cells.filter((c) => c);
+    })
+    .filter((r) => r.length > 0);
+
+  if (!textRows.length) return { headers: [], rows: [] };
+
+  // Find header row containing date/amount hint words
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(textRows.length, 30); i++) {
+    const rowText = textRows[i].join(' ').toLowerCase();
+    const hasDate = DATE_HINTS.some((h) => rowText.includes(h));
+    const hasAmt  = AMT_HINTS.some((h) => rowText.includes(h));
+    if (hasDate && hasAmt) { headerIdx = i; break; }
+    if ((hasDate || hasAmt) && headerIdx === -1) headerIdx = i;
+  }
+  if (headerIdx === -1) {
+    headerIdx = textRows.reduce((best, row, i) =>
+      row.length > textRows[best].length ? i : best, 0);
+  }
+
+  const headerCells = textRows[headerIdx];
+  const colCount = Math.max(...textRows.map((r) => r.length));
+  const headers: string[] = [
+    ...headerCells,
+    ...Array.from({ length: Math.max(0, colCount - headerCells.length) }, (_, i) =>
+      `Col${i + headerCells.length + 1}`),
+  ];
+
+  const rows = textRows.slice(headerIdx + 1).map((r) =>
+    Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ''])),
+  ).filter((r) => Object.values(r).some((v) => v.trim()));
+
+  return { headers, rows };
+}
+
 // ── Value normalizers ────────────────────────────────────────────────────────
 
 function normalizeDate(s: string): string | null {
@@ -94,7 +228,7 @@ function normalizeAmount(s: string): number | null {
 // ── Column matching ──────────────────────────────────────────────────────────
 
 const DATE_HINTS = [
-  'data', 'date', 'datum', 'fecha', 'dt',
+  'data', 'date', 'datum', 'fecha', 'dt', 'Dati',
   'data operazione', 'data di operazione', 'data_operazione',
   'data valuta', 'data di valuta', 'data_valuta',
   'data contabile', 'data di contabilizzazione', 'data_contabile',
@@ -145,7 +279,7 @@ const DESC_HINTS = [
   'descrizione movimento', 'descrizione transazione', 'descrizione pagamento',
   'causale movimento', 'causale transazione', 'causale pagamento',
   'descrizione addebito', 'descrizione accredito', 'descrizione bonifico',
-  'descrizione rimborso', 'causale rimborso',
+  'descrizione rimborso', 'causale rimborso', 'Descrizione Operazione',
 ];
 
 function colScore(col: string, hints: string[]): number {
@@ -198,6 +332,8 @@ function autoMapColumns(headers: string[]): { date: string; amount: string; desc
 
 // ── Component ────────────────────────────────────────────────────────────────
 
+type FileFormat = 'csv' | 'xlsx' | 'pdf';
+
 interface ParsedRow {
   date: string;
   amount: number;
@@ -213,58 +349,96 @@ interface DuplicateInfo {
   type: TransactionType;
 }
 
+const FORMAT_LABEL: Record<FileFormat, string> = { csv: 'CSV', xlsx: 'XLSX', pdf: 'PDF' };
+
 export function FinanceCsvImport() {
   const bulkAdd = useBulkAddTransactions();
   const { data: existingTxns = [] } = useTransactions();
 
-  const [headers,  setHeaders ] = useState<string[]>([]);
-  const [rawRows,  setRawRows ] = useState<Record<string, string>[]>([]);
-  const [fileName, setFileName] = useState('');
-  const [colDate,  setColDate ] = useState('');
-  const [colAmt,   setColAmt  ] = useState('');
-  const [colDesc,  setColDesc ] = useState('');
-  const [dragging, setDragging] = useState(false);
-  const [imported, setImported] = useState<number | null>(null);
-  const [err,      setErr     ] = useState('');
+  const [headers,    setHeaders   ] = useState<string[]>([]);
+  const [rawRows,    setRawRows   ] = useState<Record<string, string>[]>([]);
+  const [fileName,   setFileName  ] = useState('');
+  const [fileFormat, setFileFormat] = useState<FileFormat>('csv');
+  const [colDate,    setColDate   ] = useState('');
+  const [colAmt,     setColAmt    ] = useState('');
+  const [colDesc,    setColDesc   ] = useState('');
+  const [dragging,   setDragging  ] = useState(false);
+  const [loading,    setLoading   ] = useState(false);
+  const [imported,   setImported  ] = useState<number | null>(null);
+  const [err,        setErr       ] = useState('');
 
-  // Stato modale doppioni
   const [duplicates,    setDuplicates   ] = useState<DuplicateInfo[]>([]);
   const [pendingInputs, setPendingInputs] = useState<TransactionInput[]>([]);
   const [showDupModal,  setShowDupModal ] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const ingest = useCallback((file: File) => {
-    if (!file.name.toLowerCase().endsWith('.csv') && !file.type.includes('csv')) {
-      setErr('Seleziona un file .csv'); return;
-    }
-    setErr(''); setImported(null);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      const { headers: h, rows } = parseCSV(text);
-      if (!h.length) { setErr('File vuoto o formato non riconosciuto.'); return; }
+  const applyParsed = useCallback(
+    (h: string[], rows: Record<string, string>[], name: string, fmt: FileFormat) => {
+      if (!h.length) { setErr('File vuoto o formato non riconosciuto.'); setLoading(false); return; }
       setHeaders(h);
       setRawRows(rows);
-      setFileName(file.name);
+      setFileName(name);
+      setFileFormat(fmt);
       const m = autoMapColumns(h);
       setColDate(m.date);
       setColAmt(m.amount);
       setColDesc(m.description);
-    };
-    reader.readAsText(file, 'UTF-8');
-  }, []);
+      setLoading(false);
+    },
+    [],
+  );
 
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault(); setDragging(false);
-    const f = e.dataTransfer.files?.[0];
-    if (f) ingest(f);
-  }, [ingest]);
+  const ingest = useCallback(
+    (file: File) => {
+      const ext = file.name.toLowerCase().split('.').pop() ?? '';
+      const allowed: Record<string, FileFormat> = { csv: 'csv', xlsx: 'xlsx', xls: 'xlsx', pdf: 'pdf' };
+      const fmt = allowed[ext];
+      if (!fmt) { setErr('Seleziona un file .csv, .xlsx o .pdf'); return; }
+
+      setErr(''); setImported(null); setLoading(true);
+      const reader = new FileReader();
+
+      if (fmt === 'csv') {
+        reader.onload = (e) => {
+          const text = e.target?.result as string;
+          const { headers: h, rows } = parseCSV(text);
+          applyParsed(h, rows, file.name, 'csv');
+        };
+        reader.readAsText(file, 'UTF-8');
+      } else {
+        reader.onload = async (e) => {
+          const buffer = e.target?.result as ArrayBuffer;
+          try {
+            const result =
+              fmt === 'pdf'
+                ? await parsePDFBuffer(buffer)
+                : await parseXLSXBuffer(buffer);
+            applyParsed(result.headers, result.rows, file.name, fmt);
+          } catch {
+            setErr('Errore nella lettura del file. Verifica che non sia corrotto.');
+            setLoading(false);
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      }
+    },
+    [applyParsed],
+  );
+
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault(); setDragging(false);
+      const f = e.dataTransfer.files?.[0];
+      if (f) ingest(f);
+    },
+    [ingest],
+  );
 
   const reset = () => {
     setHeaders([]); setRawRows([]); setFileName('');
     setColDate(''); setColAmt(''); setColDesc('');
-    setImported(null); setErr('');
+    setImported(null); setErr(''); setLoading(false);
     setDuplicates([]); setPendingInputs([]); setShowDupModal(false);
   };
 
@@ -289,7 +463,7 @@ export function FinanceCsvImport() {
     const n      = amount ?? 0;
 
     let description = rawDesc.trim();
-    if (!description) description = n < 0 ? 'Pagamento' : n > 0 ? 'Rimborso' : 'Importato da CSV';
+    if (!description) description = n < 0 ? 'Pagamento' : n > 0 ? 'Rimborso' : 'Importato';
 
     return {
       date:        date ?? rawDate,
@@ -306,7 +480,7 @@ export function FinanceCsvImport() {
   // ── Duplicate detection ───────────────────────────────────────────────────
 
   const existingKeys = new Set(
-    existingTxns.map((t) => `${t.date}|${t.description.toLowerCase().trim()}`)
+    existingTxns.map((t) => `${t.date}|${t.description.toLowerCase().trim()}`),
   );
 
   const findDuplicates = (inputs: TransactionInput[]): DuplicateInfo[] =>
@@ -351,14 +525,12 @@ export function FinanceCsvImport() {
 
   const handleImportSkipDups = () => {
     const filtered = pendingInputs.filter(
-      (i) => !existingKeys.has(`${i.date}|${i.description.toLowerCase().trim()}`)
+      (i) => !existingKeys.has(`${i.date}|${i.description.toLowerCase().trim()}`),
     );
     void doImport(filtered);
   };
 
-  const handleImportAll = () => {
-    void doImport(pendingInputs);
-  };
+  const handleImportAll = () => { void doImport(pendingInputs); };
 
   const hasFile = headers.length > 0;
 
@@ -367,7 +539,7 @@ export function FinanceCsvImport() {
   return (
     <div className="fin-card fin-csv-wrap">
       <div className="fin-card-title">
-        Importa CSV
+        Importa estratto conto
         {hasFile && (
           <button className="fin-csv-reset-btn" onClick={reset} aria-label="Chiudi">
             <X size={14} />
@@ -391,23 +563,32 @@ export function FinanceCsvImport() {
       {!hasFile && imported === null && (
         <>
           <div
-            className={`fin-csv-drop ${dragging ? 'fin-csv-drop--over' : ''}`}
+            className={`fin-csv-drop ${dragging ? 'fin-csv-drop--over' : ''} ${loading ? 'fin-csv-drop--loading' : ''}`}
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
-            onClick={() => fileRef.current?.click()}
+            onClick={() => !loading && fileRef.current?.click()}
             role="button"
             tabIndex={0}
-            onKeyDown={(e) => e.key === 'Enter' && fileRef.current?.click()}
+            onKeyDown={(e) => e.key === 'Enter' && !loading && fileRef.current?.click()}
           >
-            <Upload size={22} className="fin-csv-drop-icon" />
-            <span className="fin-csv-drop-label">Trascina il CSV o <u>clicca qui</u></span>
-            <span className="fin-csv-drop-sub">Virgola · Punto e virgola · Tab</span>
+            {loading ? (
+              <>
+                <div className="fin-csv-spinner" />
+                <span className="fin-csv-drop-label">Lettura in corso…</span>
+              </>
+            ) : (
+              <>
+                <Upload size={22} className="fin-csv-drop-icon" />
+                <span className="fin-csv-drop-label">Trascina o <u>seleziona un file</u></span>
+                <span className="fin-csv-drop-sub">CSV · XLSX · PDF (estratto conto testuale)</span>
+              </>
+            )}
           </div>
           <input
             ref={fileRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,.pdf,application/pdf"
             style={{ display: 'none' }}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) ingest(f); e.target.value = ''; }}
           />
@@ -421,7 +602,47 @@ export function FinanceCsvImport() {
           <div className="fin-csv-file-row">
             <FileText size={13} />
             <span className="fin-csv-file-name">{fileName}</span>
+            <span className="fin-csv-format-badge fin-csv-format-badge--{fileFormat}">
+              {FORMAT_LABEL[fileFormat]}
+            </span>
             <span className="fin-csv-file-count">{rawRows.length} righe</span>
+          </div>
+
+          {/* Column selectors */}
+          <div className="fin-csv-col-map">
+            <label className="fin-csv-col-label">
+              Data
+              <select
+                className="fin-csv-col-select"
+                value={colDate}
+                onChange={(e) => setColDate(e.target.value)}
+              >
+                <option value="">— nessuna —</option>
+                {headers.map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
+            </label>
+            <label className="fin-csv-col-label">
+              Importo
+              <select
+                className="fin-csv-col-select"
+                value={colAmt}
+                onChange={(e) => setColAmt(e.target.value)}
+              >
+                <option value="">— nessuna —</option>
+                {headers.map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
+            </label>
+            <label className="fin-csv-col-label">
+              Descrizione
+              <select
+                className="fin-csv-col-select"
+                value={colDesc}
+                onChange={(e) => setColDesc(e.target.value)}
+              >
+                <option value="">— nessuna —</option>
+                {headers.map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
+            </label>
           </div>
 
           <div className="fin-csv-status">
@@ -498,7 +719,7 @@ export function FinanceCsvImport() {
             </div>
 
             <p className="fin-dup-desc">
-              {duplicates.length} transazion{duplicates.length === 1 ? 'e' : 'i'} nel CSV {duplicates.length === 1 ? 'ha' : 'hanno'} stessa data e descrizione di transazioni già presenti.
+              {duplicates.length} transazion{duplicates.length === 1 ? 'e' : 'i'} nel file {duplicates.length === 1 ? 'ha' : 'hanno'} stessa data e descrizione di transazioni già presenti.
             </p>
 
             <div className="fin-dup-list">
