@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
 import { useAuth } from './useAuth';
 import { FINANCE_DEFAULT_CAT_IDS } from '@/utils/constants';
-import type { Transaction, TransactionInput, CategoryConfig, FinanceBudget } from '@/types';
+import type { Transaction, TransactionInput, CategoryConfig, FinanceBudget, PatrimonioAsset, PatrimonioAssetInput } from '@/types';
 
 const QUERY_KEY = ['transactions'];
 const CAT_QUERY_KEY = ['finance_categories'];
@@ -398,5 +398,79 @@ export function useDeleteBudget() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: BUDGET_KEY }),
+  });
+}
+
+// ── Patrimonio hooks ──────────────────────────────────────────────────────────
+
+const PATRIMONIO_KEY = ['patrimonio_assets'];
+
+export function usePatrimonioAssets() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: PATRIMONIO_KEY,
+    queryFn: async () => {
+      if (!user) throw new Error('Utente non autenticato');
+      const { data, error } = await supabase
+        .from('patrimonio_assets')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return data as PatrimonioAsset[];
+    },
+    enabled: !!user,
+  });
+}
+
+export function useAddPatrimonioAsset() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (input: PatrimonioAssetInput) => {
+      if (!user) throw new Error('Utente non autenticato');
+      const { data, error } = await supabase
+        .from('patrimonio_assets')
+        .insert([{ ...input, user_id: user.id }])
+        .select()
+        .single();
+      if (error) throw error;
+      return data as PatrimonioAsset;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: PATRIMONIO_KEY }),
+  });
+}
+
+export function useUpdatePatrimonioAsset() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ id, ...update }: { id: string } & Partial<PatrimonioAssetInput>) => {
+      if (!user) throw new Error('Utente non autenticato');
+      const { error } = await supabase
+        .from('patrimonio_assets')
+        .update({ ...update, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .eq('user_id', user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: PATRIMONIO_KEY }),
+  });
+}
+
+export function useDeletePatrimonioAsset() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      if (!user) throw new Error('Utente non autenticato');
+      const { error } = await supabase
+        .from('patrimonio_assets')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: PATRIMONIO_KEY }),
   });
 }

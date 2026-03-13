@@ -838,7 +838,7 @@
   backdrop-filter: blur(24px) saturate(180%);
   border-radius: 20px;
   padding: 24px;
-  box-shadow: 
+  box-shadow:
     0 12px 40px rgba(0, 0, 0, 0.35),
     0 0 0 1px rgba(124, 58, 237, 0.15),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -847,12 +847,13 @@
   width: 100%;
   margin: 0 auto;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   color: #f0edff;
   pointer-events: auto;
   max-height: 75vh;
   max-height: 75dvh;
-  overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: rgba(167, 139, 250, 0.3) transparent;
@@ -2426,6 +2427,16 @@ select.fragment-input option {
   padding: 8px 12px;
   margin-bottom: 0.6rem;
 }
+.csv-preview-scroll {
+  overflow-x: auto;
+  margin: 0 -0.3rem;
+}
+.csv-preview-scroll .fragment-list-row {
+  min-width: 320px;
+}
+.csv-preview-scroll .fragment-list-desc {
+  max-width: none;
+}
 
 /* ─── Health Setup Fragment ─────────────────────────────────────────────────── */
 .setup-step {
@@ -2999,6 +3010,17 @@ select.fragment-input option {
 /* Section wrapper */
 .fp-section { display: flex; flex-direction: column; gap: 8px; }
 
+/* Month title (centered, above KPIs) */
+.fp-month-title {
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: rgba(240,237,255,0.38);
+  margin: 0 0 2px;
+}
+
 /* Section label (uppercase eyebrow) */
 .fp-section-label {
   font-size: 0.6rem; font-weight: 700; letter-spacing: 0.09em;
@@ -3155,16 +3177,56 @@ select.fragment-input option {
 .fp-link-btn   { background: none; border: none; cursor: pointer; color: rgba(245,158,11,0.7); font-size: 0.72rem; font-family: inherit; padding: 0; }
 .fp-link-btn:hover { color: #fbbf24; }
 
+/* Import body: scrollable area containing column map + preview */
+.fp-import-body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  max-height: calc(50dvh - 4rem);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(245,158,11,0.2) transparent;
+}
+
+/* Column mapping: horizontal scroll row */
+.fp-col-map-scroll {
+  display: flex;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  gap: 8px;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+}
+.fp-col-map-scroll::-webkit-scrollbar { display: none; }
+
 .fp-col-map   { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
-.fp-col-label { display: flex; flex-direction: column; gap: 3px; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: rgba(240,237,255,0.32); }
+.fp-col-label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 0.6rem; font-weight: 700; letter-spacing: 0.07em;
+  text-transform: uppercase; color: rgba(240,237,255,0.32);
+  flex: 0 0 auto; min-width: 110px;
+}
 .fp-col-select {
   background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 7px; padding: 4px 7px;
+  border-radius: 7px; padding: 5px 7px;
   font-size: 0.72rem; color: rgba(240,237,255,0.72); font-family: inherit;
   outline: none; cursor: pointer; transition: border-color 0.15s;
+  width: 100%;
 }
 .fp-col-select:focus { border-color: rgba(245,158,11,0.4); }
 .fp-col-select option { background: #1a1025; }
+
+/* Sticky import button */
+.fp-submit-btn--sticky {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: rgba(245,158,11,0.13);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  margin-top: 4px;
+}
 
 .fp-import-status { font-size: 0.72rem; margin: 2px 0; }
 .fp-ok   { color: #4ade80; font-weight: 600; }
@@ -3381,11 +3443,42 @@ select.fragment-input option {
   font-size: 0.77rem; font-weight: 700; font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
+.fp-pred-conf-wrap {
+  display: flex; flex-direction: column; align-items: flex-end;
+  flex-shrink: 0; gap: 0.18rem; min-width: 2.6rem;
+}
 .fp-pred-conf {
   font-size: 0.6rem; font-weight: 600;
-  color: rgba(255,255,255,0.3); font-variant-numeric: tabular-nums;
-  flex-shrink: 0; min-width: 2.2rem; text-align: right;
+  color: rgba(255,255,255,0.4); font-variant-numeric: tabular-nums;
 }
+.fp-pred-conf-bar {
+  width: 2.4rem; height: 3px; border-radius: 2px;
+  background: rgba(255,255,255,0.1); overflow: hidden;
+}
+.fp-pred-conf-fill {
+  height: 100%; border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+/* ── Weighted totals row ──────────────────────────────────────────────────── */
+.fp-weighted-row {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 0.4rem;
+  padding: 0.5rem 0.7rem;
+  margin: 0.5rem 0 0.75rem;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+}
+.fp-weighted-label {
+  font-size: 0.62rem; font-weight: 500;
+  color: rgba(255,255,255,0.3); letter-spacing: 0.03em; text-transform: uppercase;
+}
+.fp-weighted-vals {
+  display: flex; align-items: center; gap: 0.45rem;
+  font-size: 0.72rem; font-variant-numeric: tabular-nums;
+}
+
 .fp-pred-empty {
   font-size: 0.68rem; color: rgba(255,255,255,0.22);
   font-style: italic; text-align: center;
@@ -3451,6 +3544,43 @@ select.fragment-input option {
 }
 .fp-sub-savings-label { font-size: 0.63rem; color: rgba(255,255,255,0.3); }
 .fp-sub-savings-value { font-size: 0.8rem; font-weight: 700; color: #4ade80; }
+
+/* Income amount color */
+.fp-sub-amt--inc { color: #4ade80 !important; }
+
+/* Dismiss confirm panel */
+.fp-sub-dismiss-panel {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.4rem 0 0.65rem 2rem;
+  flex-wrap: wrap;
+}
+.fp-sub-dismiss-q {
+  font-size: 0.66rem;
+  color: rgba(255,255,255,0.4);
+  flex: 1;
+  min-width: 0;
+  line-height: 1.4;
+}
+.fp-sub-dismiss-btn {
+  padding: 0.22rem 0.65rem;
+  border-radius: 5px;
+  border: 1px solid rgba(239,68,68,0.35);
+  background: rgba(239,68,68,0.08);
+  color: rgba(239,68,68,0.75);
+  font-size: 0.65rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.fp-sub-dismiss-btn:hover {
+  background: rgba(239,68,68,0.16);
+  color: #ef4444;
+}
 .fp-sub-empty {
   font-size: 0.78rem; color: rgba(255,255,255,0.32);
   text-align: center; margin-top: 2.5rem;
@@ -3479,6 +3609,7 @@ select.fragment-input option {
 .nebula-core[data-nb-theme="bianco"] .fp-field-input:focus { border-color: rgba(180,83,9,0.4); }
 .nebula-core[data-nb-theme="bianco"] .fp-field-label     { color: rgba(18,8,32,0.3); }
 .nebula-core[data-nb-theme="bianco"] .fp-submit-btn      { background: rgba(180,83,9,0.08); border-color: rgba(180,83,9,0.25); color: #b45309; }
+.nebula-core[data-nb-theme="bianco"] .fp-submit-btn--sticky { background: rgba(180,83,9,0.1); backdrop-filter: blur(8px); }
 .nebula-core[data-nb-theme="bianco"] .fp-dropzone        { border-color: rgba(180,83,9,0.2); background: rgba(180,83,9,0.02); }
 .nebula-core[data-nb-theme="bianco"] .fp-drop-label      { color: rgba(18,8,32,0.6); }
 .nebula-core[data-nb-theme="bianco"] .fp-month-row       { background: rgba(0,0,0,0.02); }

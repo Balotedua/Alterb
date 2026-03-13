@@ -16,6 +16,7 @@ import {
 import { FINANCE_DEFAULT_CATS } from '@/utils/constants';
 import { FinanceCategoryContent } from '@/modules/finance/FinanceCategoryFragment';
 import { GroupedBarChart, MONTHS_IT } from '@/modules/finance/FinanceChartFragment';
+import { FinancePatrimonioTab } from '@/modules/finance/FinancePatrimonioTab';
 import { formatCurrency } from '@/utils/formatters';
 import type { TransactionType, Transaction } from '@/types';
 
@@ -31,12 +32,13 @@ function fmtMonth(iso: string) {
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
-type TabId = 'panoramica' | 'budget' | 'abbonamenti' | 'aggiungi' | 'importa' | 'categorie' | 'analisi';
+type TabId = 'panoramica' | 'budget' | 'abbonamenti' | 'aggiungi' | 'importa' | 'categorie' | 'analisi' | 'patrimonio';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'panoramica',  label: 'Panoramica'  },
+  { id: 'patrimonio',  label: 'Patrimonio'  },
   { id: 'budget',      label: 'Budget'      },
-  { id: 'abbonamenti', label: 'Abbonamenti' },
+  { id: 'abbonamenti', label: 'Ricorrenti' },
   { id: 'aggiungi',    label: 'Aggiungi'    },
   { id: 'importa',     label: 'Importa'     },
   { id: 'categorie',   label: 'Categorie'   },
@@ -81,6 +83,9 @@ function PanoramaTab() {
 
   return (
     <div className="fp-section">
+      {/* Month title */}
+      <p className="fp-month-title">Entrate e uscite mensili</p>
+
       {/* KPI row */}
       <div className="fp-kpi-row">
         <div className="fp-kpi-chip fp-kpi-chip--green">
@@ -442,7 +447,9 @@ function ImportaTab() {
   const { mutate: bulkAdd, isPending } = useBulkAddTransactions();
   const { data: existing = [] } = useTransactions();
 
-  const existingKeys = new Set(existing.map((t) => `${t.date}|${t.description.toLowerCase().trim()}`));
+  const impDupKey = (date: string, amount: number, desc: string) =>
+    `${date.slice(0,10)}|${Math.floor(amount)}|${desc.toLowerCase().replace(/\s+/g, '')}`;
+  const existingKeys = new Set(existing.map((t) => impDupKey(t.date, t.amount, t.description)));
 
   function applyParsed(h: string[], rows: Record<string,string>[], name: string, fmt: FileFormat) {
     if (!h.length) { setErr('File vuoto o formato non riconosciuto.'); setLoading(false); return; }
@@ -491,9 +498,9 @@ function ImportaTab() {
   function doImport() {
     if (!valid.length) return;
     const inputs = valid.map((r) => ({ amount: r.amount, type: r.type, category: 'other' as const, description: r.description, date: r.date }));
-    const dups = inputs.filter((i) => existingKeys.has(`${i.date}|${i.description.toLowerCase().trim()}`));
-    const toAdd = dups.length > 0 ? inputs.filter((i) => !existingKeys.has(`${i.date}|${i.description.toLowerCase().trim()}`)) : inputs;
-    if (!toAdd.length && dups.length > 0) { setErr(`Tutti i ${dups.length} movimenti sono già presenti.`); return; }
+    const toAdd = inputs.filter((i) => !existingKeys.has(impDupKey(i.date, i.amount, i.description)));
+    const dupCount = inputs.length - toAdd.length;
+    if (!toAdd.length && dupCount > 0) { setErr(`Tutti i ${dupCount} movimenti sono già presenti.`); return; }
     bulkAdd(toAdd, {
       onSuccess: () => { setImported(toAdd.length); setHeaders([]); setRawRows([]); setFileName(''); },
       onError: () => setErr('Errore importazione. Riprova.'),
@@ -543,45 +550,49 @@ function ImportaTab() {
             <button className="fp-link-btn" onClick={reset}>✕</button>
           </div>
 
-          {/* Column mapping */}
-          <div className="fp-col-map">
-            {(['colDate','colAmt','colDesc'] as const).map((key) => {
-              const labels: Record<string,string> = { colDate:'Data', colAmt:'Importo', colDesc:'Descrizione' };
-              const vals: Record<string,string> = { colDate, colAmt, colDesc };
-              const setters: Record<string,(v:string)=>void> = { colDate:setColDate, colAmt:setColAmt, colDesc:setColDesc };
-              return (
-                <label key={key} className="fp-col-label">
-                  {labels[key]}
-                  <select className="fp-col-select" value={vals[key]} onChange={(e) => setters[key](e.target.value)}>
-                    <option value="">—</option>
-                    {headers.map((h) => <option key={h} value={h}>{h}</option>)}
-                  </select>
-                </label>
-              );
-            })}
-          </div>
-
-          <p className="fp-import-status">
-            {valid.length > 0
-              ? <><span className="fp-ok">✓ {valid.length} importabili</span>{skipped > 0 && <span className="fp-muted"> · {skipped} saltate</span>}</>
-              : <span className="fp-warn">Nessuna riga valida — verifica le colonne</span>
-            }
-          </p>
-
-          {/* Mini preview */}
-          {parsed.slice(0,4).map((r, i) => (
-            <div key={i} className={`fp-txn-row ${r.ok ? '' : 'fp-txn-row--bad'}`}>
-              {r.ok && <span className={`fp-txn-dot ${r.type==='income'?'fp-dot--green':'fp-dot--red'}`} />}
-              <span className="fp-txn-date">{r.date||'—'}</span>
-              <span className="fp-txn-desc">{r.description}</span>
-              {r.ok && <span className={`fp-txn-amt ${r.type==='income'?'fp-amt--green':'fp-amt--red'}`}>{r.type==='income'?'+':'−'}{formatCurrency(r.amount)}</span>}
+          {/* Scrollable body: column mapping + preview */}
+          <div className="fp-import-body">
+            {/* Column mapping — horizontal scroll on mobile */}
+            <div className="fp-col-map-scroll">
+              {(['colDate','colAmt','colDesc'] as const).map((key) => {
+                const labels: Record<string,string> = { colDate:'Data', colAmt:'Importo', colDesc:'Descrizione' };
+                const vals: Record<string,string> = { colDate, colAmt, colDesc };
+                const setters: Record<string,(v:string)=>void> = { colDate:setColDate, colAmt:setColAmt, colDesc:setColDesc };
+                return (
+                  <label key={key} className="fp-col-label">
+                    {labels[key]}
+                    <select className="fp-col-select" value={vals[key]} onChange={(e) => setters[key](e.target.value)}>
+                      <option value="">—</option>
+                      {headers.map((h) => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </label>
+                );
+              })}
             </div>
-          ))}
-          {parsed.length > 4 && <p className="fp-muted" style={{fontSize:'0.68rem',textAlign:'center',marginTop:4}}>+{parsed.length-4} elementi</p>}
+
+            <p className="fp-import-status">
+              {valid.length > 0
+                ? <><span className="fp-ok">✓ {valid.length} importabili</span>{skipped > 0 && <span className="fp-muted"> · {skipped} saltate</span>}</>
+                : <span className="fp-warn">Nessuna riga valida — verifica le colonne</span>
+              }
+            </p>
+
+            {/* Mini preview */}
+            {parsed.slice(0,5).map((r, i) => (
+              <div key={i} className={`fp-txn-row ${r.ok ? '' : 'fp-txn-row--bad'}`}>
+                {r.ok && <span className={`fp-txn-dot ${r.type==='income'?'fp-dot--green':'fp-dot--red'}`} />}
+                <span className="fp-txn-date">{r.date||'—'}</span>
+                <span className="fp-txn-desc">{r.description}</span>
+                {r.ok && <span className={`fp-txn-amt ${r.type==='income'?'fp-amt--green':'fp-amt--red'}`}>{r.type==='income'?'+':'−'}{formatCurrency(r.amount)}</span>}
+              </div>
+            ))}
+            {parsed.length > 5 && <p className="fp-muted" style={{fontSize:'0.68rem',textAlign:'center',marginTop:4}}>+{parsed.length-5} elementi</p>}
+          </div>
 
           {err && <p className="fp-err">{err}</p>}
 
-          <button className="fp-submit-btn" onClick={doImport} disabled={valid.length===0||isPending}>
+          {/* Sticky import button */}
+          <button className="fp-submit-btn fp-submit-btn--sticky" onClick={doImport} disabled={valid.length===0||isPending}>
             {isPending ? 'Importazione…' : `Importa ${valid.length} moviment${valid.length===1?'o':'i'}`}
           </button>
         </>
@@ -621,7 +632,22 @@ const SUB_ICONS: [RegExp, string][] = [
   [/canone|abbonamento/i,                        '📋'],
 ];
 
-function subIcon(desc: string): string {
+const INC_ICONS: [RegExp, string][] = [
+  [/stipendio|salary|paga|busta/i, '💼'],
+  [/affitto|rent|canone/i,         '🏠'],
+  [/dividend|dividendo/i,          '📈'],
+  [/pensione|pension/i,            '👴'],
+  [/rimborso|refund/i,             '↩️'],
+  [/freelance|consulenza/i,        '💻'],
+  [/bonus/i,                       '🎁'],
+  [/cashback/i,                    '💳'],
+];
+
+function subIcon(desc: string, type: 'income' | 'expense'): string {
+  if (type === 'income') {
+    for (const [re, icon] of INC_ICONS) if (re.test(desc)) return icon;
+    return '↑';
+  }
   for (const [re, icon] of SUB_ICONS) if (re.test(desc)) return icon;
   return '↻';
 }
@@ -634,10 +660,10 @@ function amtTolerance(median: number): number {
   return Math.min(median * 0.03, 5.00);
 }
 
-function detectSubscriptions(txns: Transaction[]): Subscription[] {
+function detectSubscriptions(txns: Transaction[], type: 'income' | 'expense'): Subscription[] {
   const now    = new Date();
   const cutoff = new Date(now.getFullYear(), now.getMonth() - 8, 1).getTime();
-  const recent = txns.filter(t => t.type === 'expense' && new Date(t.date).getTime() >= cutoff);
+  const recent = txns.filter(t => t.type === type && new Date(t.date).getTime() >= cutoff);
 
   // Raggruppa per descrizione normalizzata
   const byDesc = new Map<string, Transaction[]>();
@@ -692,7 +718,7 @@ function detectSubscriptions(txns: Transaction[]): Subscription[] {
       t.description.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 60) === normDesc
     )?.description.trim() ?? normDesc;
 
-    subs.push({ key: normDesc, displayName, amount: avgAmount, typicalDay: medDay, months: monthKeys.length, firstSeen, icon: subIcon(normDesc) });
+    subs.push({ key: normDesc, displayName, amount: avgAmount, typicalDay: medDay, months: monthKeys.length, firstSeen, icon: subIcon(normDesc, type) });
   }
 
   return subs.sort((a, b) => b.amount - a.amount);
@@ -700,75 +726,145 @@ function detectSubscriptions(txns: Transaction[]): Subscription[] {
 
 // ── SubscriptionsTab ──────────────────────────────────────────────────────────
 
+const DISMISSED_KEY = 'alter_dismissed_recur';
+
+function SubItem({
+  sub,
+  type,
+  confirmKey,
+  setConfirmKey,
+  onDismiss,
+}: {
+  sub: Subscription;
+  type: 'income' | 'expense';
+  confirmKey: string | null;
+  setConfirmKey: (k: string | null) => void;
+  onDismiss: (k: string) => void;
+}) {
+  const isConfirming = confirmKey === sub.key;
+  const since = new Date(sub.firstSeen).toLocaleDateString('it-IT', { month: 'short', year: 'numeric' });
+
+  return (
+    <div className="fp-sub-item">
+      <div className="fp-sub-row">
+        <span className="fp-sub-icon">{sub.icon}</span>
+        <div className="fp-sub-info">
+          <span className="fp-sub-name">{sub.displayName}</span>
+          <span className="fp-sub-meta">~{sub.typicalDay} del mese · {sub.months} mesi · da {since}</span>
+        </div>
+        <div className="fp-sub-right">
+          <span className={`fp-sub-amt ${type === 'income' ? 'fp-sub-amt--inc' : ''}`}>
+            {type === 'income' ? '+' : ''}{formatCurrency(sub.amount)}<span className="fp-sub-freq">/mese</span>
+          </span>
+          <button
+            className={`fp-sub-btn ${isConfirming ? 'fp-sub-btn--open' : ''}`}
+            onClick={() => setConfirmKey(isConfirming ? null : sub.key)}
+          >
+            {isConfirming ? '✕' : '···'}
+          </button>
+        </div>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {isConfirming && (
+          <motion.div
+            className="fp-sub-dismiss-panel"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] as [number,number,number,number] }}
+            style={{ overflow: 'hidden' }}
+          >
+            <span className="fp-sub-dismiss-q">
+              Non vuoi più tracciare {type === 'income' ? 'questa entrata' : 'questa uscita'} mensile?
+            </span>
+            <button className="fp-sub-dismiss-btn" onClick={() => onDismiss(sub.key)}>
+              Sì, nascondi
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 function SubscriptionsTab() {
   const { data: txns = [] } = useTransactions();
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [confirmKey, setConfirmKey] = useState<string | null>(null);
+  const [dismissed, setDismissed]   = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(DISMISSED_KEY) ?? '[]') as string[]); }
+    catch { return new Set<string>(); }
+  });
 
-  const subs         = useMemo(() => detectSubscriptions(txns), [txns]);
-  const totalMonthly = subs.reduce((s, sub) => s + sub.amount, 0);
+  const expSubs = useMemo(
+    () => detectSubscriptions(txns, 'expense').filter(s => !dismissed.has(s.key)),
+    [txns, dismissed],
+  );
+  const incSubs = useMemo(
+    () => detectSubscriptions(txns, 'income').filter(s => !dismissed.has(s.key)),
+    [txns, dismissed],
+  );
 
-  if (subs.length === 0) return (
+  const totalExp = expSubs.reduce((s, sub) => s + sub.amount, 0);
+  const totalInc = incSubs.reduce((s, sub) => s + sub.amount, 0);
+
+  const dismiss = (key: string) => {
+    const next = new Set(dismissed).add(key);
+    setDismissed(next);
+    localStorage.setItem(DISMISSED_KEY, JSON.stringify([...next]));
+    setConfirmKey(null);
+  };
+
+  if (expSubs.length === 0 && incSubs.length === 0) return (
     <div className="fp-section">
-      <p className="fp-sub-empty">Nessun pagamento ricorrente rilevato.</p>
+      <p className="fp-sub-empty">Nessun movimento ricorrente rilevato.</p>
       <p className="fp-sub-empty-hint">
-        Servono almeno 3 addebiti in 3 mesi consecutivi, con importo e giorno del mese simili.
+        Servono almeno 3 movimenti in 3 mesi consecutivi con importo e giorno del mese simili.
       </p>
     </div>
   );
 
   return (
     <div className="fp-section">
-      <div className="fp-sub-header">
-        <span>{subs.length} ricorrenti</span>
-        <span className="fp-sub-sep">·</span>
-        <span>{formatCurrency(totalMonthly)}<span className="fp-sub-freq">/mese</span></span>
-        <span className="fp-sub-sep">·</span>
-        <span className="fp-sub-year">{formatCurrency(totalMonthly * 12)}/anno</span>
-      </div>
+      {/* Entrate ricorrenti */}
+      {incSubs.length > 0 && (
+        <>
+          <p className="fp-section-label">Entrate ricorrenti mensili</p>
+          <div className="fp-sub-header">
+            <span>{incSubs.length} entrat{incSubs.length === 1 ? 'a' : 'e'}</span>
+            <span className="fp-sub-sep">·</span>
+            <span className="fp-sub-amt--inc">{formatCurrency(totalInc)}<span className="fp-sub-freq">/mese</span></span>
+          </div>
+          <div className="fp-sub-list">
+            {incSubs.map(sub => (
+              <SubItem key={sub.key} sub={sub} type="income"
+                confirmKey={confirmKey} setConfirmKey={setConfirmKey} onDismiss={dismiss} />
+            ))}
+          </div>
+        </>
+      )}
 
-      <div className="fp-sub-list">
-        {subs.map((sub) => {
-          const isOpen = expanded === sub.key;
-          const since  = new Date(sub.firstSeen).toLocaleDateString('it-IT', { month: 'short', year: 'numeric' });
-
-          return (
-            <div key={sub.key} className="fp-sub-item">
-              <div className="fp-sub-row">
-                <span className="fp-sub-icon">{sub.icon}</span>
-                <div className="fp-sub-info">
-                  <span className="fp-sub-name">{sub.displayName}</span>
-                  <span className="fp-sub-meta">~{sub.typicalDay} del mese · {sub.months} mesi · da {since}</span>
-                </div>
-                <div className="fp-sub-right">
-                  <span className="fp-sub-amt">{formatCurrency(sub.amount)}<span className="fp-sub-freq">/mese</span></span>
-                  <button
-                    className={`fp-sub-btn${isOpen ? ' fp-sub-btn--open' : ''}`}
-                    onClick={() => setExpanded(isOpen ? null : sub.key)}
-                  >
-                    {isOpen ? '✕' : 'Cancella?'}
-                  </button>
-                </div>
-              </div>
-
-              <AnimatePresence initial={false}>
-                {isOpen && (
-                  <motion.div
-                    className="fp-sub-savings"
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] as [number,number,number,number] }}
-                    style={{ overflow: 'hidden' }}
-                  >
-                    <span className="fp-sub-savings-label">Se disdici risparmi</span>
-                    <strong className="fp-sub-savings-value">{formatCurrency(sub.amount * 12)} all'anno</strong>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          );
-        })}
-      </div>
+      {/* Uscite ricorrenti */}
+      {expSubs.length > 0 && (
+        <>
+          <p className="fp-section-label" style={{ marginTop: incSubs.length > 0 ? '0.85rem' : 0 }}>
+            Uscite ricorrenti mensili
+          </p>
+          <div className="fp-sub-header">
+            <span>{expSubs.length} abbonament{expSubs.length === 1 ? 'o' : 'i'}</span>
+            <span className="fp-sub-sep">·</span>
+            <span>{formatCurrency(totalExp)}<span className="fp-sub-freq">/mese</span></span>
+            <span className="fp-sub-sep">·</span>
+            <span className="fp-sub-year">{formatCurrency(totalExp * 12)}/anno</span>
+          </div>
+          <div className="fp-sub-list">
+            {expSubs.map(sub => (
+              <SubItem key={sub.key} sub={sub} type="expense"
+                confirmKey={confirmKey} setConfirmKey={setConfirmKey} onDismiss={dismiss} />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1193,46 +1289,87 @@ function AnalisiTab() {
       </div>
 
       {/* ── Previsioni prossimo mese ── */}
-      <div className="fp-pred-header">
-        <span className="fp-section-label" style={{ margin: 0 }}>
-          Previsioni · {nextMonthLabel}
-        </span>
-        {patterns.length > 0 && (() => {
-          const projInc = patterns.filter(p => p.type === 'income').reduce((s, p) => s + p.avgAmount, 0);
-          const projExp = patterns.filter(p => p.type === 'expense').reduce((s, p) => s + p.avgAmount, 0);
-          const projBal = projInc - projExp;
-          return (
-            <span className="fp-pred-total" style={{ color: projBal >= 0 ? '#34d399' : '#f87171' }}>
-              {projBal >= 0 ? '+' : ''}{formatCurrency(projBal)}
-            </span>
-          );
-        })()}
-      </div>
+      <p className="fp-section-label">Previsioni · {nextMonthLabel}</p>
 
       {patterns.length === 0 ? (
         <p className="fp-pred-empty">
           Dati insufficienti. Servono almeno 3 mesi di movimenti per rilevare ricorrenze.
         </p>
-      ) : (
-        <div className="fp-pred-list">
-          {patterns.map((p, i) => (
-            <div key={i} className="fp-pred-row">
-              <span
-                className="fp-pred-dot"
-                style={{ background: p.type === 'income' ? '#34d399' : '#f87171' }}
-              />
-              <div className="fp-pred-info">
-                <span className="fp-pred-desc">{p.displayName}</span>
-                <span className="fp-pred-day">~{p.typicalDay} del mese</span>
+      ) : (() => {
+        const incPatterns = patterns.filter(p => p.type === 'income');
+        const expPatterns = patterns.filter(p => p.type === 'expense');
+        const projInc     = incPatterns.reduce((s, p) => s + p.avgAmount, 0);
+        const projExp     = expPatterns.reduce((s, p) => s + p.avgAmount, 0);
+        const projBal     = projInc - projExp;
+        // Totali ponderati per probabilità
+        const weightedInc = incPatterns.reduce((s, p) => s + p.avgAmount * (p.confidence / 100), 0);
+        const weightedExp = expPatterns.reduce((s, p) => s + p.avgAmount * (p.confidence / 100), 0);
+        const weightedBal = weightedInc - weightedExp;
+
+        return (
+          <>
+            {/* KPI totali stimati */}
+            <div className="fp-kpi-row">
+              <div className="fp-kpi-chip fp-kpi-chip--green">
+                <span className="fp-kpi-label">Entrate stimate</span>
+                <span className="fp-kpi-value">{formatCurrency(projInc)}</span>
               </div>
-              <span className={p.type === 'income' ? 'fp-amt--green' : 'fp-amt--red'}>
-                {p.type === 'income' ? '+' : '−'}{formatCurrency(p.avgAmount)}
-              </span>
-              <span className="fp-pred-conf">{p.confidence}%</span>
+              <div className="fp-kpi-chip fp-kpi-chip--red">
+                <span className="fp-kpi-label">Uscite stimate</span>
+                <span className="fp-kpi-value">{formatCurrency(projExp)}</span>
+              </div>
+              <div className={`fp-kpi-chip ${projBal >= 0 ? 'fp-kpi-chip--green' : 'fp-kpi-chip--red'}`}>
+                <span className="fp-kpi-label">Saldo previsto</span>
+                <span className="fp-kpi-value">{projBal >= 0 ? '+' : ''}{formatCurrency(projBal)}</span>
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+
+            {/* Totali ponderati per probabilità */}
+            <div className="fp-weighted-row">
+              <span className="fp-weighted-label">Atteso (prob. ponderata)</span>
+              <span className="fp-weighted-vals">
+                <span style={{ color: '#34d399' }}>+{formatCurrency(weightedInc)}</span>
+                <span style={{ color: 'var(--nebula-text-muted, rgba(255,255,255,0.3))' }}>/</span>
+                <span style={{ color: '#f87171' }}>−{formatCurrency(weightedExp)}</span>
+                <span style={{ color: weightedBal >= 0 ? '#34d399' : '#f87171', fontWeight: 600 }}>
+                  = {weightedBal >= 0 ? '+' : ''}{formatCurrency(weightedBal)}
+                </span>
+              </span>
+            </div>
+
+            {/* Lista voci */}
+            <div className="fp-pred-list">
+              {patterns.map((p, i) => (
+                <div key={i} className="fp-pred-row">
+                  <span
+                    className="fp-pred-dot"
+                    style={{ background: p.type === 'income' ? '#34d399' : '#f87171' }}
+                  />
+                  <div className="fp-pred-info">
+                    <span className="fp-pred-desc">{p.displayName}</span>
+                    <span className="fp-pred-day">~{p.typicalDay} del mese</span>
+                  </div>
+                  <span className={p.type === 'income' ? 'fp-amt--green' : 'fp-amt--red'}>
+                    {p.type === 'income' ? '+' : '−'}{formatCurrency(p.avgAmount)}
+                  </span>
+                  <div className="fp-pred-conf-wrap">
+                    <span className="fp-pred-conf">{p.confidence}%</span>
+                    <div className="fp-pred-conf-bar">
+                      <div
+                        className="fp-pred-conf-fill"
+                        style={{
+                          width: `${p.confidence}%`,
+                          background: p.confidence >= 80 ? '#34d399' : p.confidence >= 65 ? '#fbbf24' : '#f87171',
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }
@@ -1260,13 +1397,14 @@ export function FinancePanoramaFragment({ params }: { params: Record<string, unk
       {/* Content */}
       <AnimatePresence mode="wait">
         <motion.div key={tab} {...TAB_ANIM}>
-          {tab === 'panoramica' && <PanoramaTab />}
-          {tab === 'budget'       && <BudgetTab />}
-          {tab === 'abbonamenti'  && <SubscriptionsTab />}
-          {tab === 'aggiungi'     && <AggiungiTab />}
-          {tab === 'importa'    && <ImportaTab />}
-          {tab === 'categorie'  && <div className="fp-section"><FinanceCategoryContent /></div>}
-          {tab === 'analisi'    && <AnalisiTab />}
+          {tab === 'panoramica'  && <PanoramaTab />}
+          {tab === 'patrimonio'  && <FinancePatrimonioTab />}
+          {tab === 'budget'      && <BudgetTab />}
+          {tab === 'abbonamenti' && <SubscriptionsTab />}
+          {tab === 'aggiungi'    && <AggiungiTab />}
+          {tab === 'importa'     && <ImportaTab />}
+          {tab === 'categorie'   && <div className="fp-section"><FinanceCategoryContent /></div>}
+          {tab === 'analisi'     && <AnalisiTab />}
         </motion.div>
       </AnimatePresence>
     </NebulaCard>

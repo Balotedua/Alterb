@@ -104,9 +104,9 @@ function parseCsv(text: string): Omit<ParsedRow, '_isDup'>[] {
   return rows;
 }
 
-// ── Duplicate key: data + importo + descrizione ────────────────────────────────
+// ── Duplicate key: data + importo (senza centesimi) + descrizione (senza spazi/maiuscole) ──
 function dupKey(date: string, amount: number, description: string): string {
-  return `${date.slice(0,10)}|${amount.toFixed(2)}|${description.trim().toLowerCase()}`;
+  return `${date.slice(0,10)}|${Math.floor(amount)}|${description.toLowerCase().replace(/\s+/g, '')}`;
 }
 
 // ── Fragment ───────────────────────────────────────────────────────────────────
@@ -246,6 +246,7 @@ export function FinanceCsvFragment(_: Props) {
             </div>
           )}
 
+          <div className="csv-preview-scroll">
           <div className="fragment-list">
             {rows.slice(0, 60).map((r, i) => (
               <div
@@ -279,6 +280,7 @@ export function FinanceCsvFragment(_: Props) {
                 ...e altre {rows.length - 60} righe
               </p>
             )}
+          </div>
           </div>
         </>
       )}

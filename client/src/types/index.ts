@@ -27,6 +27,36 @@ export interface TransactionInput {
   date: string;
 }
 
+// ─── Patrimonio ───────────────────────────────────────────────────────────────
+export type PatrimonioAssetType =
+  | 'checking'
+  | 'savings'
+  | 'investments'
+  | 'crypto'
+  | 'cash'
+  | 'real_estate'
+  | 'other';
+
+export interface PatrimonioAsset {
+  id: string;
+  user_id: string;
+  label: string;
+  asset_type: PatrimonioAssetType;
+  amount: number;
+  icon?: string;
+  color?: string;
+  updated_at: string;
+  created_at: string;
+}
+
+export interface PatrimonioAssetInput {
+  label: string;
+  asset_type: PatrimonioAssetType;
+  amount: number;
+  icon?: string;
+  color?: string;
+}
+
 // ─── Psychology ───────────────────────────────────────────────────────────────
 export type MoodLevel = 1 | 2 | 3 | 4 | 5;
 

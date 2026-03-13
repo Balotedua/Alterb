@@ -478,14 +478,18 @@ export function FinanceCsvImport() {
   const skipped = parsed.length - valid.length;
 
   // ── Duplicate detection ───────────────────────────────────────────────────
+  // Doppione = stessa data + stesso importo (senza centesimi) + stessa descrizione (senza spazi/maiuscole)
+
+  const csvDupKey = (date: string, amount: number, desc: string) =>
+    `${date.slice(0, 10)}|${Math.floor(amount)}|${desc.toLowerCase().replace(/\s+/g, '')}`;
 
   const existingKeys = new Set(
-    existingTxns.map((t) => `${t.date}|${t.description.toLowerCase().trim()}`),
+    existingTxns.map((t) => csvDupKey(t.date, t.amount, t.description)),
   );
 
   const findDuplicates = (inputs: TransactionInput[]): DuplicateInfo[] =>
     inputs
-      .filter((i) => existingKeys.has(`${i.date}|${i.description.toLowerCase().trim()}`))
+      .filter((i) => existingKeys.has(csvDupKey(i.date, i.amount, i.description)))
       .map((i) => ({ date: i.date, description: i.description, amount: i.amount, type: i.type }));
 
   // ── Import ───────────────────────────────────────────────────────────────
@@ -525,7 +529,7 @@ export function FinanceCsvImport() {
 
   const handleImportSkipDups = () => {
     const filtered = pendingInputs.filter(
-      (i) => !existingKeys.has(`${i.date}|${i.description.toLowerCase().trim()}`),
+      (i) => !existingKeys.has(csvDupKey(i.date, i.amount, i.description)),
     );
     void doImport(filtered);
   };

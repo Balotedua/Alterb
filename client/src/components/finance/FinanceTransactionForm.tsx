@@ -27,13 +27,13 @@ export function FinanceTransactionForm() {
     if (!description.trim()) { setError('Inserisci una descrizione'); return; }
     if (!category) { setError('Seleziona una categoria'); return; }
 
-    // Controllo doppioni: stessa data + stesso importo + stessa descrizione
-    const descNorm = description.trim().toLowerCase();
+    // Controllo doppioni: stessa data + stesso importo (senza centesimi) + stessa descrizione (senza spazi/maiuscole)
+    const descNorm = description.trim().toLowerCase().replace(/\s+/g, '');
     const duplicate = (txns ?? []).find(
       (t) =>
         t.date.slice(0, 10) === date &&
-        Math.abs(t.amount - amt) < 0.001 &&
-        t.description.trim().toLowerCase() === descNorm
+        Math.floor(t.amount) === Math.floor(amt) &&
+        t.description.trim().toLowerCase().replace(/\s+/g, '') === descNorm
     );
     if (duplicate) {
       setError(`Duplicato: esiste già "${duplicate.description}" del ${duplicate.date.slice(0, 10)} per €${duplicate.amount.toFixed(2)}.`);
