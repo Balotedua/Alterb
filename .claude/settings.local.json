@@ -30,7 +30,12 @@
       "Bash(python \"C:\\\\Users\\\\danie\\\\Desktop\\\\vercelesercizio\\\\_append_admin2.py\" && rm \"C:\\\\Users\\\\danie\\\\Desktop\\\\vercelesercizio\\\\_append_admin2.py\")",
       "Bash(find \"C:/Users/danie/Desktop/vercelesercizio/client/src/modules\" -name \"*.css\" 2>/dev/null | head -10)",
       "Bash(find \"C:/Users/danie/Desktop/vercelesercizio/client/src\" -type f -name \"*Page*.tsx\" -o -type f -name \"*page*.tsx\" 2>/dev/null | head -30)",
-      "Bash(find \"C:/Users/danie/Desktop/vercelesercizio/client/src\" -name \"*finance*.css\" -o -name \"*panorama*.css\" 2>/dev/null | head -10)"
+      "Bash(find \"C:/Users/danie/Desktop/vercelesercizio/client/src\" -name \"*finance*.css\" -o -name \"*panorama*.css\" 2>/dev/null | head -10)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(echo:*)",
+      "Read(//mnt/c/Users/danie/**)",
+      "Read(//c/Users/danie/Desktop//**)"
     ]
   }
 }

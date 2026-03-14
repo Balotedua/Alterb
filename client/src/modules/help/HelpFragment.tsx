@@ -39,6 +39,15 @@ const SECTIONS: Section[] = [
     mainFragmentParams: {},
   },
   {
+    id: 'workout',
+    label: 'Workout',
+    icon: '💪',
+    glow: '#a78bfa',
+    available: true,
+    mainFragment: 'HealthWorkout',
+    mainFragmentParams: {},
+  },
+  {
     id: 'psych',
     label: 'Mente',
     icon: '🧠',

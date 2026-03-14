@@ -270,6 +270,31 @@ export function parseLocalIntent(raw: string, context?: NebulaContext | null): L
 
   const isHealthSteps = has(t, /\b(passi|camminat[oa]|percorso|steps)\b/) && isHealth;
 
+  const isHealthPR       = has(t, /\b(pr|personal record|record personale|massimal[ei]|1rm|one rep max|panca piana|squat|stacco|wall of fame|progressione|forza massimale)\b/);
+  const isHealthTraining = has(t, /\b(training|allenament[oi]|muscol[io]|silhouette|log sessione|big three|corpo|palestra|gym|workout)\b/) || (has(t, /\b(forza|squat|panca|stacco)\b/) && !isHealthPR);
+
+  if (isHealthPR && !isHealthTraining) {
+    return {
+      type: 'VISUAL', module: 'HEALTH', intent: 'HEALTH',
+      fragment: 'HealthWorkout',
+      params: { tab: 'pr' },
+      intensity: 0.55,
+      message: 'PR Matrix — i tuoi record personali e la progressione della forza.',
+    };
+  }
+
+  if (isHealthTraining || isHealthPR) {
+    return {
+      type: 'VISUAL', module: 'HEALTH', intent: 'HEALTH',
+      fragment: 'HealthWorkout',
+      params: { tab: isHealthPR ? 'pr' : 'silhouette' },
+      intensity: 0.55,
+      message: isHealthPR
+        ? 'PR Matrix — i tuoi record personali e la progressione della forza.'
+        : 'Silhouette interattiva — clicca un muscolo per il dettaglio.',
+    };
+  }
+
   if (isHealthSetup) {
     return {
       type: 'VISUAL', module: 'HEALTH', intent: 'HEALTH',

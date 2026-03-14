@@ -37,9 +37,12 @@ Per FINANCE:
   - "FinanceAnalytics" → grafici analisi: 7 giorni, giorno della settimana, 6 mesi
 
 Per HEALTH:
-  - "HealthOverview" → sonno + peso + acqua (default)
-  - "HealthSleep"    → storico sonno + grafico
-  - "HealthWater"    → idratazione oggi con progress bar
+  - "HealthOverview"  → sonno + peso + acqua (default)
+  - "HealthSleep"     → storico sonno + grafico
+  - "HealthWater"     → idratazione oggi con progress bar
+  - "HealthWorkout"   → pannello combinato: tab 1 Silhouette (muscoli, Big Three, quick log, calendario) · tab 2 PR Matrix (record personali, 1RM, progressione, wall of fame). Params opzionali: { "tab": "silhouette" | "pr" }. Usa per: allenamento, training, muscoli, palestra, silhouette, PR, record, massimale, 1RM, panca, squat, stacco, progressione, forza
+  - "HealthTraining"  → (legacy) silhouette interattiva muscoli — preferisci HealthWorkout
+  - "HealthPR"        → (legacy) PR Matrix — preferisci HealthWorkout
 
 Per PSYCH:
   - "PsychOverview"  → umore attuale + media N giorni (default)

@@ -16,6 +16,9 @@ import { HealthWaterFragment }     from './health/HealthWaterFragment';
 import { HealthSetupFragment }     from './health/HealthSetupFragment';
 import { HealthDailyFragment }     from './health/HealthDailyFragment';
 import { HealthGoalsFragment }     from './health/HealthGoalsFragment';
+import { HealthTrainingFragment }  from './health/HealthTrainingFragment';
+import { HealthPRFragment }        from './health/HealthPRFragment';
+import { HealthWorkoutFragment }   from './health/HealthWorkoutFragment';
 import { MoodHistoryFragment }     from './psychology/MoodHistoryFragment';
 import { PsychOverviewFragment }   from './psychology/PsychOverviewFragment';
 import { SettingsFragment }        from './settings/SettingsFragment';
@@ -42,12 +45,15 @@ export const FRAGMENT_REGISTRY: Record<string, FragmentComponent> = {
   FinancePanorama:   FinancePanoramaFragment,
 
   // Health
-  HealthOverview: HealthOverviewFragment,
-  HealthSleep:    HealthSleepFragment,
-  HealthWater:    HealthWaterFragment,
-  HealthSetup:    HealthSetupFragment,
-  HealthDaily:    HealthDailyFragment,
-  HealthGoals:    HealthGoalsFragment,
+  HealthOverview:  HealthOverviewFragment,
+  HealthSleep:     HealthSleepFragment,
+  HealthWater:     HealthWaterFragment,
+  HealthSetup:     HealthSetupFragment,
+  HealthDaily:     HealthDailyFragment,
+  HealthGoals:     HealthGoalsFragment,
+  HealthTraining:  HealthTrainingFragment,
+  HealthPR:        HealthPRFragment,
+  HealthWorkout:   HealthWorkoutFragment,
 
   // Psychology
   PsychOverview:  PsychOverviewFragment,
