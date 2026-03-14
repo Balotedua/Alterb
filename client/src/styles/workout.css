@@ -377,6 +377,11 @@
   padding: 16px 20px;
   border-bottom: 0.5px solid rgba(255, 255, 255, 0.03);
   align-items: center;
+  transition: background-color 0.2s ease;
+}
+
+.stats-row:hover {
+  background-color: rgba(255, 255, 255, 0.03);
 }
 
 .stats-row.header {
@@ -421,6 +426,7 @@
   border-radius: 2px;
   background: rgba(0, 255, 0, 0.1);
   color: rgba(0, 255, 0, 0.9);
+  transition: all 0.3s ease;
 }
 
 .stat-trend.negative {
@@ -453,4 +459,89 @@
   color: rgba(255, 255, 255, 0.4);
   font-family: monospace;
   letter-spacing: 0.05em;
+}
+
+/* MIGLIORAMENTI USABILITÀ */
+.exercise-row-main {
+  transition: background-color 0.2s ease;
+}
+
+.exercise-row-main:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.muscle-point {
+  transition: all 0.3s ease;
+}
+
+.muscle-point:hover {
+  transform: scale(1.2);
+}
+
+.progress-line {
+  transition: stroke-width 0.3s ease;
+}
+
+.progress-line:hover {
+  stroke-width: 3;
+}
+
+/* SCROLLBAR PERSONALIZZATA */
+.exercise-list::-webkit-scrollbar,
+.stats-table::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.exercise-list::-webkit-scrollbar-track,
+.stats-table::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 3px;
+}
+
+.exercise-list::-webkit-scrollbar-thumb,
+.stats-table::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 255, 0.3);
+  border-radius: 3px;
+}
+
+.exercise-list::-webkit-scrollbar-thumb:hover,
+.stats-table::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 255, 0.5);
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  .overview-card {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  
+  .exercise-header-row,
+  .exercise-row-main,
+  .stats-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  
+  .ex-col-name,
+  .ex-col-muscle,
+  .ex-col-data,
+  .stat-col-exercise,
+  .stat-col-weight,
+  .stat-col-date,
+  .stat-col-trend {
+    font-size: 0.75rem;
+  }
+  
+  .workout-tabs {
+    flex-wrap: wrap;
+  }
+  
+  .workout-tabs [role="tab"] {
+    flex: 1;
+    min-width: 80px;
+    text-align: center;
+    padding: 8px 12px;
+  }
 }
