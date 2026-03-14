@@ -1,0 +1,456 @@
+/* WORKOUT TERMINAL STYLES */
+.workout-panel {
+  padding: 24px;
+  background: rgba(10, 10, 20, 0.85);
+  backdrop-filter: blur(12px);
+  border: 0.5px solid rgba(255, 255, 255, 0.05);
+  border-radius: 0;
+  min-height: 100vh;
+  font-family: 'Segoe UI', monospace;
+}
+
+.workout-title {
+  font-size: 1.2rem;
+  margin-bottom: 28px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 300;
+  text-align: center;
+}
+
+/* TABS */
+.workout-tabs {
+  display: flex;
+  gap: 1px;
+  margin-bottom: 32px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 2px;
+  padding: 2px;
+  backdrop-filter: blur(8px);
+  border: 0.5px solid rgba(255, 255, 255, 0.05);
+}
+
+.workout-tabs [role="tab"] {
+  background: transparent;
+  border: none;
+  padding: 10px 20px;
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: monospace;
+  border-radius: 0;
+  transition: all 0.2s;
+}
+
+.workout-tabs [role="tab"][data-state="active"] {
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 12px rgba(0, 200, 255, 0.15);
+}
+
+.overview-card {
+  background: rgba(15, 15, 25, 0.6);
+  backdrop-filter: blur(20px);
+  border: 0.5px solid rgba(255, 255, 255, 0.05);
+  padding: 24px;
+  border-radius: 0;
+}
+
+/* MUSCLE MAP */
+.muscle-map {
+  position: relative;
+  padding: 20px;
+}
+
+.muscle-svg {
+  width: 100%;
+  height: auto;
+}
+
+.silhouette-line {
+  stroke: rgba(0, 255, 255, 0.3);
+  stroke-width: 0.5;
+  fill: none;
+  stroke-linecap: round;
+}
+
+.muscle-point {
+  fill: rgba(255, 255, 255, 0.1);
+  stroke: rgba(0, 255, 255, 0.6);
+  stroke-width: 0.5;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.muscle-point:hover {
+  fill: rgba(0, 255, 255, 0.2);
+}
+
+.muscle-point.selected {
+  fill: rgba(0, 255, 255, 0.4);
+  stroke: rgba(0, 255, 255, 1);
+}
+
+.muscle-point.trained {
+  fill: rgba(255, 50, 50, 0.2);
+  stroke: rgba(255, 100, 100, 0.8);
+}
+
+.muscle-glow {
+  fill: none;
+  stroke: rgba(255, 0, 100, 0.4);
+  stroke-width: 2;
+  filter: blur(8px);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.muscle-label {
+  font-size: 0.6rem;
+  fill: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-family: monospace;
+}
+
+.muscle-legend {
+  margin-top: 20px;
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 0.5px solid rgba(0, 255, 255, 0.6);
+}
+
+.legend-dot.trained {
+  background: rgba(255, 50, 50, 0.2);
+  border-color: rgba(255, 100, 100, 0.8);
+  box-shadow: 0 0 10px rgba(255, 0, 100, 0.5);
+}
+
+.legend-text {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-family: monospace;
+}
+
+/* EXERCISE LIST */
+.exercise-list {
+  background: rgba(20, 20, 30, 0.5);
+  border: 0.5px solid rgba(255, 255, 255, 0.05);
+  padding: 0;
+}
+
+.exercise-header-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  padding: 16px 20px;
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.05);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.3);
+  font-family: monospace;
+}
+
+.exercise-row {
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.03);
+  transition: background 0.2s;
+}
+
+.exercise-row:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.exercise-row-main {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  padding: 18px 20px;
+  cursor: pointer;
+  align-items: center;
+}
+
+.ex-col-name, .ex-col-muscle, .ex-col-data {
+  font-size: 0.85rem;
+}
+
+.ex-name-code {
+  color: rgba(255, 255, 255, 0.9);
+  font-family: monospace;
+  letter-spacing: 0.05em;
+}
+
+.ex-muscle-tag {
+  color: rgba(0, 255, 255, 0.7);
+  font-family: monospace;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  background: rgba(0, 255, 255, 0.05);
+  border-radius: 2px;
+}
+
+.ex-data-monospace {
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.8);
+  letter-spacing: 0.05em;
+}
+
+.exercise-details {
+  overflow: hidden;
+  background: rgba(10, 10, 20, 0.8);
+  border-top: 0.5px solid rgba(255, 255, 255, 0.05);
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  padding: 24px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-label {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-family: monospace;
+}
+
+.detail-value {
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.95);
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.05em;
+}
+
+/* PROGRESS CHART */
+.progress-chart {
+  background: rgba(15, 15, 25, 0.6);
+  border: 0.5px solid rgba(255, 255, 255, 0.05);
+  padding: 24px;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.chart-title {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.chart-subtitle {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: monospace;
+}
+
+.chart-svg {
+  overflow: visible;
+}
+
+.progress-line {
+  stroke: rgba(0, 255, 255, 0.8);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 8px rgba(0, 255, 255, 0.5));
+}
+
+.progress-dot {
+  fill: rgba(0, 255, 255, 1);
+  stroke: rgba(10, 10, 20, 1);
+  stroke-width: 1;
+}
+
+.progress-label {
+  fill: rgba(0, 255, 255, 0.9);
+  font-size: 0.7rem;
+  font-family: monospace;
+  letter-spacing: 0.05em;
+}
+
+.chart-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 0.5px solid rgba(255, 255, 255, 0.05);
+}
+
+.chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.legend-line {
+  width: 30px;
+  height: 2px;
+  background: rgba(0, 255, 255, 0.8);
+}
+
+.legend-text {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-family: monospace;
+}
+
+.chart-stats {
+  display: flex;
+  gap: 20px;
+}
+
+.stat {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: monospace;
+  letter-spacing: 0.05em;
+}
+
+/* STATS PANEL */
+.stats-panel {
+  background: rgba(15, 15, 25, 0.6);
+  border: 0.5px solid rgba(255, 255, 255, 0.05);
+  padding: 24px;
+}
+
+.stats-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.stats-title {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.stats-subtitle {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: monospace;
+}
+
+.stats-table {
+  border: 0.5px solid rgba(255, 255, 255, 0.05);
+}
+
+.stats-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  padding: 16px 20px;
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.03);
+  align-items: center;
+}
+
+.stats-row.header {
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.3);
+  font-family: monospace;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.stat-col-exercise,
+.stat-col-weight,
+.stat-col-date,
+.stat-col-trend {
+  font-size: 0.85rem;
+}
+
+.stat-exercise-code {
+  color: rgba(255, 255, 255, 0.9);
+  font-family: monospace;
+  letter-spacing: 0.05em;
+}
+
+.stat-weight-monospace,
+.stat-date-monospace {
+  font-family: 'Courier New', monospace;
+  color: rgba(255, 255, 255, 0.8);
+  letter-spacing: 0.05em;
+}
+
+.stat-unit {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.7rem;
+  margin-left: 2px;
+}
+
+.stat-trend {
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  padding: 2px 8px;
+  border-radius: 2px;
+  background: rgba(0, 255, 0, 0.1);
+  color: rgba(0, 255, 0, 0.9);
+}
+
+.stat-trend.negative {
+  background: rgba(255, 0, 0, 0.1);
+  color: rgba(255, 0, 0, 0.9);
+}
+
+.stats-footer {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 0.5px solid rgba(255, 255, 255, 0.05);
+}
+
+.stats-note {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.note-label {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-family: monospace;
+}
+
+.note-text {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: monospace;
+  letter-spacing: 0.05em;
+}
