@@ -30,6 +30,7 @@ import { BugReportFragment }       from './bug/BugReportFragment';
 import { AdminFragment }           from './admin/AdminFragment';
 import { RoutineFragment }                from './routine/RoutineFragment';
 import { ConsciousnessInboxFragment }    from './consciousness/ConsciousnessInboxFragment';
+import { HomeFragment }                  from './home/HomeFragment';
 
 type FragmentComponent = ComponentType<{ params: Record<string, unknown> }>;
 
@@ -82,6 +83,9 @@ export const FRAGMENT_REGISTRY: Record<string, FragmentComponent> = {
 
   // Consciousness Inbox
   ConsciousnessInbox: ConsciousnessInboxFragment,
+
+  // Home
+  Home: HomeFragment,
 };
 
 export type FragmentName = keyof typeof FRAGMENT_REGISTRY;

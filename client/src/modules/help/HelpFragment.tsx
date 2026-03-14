@@ -20,6 +20,15 @@ interface Section {
 
 const SECTIONS: Section[] = [
   {
+    id: 'home',
+    label: 'Home',
+    icon: '🏠',
+    glow: '#818cf8',
+    available: true,
+    mainFragment: 'Home',
+    mainFragmentParams: { tab: 'dashboard' },
+  },
+  {
     id: 'finance',
     label: 'Finanze',
     icon: '💰',
