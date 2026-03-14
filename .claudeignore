@@ -1,0 +1,31 @@
+# Build & Dependencies
+node_modules/
+client/dist/
+*.tsbuildinfo
+
+# Assets (Token Drainers)
+**/*.svg
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.gif
+**/*.ico
+**/*.css
+**/*.scss
+
+# Locks & Config (Non-essential)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.claudecode.json
+vercel.json
+eslint.config.js
+
+# Documentation (Use only CLAUDE.md)
+*.md
+!CLAUDE.md
+
+# Logs & OS
+*.log
+.DS_Store
+.env*

@@ -9,6 +9,7 @@ CREATE TABLE transactions (
     type TEXT NOT NULL CHECK (type IN ('income', 'expense')),
     category TEXT NOT NULL,
     description TEXT NOT NULL,
+    notes TEXT,
     date DATE NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -57,3 +58,9 @@ CREATE POLICY "Users can update their own transactions"
 CREATE POLICY "Users can delete their own transactions"
     ON transactions FOR DELETE
     USING (auth.uid() = user_id);
+
+-- Migration: aggiungi campo hidden_from_charts (esegui solo se la colonna non esiste già)
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS hidden_from_charts BOOLEAN DEFAULT FALSE;
+
+-- Migration: escludi categoria intera dai grafici
+ALTER TABLE finance_categories ADD COLUMN IF NOT EXISTS hidden_from_charts BOOLEAN DEFAULT FALSE;

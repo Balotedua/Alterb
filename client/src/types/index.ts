@@ -15,8 +15,10 @@ export interface Transaction {
   type: TransactionType;
   category: string;
   description: string;
+  notes?: string;
   date: string; // ISO string
   created_at: string;
+  hidden_from_charts?: boolean;
 }
 
 export interface TransactionInput {
@@ -24,6 +26,7 @@ export interface TransactionInput {
   type: TransactionType;
   category: string;
   description: string;
+  notes?: string;
   date: string;
 }
 
@@ -55,6 +58,30 @@ export interface PatrimonioAssetInput {
   amount: number;
   icon?: string;
   color?: string;
+}
+
+// ─── Prestiti ─────────────────────────────────────────────────────────────────
+export type PrestitoTipo = 'dato' | 'ricevuto';
+
+export interface Prestito {
+  id: string;
+  user_id: string;
+  tipo: PrestitoTipo;
+  persona: string;
+  importo: number;
+  data: string;
+  note?: string;
+  saldato: boolean;
+  created_at: string;
+}
+
+export interface PrestitoInput {
+  tipo: PrestitoTipo;
+  persona: string;
+  importo: number;
+  data: string;
+  note?: string;
+  saldato?: boolean;
 }
 
 // ─── Psychology ───────────────────────────────────────────────────────────────
@@ -163,6 +190,7 @@ export interface CategoryConfig {
   label: string;
   icon: string;
   color: string;
+  hidden_from_charts?: boolean;
 }
 
 export interface FinanceBudget {

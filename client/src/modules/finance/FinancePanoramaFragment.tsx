@@ -1,11 +1,13 @@
 import { useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, TrendingUp, TrendingDown, Upload, RefreshCw } from 'lucide-react';
+import { Trash2, TrendingUp, TrendingDown, Upload, RefreshCw, Search, ChevronDown, Check, X, EyeOff, Eye } from 'lucide-react';
 import { NebulaCard } from '@/components/ui/nebula/NebulaCard';
 import {
   useTransactions,
+  useVisibleTransactions,
   useMonthlyStats,
   useAddTransaction,
+  useUpdateTransaction,
   useDeleteTransaction,
   useBulkAddTransactions,
   useFinanceBudgets,
@@ -16,7 +18,9 @@ import {
 import { FINANCE_DEFAULT_CATS } from '@/utils/constants';
 import { FinanceCategoryContent } from '@/modules/finance/FinanceCategoryFragment';
 import { GroupedBarChart, MONTHS_IT } from '@/modules/finance/FinanceChartFragment';
-import { FinancePatrimonioTab } from '@/modules/finance/FinancePatrimonioTab';
+import { FinancePatrimonioContent } from '@/modules/finance/FinancePatrimonioTab';
+import { FinancePrestitiTab } from '@/modules/finance/FinancePrestitiTab';
+import { FinanceDeleteTabContent } from '@/modules/finance/FinanceDeleteTabFragment';
 import { formatCurrency } from '@/utils/formatters';
 import type { TransactionType, Transaction } from '@/types';
 
@@ -32,17 +36,14 @@ function fmtMonth(iso: string) {
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
-type TabId = 'panoramica' | 'budget' | 'abbonamenti' | 'aggiungi' | 'importa' | 'categorie' | 'analisi' | 'patrimonio';
+type TabId = 'panoramica' | 'pianificazione' | 'aggiungi' | 'elimina' | 'categorie';
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'panoramica',  label: 'Panoramica'  },
-  { id: 'patrimonio',  label: 'Patrimonio'  },
-  { id: 'budget',      label: 'Budget'      },
-  { id: 'abbonamenti', label: 'Ricorrenti' },
-  { id: 'aggiungi',    label: 'Aggiungi'    },
-  { id: 'importa',     label: 'Importa'     },
-  { id: 'categorie',   label: 'Categorie'   },
-  { id: 'analisi',     label: 'Analisi'     },
+  { id: 'panoramica',    label: 'Panoramica'    },
+  { id: 'pianificazione',label: 'Pianificazione'},
+  { id: 'aggiungi',      label: 'Aggiungi'      },
+  { id: 'elimina',       label: 'Elimina'       },
+  { id: 'categorie',     label: 'Analisi'       },
 ];
 
 const TAB_ANIM = {
@@ -71,15 +72,61 @@ function PanoramaTab() {
   const { income, expenses, balance, savingsRate } = useMonthlyStats();
   const { data: txns = [] }                        = useTransactions();
   const { mutate: del, isPending: delPending }      = useDeleteTransaction();
+  const { mutate: upd, isPending: updPending }      = useUpdateTransaction();
 
-  const [filter, setFilter] = useState<F>('all');
-  const [page, setPage]     = useState(0);
+  const [filter, setFilter]       = useState<F>('all');
+  const [search, setSearch]       = useState('');
+  const [page, setPage]           = useState(0);
+  const [expandedId, setExpanded] = useState<string | null>(null);
+  const [draft, setDraft]         = useState<{
+    amount: string; description: string; notes: string; category: string; date: string;
+  } | null>(null);
   const PAGE = 12;
 
-  const rate     = typeof savingsRate === 'string' ? savingsRate : String(savingsRate);
-  const filtered = txns.filter((t) => filter === 'all' || t.type === filter);
-  const pageTxns = filtered.slice(page * PAGE, (page + 1) * PAGE);
+  const rate = typeof savingsRate === 'string' ? savingsRate : String(savingsRate);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return txns.filter((t) => {
+      if (filter !== 'all' && t.type !== filter) return false;
+      if (!q) return true;
+      return (
+        t.description?.toLowerCase().includes(q) ||
+        t.notes?.toLowerCase().includes(q) ||
+        String(t.amount).includes(q) ||
+        t.category?.toLowerCase().includes(q)
+      );
+    });
+  }, [txns, filter, search]);
+
+  const pageTxns   = filtered.slice(page * PAGE, (page + 1) * PAGE);
   const totalPages = Math.ceil(filtered.length / PAGE);
+
+  function toggleExpand(t: typeof txns[0]) {
+    if (expandedId === t.id) {
+      setExpanded(null);
+      setDraft(null);
+    } else {
+      setExpanded(t.id);
+      setDraft({
+        amount:      String(t.amount),
+        description: t.description ?? '',
+        notes:       t.notes ?? '',
+        category:    t.category ?? 'other',
+        date:        t.date,
+      });
+    }
+  }
+
+  function saveEdit(id: string) {
+    if (!draft) return;
+    const n = parseFloat(draft.amount.replace(',', '.'));
+    if (!n || isNaN(n) || !draft.description.trim()) return;
+    upd(
+      { id, amount: Math.abs(n), description: draft.description.trim(), notes: draft.notes.trim() || undefined, category: draft.category, date: draft.date },
+      { onSuccess: () => { setExpanded(null); setDraft(null); } },
+    );
+  }
 
   return (
     <div className="fp-section">
@@ -106,8 +153,24 @@ function PanoramaTab() {
         </div>
       </div>
 
-      {/* Section label + filter pills */}
-      <p className="fp-section-label">In questo mese</p>
+      {/* Search bar */}
+      <div className="fp-search-wrap">
+        <Search size={13} className="fp-search-icon" />
+        <input
+          className="fp-search-input"
+          type="text"
+          placeholder="Cerca per descrizione, note o importo…"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+        />
+        {search && (
+          <button className="fp-search-clear" onClick={() => { setSearch(''); setPage(0); }}>
+            <X size={11} />
+          </button>
+        )}
+      </div>
+
+      {/* Filter pills */}
       <div className="admin-filter-tabs">
         {FILTERS.map((f) => (
           <button
@@ -125,27 +188,129 @@ function PanoramaTab() {
 
       {/* Transaction list */}
       {pageTxns.length === 0 ? (
-        <p className="fp-empty">Nessun movimento. Usa "Aggiungi" per iniziare.</p>
+        <p className="fp-empty">{search ? 'Nessun risultato per questa ricerca.' : 'Nessun movimento. Usa "Aggiungi" per iniziare.'}</p>
       ) : (
         <div className="fp-txn-list">
-          {pageTxns.map((t) => (
-            <div key={t.id} className="fp-txn-row fp-txn-row--deletable">
-              <span className={`fp-txn-dot ${t.type === 'income' ? 'fp-dot--green' : 'fp-dot--red'}`} />
-              <span className="fp-txn-date">{fmtDate(t.date)}</span>
-              <span className="fp-txn-desc">{t.description || t.category}</span>
-              <span className={`fp-txn-amt ${t.type === 'income' ? 'fp-amt--green' : 'fp-amt--red'}`}>
-                {t.type === 'income' ? '+' : '−'}{formatCurrency(t.amount)}
-              </span>
-              <button
-                className="fp-del-btn"
-                onClick={() => del(t.id)}
-                disabled={delPending}
-                aria-label="Elimina"
-              >
-                <Trash2 size={11} />
-              </button>
-            </div>
-          ))}
+          {pageTxns.map((t) => {
+            const isOpen = expandedId === t.id;
+            return (
+              <div key={t.id} className={['fp-txn-card', isOpen ? 'fp-txn-card--open' : ''].filter(Boolean).join(' ')}>
+                {/* Row header — clickable to expand */}
+                <div
+                  className="fp-txn-row fp-txn-row--expandable"
+                  onClick={() => toggleExpand(t)}
+                >
+                  <span className={`fp-txn-dot ${t.type === 'income' ? 'fp-dot--green' : 'fp-dot--red'}`} />
+                  <span className="fp-txn-date">{fmtDate(t.date)}</span>
+                  <span className="fp-txn-desc">
+                    {t.description || t.category}
+                    {t.notes && !isOpen && <span className="fp-txn-note">{t.notes}</span>}
+                    {t.hidden_from_charts && <EyeOff size={10} className="fp-txn-hidden-icon" />}
+                  </span>
+                  <span className={`fp-txn-amt ${t.type === 'income' ? 'fp-amt--green' : 'fp-amt--red'}`}>
+                    {t.type === 'income' ? '+' : '−'}{formatCurrency(t.amount)}
+                  </span>
+                  <ChevronDown
+                    size={12}
+                    className={['fp-txn-chevron', isOpen ? 'fp-txn-chevron--open' : ''].filter(Boolean).join(' ')}
+                  />
+                </div>
+
+                {/* Expanded detail + inline edit */}
+                <AnimatePresence initial={false}>
+                  {isOpen && draft && (
+                    <motion.div
+                      key="expand"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] as [number,number,number,number] }}
+                      style={{ overflow: 'hidden' }}
+                    >
+                      <div className="fp-txn-detail">
+                        <div className="fp-txn-edit-grid">
+                          <div className="fp-field-group">
+                            <label className="fp-field-label">Importo</label>
+                            <input
+                              className="fp-field-input"
+                              type="number"
+                              inputMode="decimal"
+                              value={draft.amount}
+                              onChange={(e) => setDraft((d) => d && ({ ...d, amount: e.target.value }))}
+                            />
+                          </div>
+                          <div className="fp-field-group">
+                            <label className="fp-field-label">Data</label>
+                            <input
+                              className="fp-field-input"
+                              type="date"
+                              value={draft.date}
+                              onChange={(e) => setDraft((d) => d && ({ ...d, date: e.target.value }))}
+                            />
+                          </div>
+                          <div className="fp-field-group fp-txn-edit-full">
+                            <label className="fp-field-label">Descrizione</label>
+                            <input
+                              className="fp-field-input"
+                              type="text"
+                              value={draft.description}
+                              onChange={(e) => setDraft((d) => d && ({ ...d, description: e.target.value }))}
+                            />
+                          </div>
+                          <div className="fp-field-group fp-txn-edit-full">
+                            <label className="fp-field-label">Note aggiuntive <span className="fp-field-optional">(opzionale)</span></label>
+                            <textarea
+                              className="fp-field-input fp-field-textarea"
+                              rows={2}
+                              value={draft.notes}
+                              placeholder="Aggiungi una nota…"
+                              onChange={(e) => setDraft((d) => d && ({ ...d, notes: e.target.value }))}
+                            />
+                          </div>
+                        </div>
+                        <div className="fp-txn-hide-toggle">
+                          <button
+                            className={['fp-hide-chart-btn', t.hidden_from_charts ? 'fp-hide-chart-btn--active' : ''].filter(Boolean).join(' ')}
+                            onClick={(e) => { e.stopPropagation(); upd({ id: t.id, hidden_from_charts: !t.hidden_from_charts }); }}
+                            disabled={updPending}
+                            title={t.hidden_from_charts ? 'Includi nei grafici' : 'Escludi dai grafici'}
+                          >
+                            {t.hidden_from_charts ? <Eye size={11} /> : <EyeOff size={11} />}
+                            {t.hidden_from_charts ? 'Includi nei grafici' : 'Escludi dai grafici'}
+                          </button>
+                        </div>
+                        <div className="fp-txn-detail-actions">
+                          <button
+                            className="fp-del-btn fp-del-btn--text"
+                            onClick={(e) => { e.stopPropagation(); del(t.id); }}
+                            disabled={delPending}
+                          >
+                            <Trash2 size={11} /> Elimina
+                          </button>
+                          <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            <button
+                              className="fp-txn-cancel-btn"
+                              onClick={(e) => { e.stopPropagation(); setExpanded(null); setDraft(null); }}
+                            >
+                              <X size={11} /> Annulla
+                            </button>
+                            <button
+                              className="fp-txn-save-btn"
+                              onClick={(e) => { e.stopPropagation(); saveEdit(t.id); }}
+                              disabled={updPending}
+                            >
+                              {updPending ? <RefreshCw size={11} className="fp-spin" /> : <Check size={11} />}
+                              {updPending ? 'Salvo…' : 'Salva'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -157,6 +322,12 @@ function PanoramaTab() {
           <button className="fp-page-btn" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>›</button>
         </div>
       )}
+
+      {/* ── Patrimonio ── */}
+      <div className="fp-panorama-patrimonio">
+        <p className="fp-section-label" style={{ marginTop: '0.5rem' }}>Patrimonio</p>
+        <FinancePatrimonioContent />
+      </div>
     </div>
   );
 }
@@ -176,6 +347,7 @@ function AggiungiTab() {
   const [type, setType]   = useState<TransactionType>('expense');
   const [amount, setAmt]  = useState('');
   const [desc, setDesc]   = useState('');
+  const [notes, setNotes] = useState('');
   const [cat, setCat]     = useState('other');
   const [date, setDate]   = useState(() => new Date().toISOString().split('T')[0]);
   const [done, setDone]   = useState(false);
@@ -186,8 +358,8 @@ function AggiungiTab() {
     const n = parseFloat(amount.replace(',', '.'));
     if (!n || isNaN(n) || !desc.trim()) return;
     add(
-      { amount: Math.abs(n), type, category: cat, description: desc.trim(), date },
-      { onSuccess: () => { setDone(true); setAmt(''); setDesc(''); setTimeout(() => setDone(false), 2000); } },
+      { amount: Math.abs(n), type, category: cat, description: desc.trim(), notes: notes.trim() || undefined, date },
+      { onSuccess: () => { setDone(true); setAmt(''); setDesc(''); setNotes(''); setTimeout(() => setDone(false), 2000); } },
     );
   }
 
@@ -233,6 +405,16 @@ function AggiungiTab() {
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
+          />
+        </div>
+        <div className="fp-field-group">
+          <label className="fp-field-label">Note aggiuntive <span className="fp-field-optional">(opzionale)</span></label>
+          <textarea
+            className="fp-field-input fp-field-textarea"
+            placeholder="es. Con carta scadenza marzo, per rimborso..."
+            rows={2}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
           />
         </div>
         <div className="fp-field-row-2">
@@ -602,6 +784,31 @@ function ImportaTab() {
 }
 
 
+// ── Aggiungi + Importa (combined tab) ─────────────────────────────────────────
+
+function AggiungiImportaTab() {
+  const [mode, setMode] = useState<'manuale' | 'importa'>('manuale');
+  return (
+    <div>
+      <div className="fp-type-toggle" style={{ marginBottom: '0.75rem' }}>
+        <button
+          className={['fp-type-btn', mode === 'manuale' ? 'fp-type-btn--active' : ''].filter(Boolean).join(' ')}
+          onClick={() => setMode('manuale')}
+        >
+          Manuale
+        </button>
+        <button
+          className={['fp-type-btn', mode === 'importa' ? 'fp-type-btn--active' : ''].filter(Boolean).join(' ')}
+          onClick={() => setMode('importa')}
+        >
+          <Upload size={12} /> Importa file
+        </button>
+      </div>
+      {mode === 'manuale' ? <AggiungiTab /> : <ImportaTab />}
+    </div>
+  );
+}
+
 // ── Subscription detection ────────────────────────────────────────────────────
 
 interface Subscription {
@@ -726,61 +933,120 @@ function detectSubscriptions(txns: Transaction[], type: 'income' | 'expense'): S
 
 // ── SubscriptionsTab ──────────────────────────────────────────────────────────
 
-const DISMISSED_KEY = 'alter_dismissed_recur';
+const DISMISSED_KEY    = 'alter_dismissed_recur';
+const NAMES_KEY        = 'alter_sub_names';
+const CUSTOM_KEY       = 'alter_custom_recur';
+
+interface CustomSub {
+  key: string;
+  displayName: string;
+  amount: number;
+  type: 'income' | 'expense';
+  icon: string;
+}
 
 function SubItem({
   sub,
   type,
-  confirmKey,
-  setConfirmKey,
+  expandKey,
+  setExpandKey,
+  customName,
+  onRename,
   onDismiss,
 }: {
   sub: Subscription;
   type: 'income' | 'expense';
-  confirmKey: string | null;
-  setConfirmKey: (k: string | null) => void;
+  expandKey: string | null;
+  setExpandKey: (k: string | null) => void;
+  customName?: string;
+  onRename: (key: string, name: string) => void;
   onDismiss: (k: string) => void;
 }) {
-  const isConfirming = confirmKey === sub.key;
+  const isExpanded = expandKey === sub.key;
+  const [localName, setLocalName] = useState(customName ?? sub.displayName);
+  const [confirming, setConfirming] = useState(false);
   const since = new Date(sub.firstSeen).toLocaleDateString('it-IT', { month: 'short', year: 'numeric' });
+
+  // sync when customName changes from outside
+  useState(() => { setLocalName(customName ?? sub.displayName); });
+
+  const handleRename = () => { if (localName.trim()) onRename(sub.key, localName.trim()); };
 
   return (
     <div className="fp-sub-item">
-      <div className="fp-sub-row">
+      <div
+        className="fp-sub-row fp-sub-row--clickable"
+        onClick={() => { setExpandKey(isExpanded ? null : sub.key); setConfirming(false); }}
+      >
         <span className="fp-sub-icon">{sub.icon}</span>
         <div className="fp-sub-info">
-          <span className="fp-sub-name">{sub.displayName}</span>
+          <span className="fp-sub-name">{customName ?? sub.displayName}</span>
           <span className="fp-sub-meta">~{sub.typicalDay} del mese · {sub.months} mesi · da {since}</span>
         </div>
         <div className="fp-sub-right">
           <span className={`fp-sub-amt ${type === 'income' ? 'fp-sub-amt--inc' : ''}`}>
             {type === 'income' ? '+' : ''}{formatCurrency(sub.amount)}<span className="fp-sub-freq">/mese</span>
           </span>
-          <button
-            className={`fp-sub-btn ${isConfirming ? 'fp-sub-btn--open' : ''}`}
-            onClick={() => setConfirmKey(isConfirming ? null : sub.key)}
-          >
-            {isConfirming ? '✕' : '···'}
-          </button>
+          <span className="fp-sub-chevron">{isExpanded ? '▲' : '▼'}</span>
         </div>
       </div>
 
       <AnimatePresence initial={false}>
-        {isConfirming && (
+        {isExpanded && (
           <motion.div
-            className="fp-sub-dismiss-panel"
+            className="fp-sub-expand"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] as [number,number,number,number] }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] as [number,number,number,number] }}
             style={{ overflow: 'hidden' }}
           >
-            <span className="fp-sub-dismiss-q">
-              Non vuoi più tracciare {type === 'income' ? 'questa entrata' : 'questa uscita'} mensile?
-            </span>
-            <button className="fp-sub-dismiss-btn" onClick={() => onDismiss(sub.key)}>
-              Sì, nascondi
-            </button>
+            {/* Costi mensile / annuale */}
+            <div className="fp-sub-kpi-row">
+              <div className="fp-sub-kpi">
+                <span className="fp-sub-kpi-label">Mensile</span>
+                <span className={`fp-sub-kpi-val ${type === 'income' ? 'fp-sub-kpi-val--inc' : ''}`}>
+                  {type === 'income' ? '+' : ''}{formatCurrency(sub.amount)}
+                </span>
+              </div>
+              <div className="fp-sub-kpi">
+                <span className="fp-sub-kpi-label">Annuale</span>
+                <span className={`fp-sub-kpi-val ${type === 'income' ? 'fp-sub-kpi-val--inc' : 'fp-sub-kpi-val--year'}`}>
+                  {type === 'income' ? '+' : ''}{formatCurrency(sub.amount * 12)}
+                </span>
+              </div>
+            </div>
+
+            {/* Rinomina */}
+            <div className="fp-sub-rename-row" onClick={e => e.stopPropagation()}>
+              <input
+                className="fp-sub-rename-input"
+                value={localName}
+                onChange={e => setLocalName(e.target.value)}
+                placeholder="Nome visualizzato…"
+                onKeyDown={e => { if (e.key === 'Enter') handleRename(); }}
+              />
+              <button
+                className="fp-sub-rename-btn"
+                onClick={handleRename}
+                disabled={localName.trim() === (customName ?? sub.displayName)}
+              >✓</button>
+            </div>
+
+            {/* Nascondi */}
+            <div className="fp-sub-dismiss-row" onClick={e => e.stopPropagation()}>
+              {!confirming ? (
+                <button className="fp-sub-dismiss-link" onClick={() => setConfirming(true)}>
+                  Nascondi questa ricorrente
+                </button>
+              ) : (
+                <>
+                  <span className="fp-sub-dismiss-q">Sicuro?</span>
+                  <button className="fp-sub-dismiss-btn" onClick={() => onDismiss(sub.key)}>Sì</button>
+                  <button className="fp-sub-dismiss-btn fp-sub-dismiss-btn--cancel" onClick={() => setConfirming(false)}>No</button>
+                </>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -788,12 +1054,83 @@ function SubItem({
   );
 }
 
+function CustomSubItem({
+  sub,
+  onDelete,
+}: {
+  sub: CustomSub;
+  onDelete: (key: string) => void;
+}) {
+  return (
+    <div className="fp-sub-item">
+      <div className="fp-sub-row">
+        <span className="fp-sub-icon">{sub.icon}</span>
+        <div className="fp-sub-info">
+          <span className="fp-sub-name">{sub.displayName}</span>
+          <span className="fp-sub-meta">aggiunta manualmente</span>
+        </div>
+        <div className="fp-sub-right">
+          <span className={`fp-sub-amt ${sub.type === 'income' ? 'fp-sub-amt--inc' : ''}`}>
+            {sub.type === 'income' ? '+' : ''}{formatCurrency(sub.amount)}<span className="fp-sub-freq">/mese</span>
+          </span>
+          <button className="fp-sub-btn fp-sub-btn--open" onClick={() => onDelete(sub.key)}>✕</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddCustomForm({ onAdd }: { onAdd: (s: CustomSub) => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [amount, setAmount] = useState('');
+  const [type, setType] = useState<'expense' | 'income'>('expense');
+
+  const submit = () => {
+    const amt = parseFloat(amount.replace(',', '.'));
+    if (!name.trim() || isNaN(amt) || amt <= 0) return;
+    onAdd({ key: `custom_${Date.now()}`, displayName: name.trim(), amount: amt, type, icon: type === 'income' ? '↑' : '↻' });
+    setName(''); setAmount(''); setType('expense'); setOpen(false);
+  };
+
+  return (
+    <div className="fp-sub-add-wrap">
+      {!open ? (
+        <button className="fp-sub-add-btn" onClick={() => setOpen(true)}>+ Aggiungi ricorrente</button>
+      ) : (
+        <div className="fp-sub-add-form">
+          <input className="fp-sub-rename-input" placeholder="Nome (es. Palestra)" value={name} onChange={e => setName(e.target.value)} />
+          <div className="fp-sub-add-row">
+            <input className="fp-sub-rename-input fp-sub-amt-input" placeholder="€/mese" value={amount} onChange={e => setAmount(e.target.value)} type="number" min="0" step="0.01" />
+            <select className="fp-sub-rename-input fp-sub-type-sel" value={type} onChange={e => setType(e.target.value as 'expense' | 'income')}>
+              <option value="expense">Uscita</option>
+              <option value="income">Entrata</option>
+            </select>
+          </div>
+          <div className="fp-sub-add-actions">
+            <button className="fp-sub-rename-btn" onClick={submit} disabled={!name.trim() || !amount}>Aggiungi</button>
+            <button className="fp-sub-dismiss-link" onClick={() => setOpen(false)}>Annulla</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SubscriptionsTab() {
   const { data: txns = [] } = useTransactions();
-  const [confirmKey, setConfirmKey] = useState<string | null>(null);
+  const [expandKey, setExpandKey]   = useState<string | null>(null);
   const [dismissed, setDismissed]   = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem(DISMISSED_KEY) ?? '[]') as string[]); }
     catch { return new Set<string>(); }
+  });
+  const [customNames, setCustomNames] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem(NAMES_KEY) ?? '{}') as Record<string, string>; }
+    catch { return {}; }
+  });
+  const [customSubs, setCustomSubs] = useState<CustomSub[]>(() => {
+    try { return JSON.parse(localStorage.getItem(CUSTOM_KEY) ?? '[]') as CustomSub[]; }
+    catch { return []; }
   });
 
   const expSubs = useMemo(
@@ -805,53 +1142,84 @@ function SubscriptionsTab() {
     [txns, dismissed],
   );
 
-  const totalExp = expSubs.reduce((s, sub) => s + sub.amount, 0);
-  const totalInc = incSubs.reduce((s, sub) => s + sub.amount, 0);
+  const customExp = customSubs.filter(s => s.type === 'expense');
+  const customInc = customSubs.filter(s => s.type === 'income');
+
+  const totalExp = expSubs.reduce((s, sub) => s + sub.amount, 0) + customExp.reduce((s, sub) => s + sub.amount, 0);
+  const totalInc = incSubs.reduce((s, sub) => s + sub.amount, 0) + customInc.reduce((s, sub) => s + sub.amount, 0);
 
   const dismiss = (key: string) => {
     const next = new Set(dismissed).add(key);
     setDismissed(next);
     localStorage.setItem(DISMISSED_KEY, JSON.stringify([...next]));
-    setConfirmKey(null);
+    setExpandKey(null);
   };
 
-  if (expSubs.length === 0 && incSubs.length === 0) return (
+  const rename = (key: string, name: string) => {
+    const next = { ...customNames, [key]: name };
+    setCustomNames(next);
+    localStorage.setItem(NAMES_KEY, JSON.stringify(next));
+  };
+
+  const addCustom = (sub: CustomSub) => {
+    const next = [...customSubs, sub];
+    setCustomSubs(next);
+    localStorage.setItem(CUSTOM_KEY, JSON.stringify(next));
+  };
+
+  const deleteCustom = (key: string) => {
+    const next = customSubs.filter(s => s.key !== key);
+    setCustomSubs(next);
+    localStorage.setItem(CUSTOM_KEY, JSON.stringify(next));
+  };
+
+  const hasAny = expSubs.length > 0 || incSubs.length > 0 || customSubs.length > 0;
+
+  if (!hasAny) return (
     <div className="fp-section">
       <p className="fp-sub-empty">Nessun movimento ricorrente rilevato.</p>
       <p className="fp-sub-empty-hint">
         Servono almeno 3 movimenti in 3 mesi consecutivi con importo e giorno del mese simili.
       </p>
+      <AddCustomForm onAdd={addCustom} />
     </div>
   );
 
   return (
     <div className="fp-section">
       {/* Entrate ricorrenti */}
-      {incSubs.length > 0 && (
+      {(incSubs.length > 0 || customInc.length > 0) && (
         <>
           <p className="fp-section-label">Entrate ricorrenti mensili</p>
           <div className="fp-sub-header">
-            <span>{incSubs.length} entrat{incSubs.length === 1 ? 'a' : 'e'}</span>
+            <span>{incSubs.length + customInc.length} entrat{incSubs.length + customInc.length === 1 ? 'a' : 'e'}</span>
             <span className="fp-sub-sep">·</span>
             <span className="fp-sub-amt--inc">{formatCurrency(totalInc)}<span className="fp-sub-freq">/mese</span></span>
+            <span className="fp-sub-sep">·</span>
+            <span className="fp-sub-amt--inc" style={{ opacity: 0.65 }}>{formatCurrency(totalInc * 12)}/anno</span>
           </div>
           <div className="fp-sub-list">
             {incSubs.map(sub => (
               <SubItem key={sub.key} sub={sub} type="income"
-                confirmKey={confirmKey} setConfirmKey={setConfirmKey} onDismiss={dismiss} />
+                expandKey={expandKey} setExpandKey={setExpandKey}
+                customName={customNames[sub.key]}
+                onRename={rename} onDismiss={dismiss} />
+            ))}
+            {customInc.map(sub => (
+              <CustomSubItem key={sub.key} sub={sub} onDelete={deleteCustom} />
             ))}
           </div>
         </>
       )}
 
       {/* Uscite ricorrenti */}
-      {expSubs.length > 0 && (
+      {(expSubs.length > 0 || customExp.length > 0) && (
         <>
-          <p className="fp-section-label" style={{ marginTop: incSubs.length > 0 ? '0.85rem' : 0 }}>
+          <p className="fp-section-label" style={{ marginTop: (incSubs.length > 0 || customInc.length > 0) ? '0.85rem' : 0 }}>
             Uscite ricorrenti mensili
           </p>
           <div className="fp-sub-header">
-            <span>{expSubs.length} abbonament{expSubs.length === 1 ? 'o' : 'i'}</span>
+            <span>{expSubs.length + customExp.length} abbonament{expSubs.length + customExp.length === 1 ? 'o' : 'i'}</span>
             <span className="fp-sub-sep">·</span>
             <span>{formatCurrency(totalExp)}<span className="fp-sub-freq">/mese</span></span>
             <span className="fp-sub-sep">·</span>
@@ -860,11 +1228,43 @@ function SubscriptionsTab() {
           <div className="fp-sub-list">
             {expSubs.map(sub => (
               <SubItem key={sub.key} sub={sub} type="expense"
-                confirmKey={confirmKey} setConfirmKey={setConfirmKey} onDismiss={dismiss} />
+                expandKey={expandKey} setExpandKey={setExpandKey}
+                customName={customNames[sub.key]}
+                onRename={rename} onDismiss={dismiss} />
+            ))}
+            {customExp.map(sub => (
+              <CustomSubItem key={sub.key} sub={sub} onDelete={deleteCustom} />
             ))}
           </div>
         </>
       )}
+
+      <AddCustomForm onAdd={addCustom} />
+    </div>
+  );
+}
+
+// ── Pianificazione (Budget + Ricorrenti + Prestiti) ────────────────────────────
+
+function SectionDivider({ title }: { title: string }) {
+  return (
+    <div className="fp-section-divider">
+      <hr className="fp-divider-line" />
+      <span className="fp-divider-title">{title}</span>
+      <hr className="fp-divider-line" />
+    </div>
+  );
+}
+
+function PianificazioneTab() {
+  return (
+    <div>
+      <SectionDivider title="Budget" />
+      <BudgetTab />
+      <SectionDivider title="Ricorrenti" />
+      <SubscriptionsTab />
+      <SectionDivider title="Prestiti" />
+      <FinancePrestitiTab />
     </div>
   );
 }
@@ -1196,9 +1596,52 @@ function detectRecurring(txns: Transaction[]): RecurringPattern[] {
   return patterns.sort((a, b) => b.confidence - a.confidence || b.avgAmount - a.avgAmount);
 }
 
-function AnalisiTab() {
-  const { data: txns = [] } = useTransactions();
+// ── Donut fallback palette ─────────────────────────────────────────────────────
+const DONUT_COLORS = ['#818cf8','#34d399','#f87171','#fbbf24','#60a5fa','#e879f9','#2dd4bf','#fb923c'];
 
+// ── DonutChart SVG ─────────────────────────────────────────────────────────────
+function DonutChart({ slices }: {
+  slices: { label: string; value: number; color: string; pct: number; icon: string }[];
+}) {
+  const R = 50, CX = 68, CY = 68, SW = 18;
+  const C = 2 * Math.PI * R;
+  let acc = 0;
+  const arcs = slices.map(s => {
+    const len = (s.pct / 100) * C;
+    const result = { ...s, len, offset: C / 4 - acc };
+    acc += len;
+    return result;
+  });
+  return (
+    <div className="fp-donut-wrap">
+      <svg width={136} height={136} viewBox="0 0 136 136" style={{ flexShrink: 0 }}>
+        <circle cx={CX} cy={CY} r={R} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={SW} />
+        {arcs.map((a, i) => (
+          <circle key={i} cx={CX} cy={CY} r={R} fill="none"
+            stroke={a.color} strokeWidth={SW}
+            strokeDasharray={`${a.len} ${C - a.len}`}
+            strokeDashoffset={a.offset}
+          />
+        ))}
+        <text x={CX} y={CY + 5} textAnchor="middle" fill="rgba(240,237,255,0.4)" fontSize="9" fontWeight="600" letterSpacing="0.04em">QUESTO MESE</text>
+      </svg>
+      <div className="fp-donut-legend">
+        {slices.map((s, i) => (
+          <div key={i} className="fp-donut-leg-row">
+            <span className="fp-donut-leg-dot" style={{ background: s.color }} />
+            <span className="fp-donut-leg-label">{s.icon} {s.label}</span>
+            <span className="fp-donut-leg-pct">{s.pct.toFixed(0)}%</span>
+            <span className="fp-donut-leg-amt">{formatCurrency(s.value)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AnalisiTab() {
+  const txns = useVisibleTransactions();
+  const { data: categories = [] } = useFinanceCategories();
   const patterns = useMemo(() => detectRecurring(txns), [txns]);
 
   const now        = new Date();
@@ -1206,7 +1649,7 @@ function AnalisiTab() {
   const nextMonthIdx   = (now.getMonth() + 1) % 12;
   const nextMonthLabel = MONTHS_IT[nextMonthIdx];
 
-  // Build last 6 months (shared for chart + table)
+  // Cashflow last 6 months
   const months = Array.from({ length: 6 }, (_, i) => {
     const d   = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}`;
@@ -1224,18 +1667,75 @@ function AnalisiTab() {
   const avgIncome   = months.reduce((s,m) => s+m.inc, 0) / 6;
   const avgExpenses = months.reduce((s,m) => s+m.exp, 0) / 6;
   const bestMonth   = [...months].sort((a,b) => (b.inc-b.exp)-(a.inc-a.exp))[0];
-
-  // Trend uscite vs mese precedente
   const cur  = months[months.length - 1];
   const prev = months[months.length - 2];
   const expDiff = prev && prev.exp > 0 ? ((cur.exp - prev.exp) / prev.exp) * 100 : null;
 
+  // Advanced analytics
+  const { catSlices, dowData, topDow, dowMax, burnRate, topPeaks } = useMemo(() => {
+    const thisExp = txns.filter(t => t.date.startsWith(currentKey) && t.type === 'expense');
+    const totalMonthExp = thisExp.reduce((s, t) => s + t.amount, 0);
+
+    // Category donut slices
+    const byCat: Record<string, number> = {};
+    for (const t of thisExp) byCat[t.category] = (byCat[t.category] ?? 0) + t.amount;
+    const slices = Object.entries(byCat)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([catId, val], idx) => {
+        const cat = categories.find(c => c.id === catId);
+        return {
+          label: cat?.label ?? catId,
+          icon: cat?.icon ?? '🏷️',
+          color: DONUT_COLORS[idx % DONUT_COLORS.length],
+          value: val,
+          pct: totalMonthExp > 0 ? (val / totalMonthExp) * 100 : 0,
+        };
+      });
+
+    // Day-of-week heatmap (all-time historical)
+    const allExp = txns.filter(t => t.type === 'expense');
+    const DOW_ORDER_LOCAL = [1, 2, 3, 4, 5, 6, 0];
+    const DAYS_IT_LOCAL   = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+    const dowTotals = Array(7).fill(0) as number[];
+    const dowCounts = Array(7).fill(0) as number[];
+    for (const t of allExp) {
+      const d = new Date(t.date + 'T00:00:00').getDay();
+      dowTotals[d] += t.amount; dowCounts[d]++;
+    }
+    const dow = DOW_ORDER_LOCAL.map(d => ({
+      label: DAYS_IT_LOCAL[d],
+      avg: dowCounts[d] > 0 ? dowTotals[d] / dowCounts[d] : 0,
+      count: dowCounts[d],
+    }));
+    const topDowEntry = dow.reduce((a, b) => b.avg > a.avg ? b : a, dow[0]);
+    const maxAvg = Math.max(...dow.map(d => d.avg), 1);
+
+    // Burn rate this month
+    const daysElapsed = Math.max(1, now.getDate());
+    const burn = totalMonthExp / daysElapsed;
+
+    // Top 5 spending days (all time)
+    const byDay: Record<string, number> = {};
+    for (const t of allExp) byDay[t.date] = (byDay[t.date] ?? 0) + t.amount;
+    const peaks = Object.entries(byDay).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+    return { catSlices: slices, dowData: dow, topDow: topDowEntry, dowMax: maxAvg, burnRate: burn, topPeaks: peaks };
+  }, [txns, categories, currentKey, now.getDate()]);
+
   return (
     <div className="fp-section">
-      {/* Cashflow chart */}
-      <p className="fp-section-label">Cashflow · 6 mesi</p>
 
-      {/* Legend */}
+      {/* ── 1. Breakdown Categorie (Donut) ── */}
+      <p className="fp-section-label">Breakdown categorie · questo mese</p>
+      {catSlices.length > 0 ? (
+        <DonutChart slices={catSlices} />
+      ) : (
+        <p className="fp-pred-empty">Nessuna uscita categorizzata questo mese.</p>
+      )}
+
+      {/* ── 2. Cashflow ── */}
+      <p className="fp-section-label">Cashflow · 6 mesi</p>
       <div className="fc-legend" style={{ marginBottom: '0.4rem' }}>
         <span className="fc-legend-item"><span className="fc-legend-dot" style={{ background: '#34d399' }} />Entrate</span>
         <span className="fc-legend-item"><span className="fc-legend-dot" style={{ background: '#f87171' }} />Uscite</span>
@@ -1245,12 +1745,9 @@ function AnalisiTab() {
           </span>
         )}
       </div>
-
       <div className="fc-chart-wrap" style={{ marginBottom: '0.75rem' }}>
         <GroupedBarChart months={months} />
       </div>
-
-      {/* Avg KPIs */}
       <div className="fp-kpi-row">
         <div className="fp-kpi-chip fp-kpi-chip--green">
           <span className="fp-kpi-label">Media entrate</span>
@@ -1265,15 +1762,10 @@ function AnalisiTab() {
           <span className="fp-kpi-value">{bestMonth?.fmtLabel ?? '—'}</span>
         </div>
       </div>
-
-      {/* Monthly table */}
       <p className="fp-section-label">Dettaglio mesi</p>
       <div className="fp-month-table">
         <div className="fp-month-header">
-          <span>Mese</span>
-          <span>Entrate</span>
-          <span>Uscite</span>
-          <span>Saldo</span>
+          <span>Mese</span><span>Entrate</span><span>Uscite</span><span>Saldo</span>
         </div>
         {months.map((m) => {
           const bal = m.inc - m.exp;
@@ -1288,9 +1780,86 @@ function AnalisiTab() {
         })}
       </div>
 
-      {/* ── Previsioni prossimo mese ── */}
-      <p className="fp-section-label">Previsioni · {nextMonthLabel}</p>
+      {/* ── 3. Heatmap Giorno della Settimana ── */}
+      {dowData.some(d => d.avg > 0) && (
+        <>
+          <p className="fp-section-label">Heatmap spese · giorno della settimana</p>
+          <div className="fp-dow-grid">
+            {dowData.map((d) => {
+              const intensity = dowMax > 0 ? d.avg / dowMax : 0;
+              const isTop = d.label === topDow?.label && d.avg > 0;
+              return (
+                <div
+                  key={d.label}
+                  className={`fp-dow-cell${isTop ? ' fp-dow-cell--top' : ''}`}
+                >
+                  <span className="fp-dow-cell-day">{d.label}</span>
+                  <div className="fp-dow-cell-bar">
+                    <div className="fp-dow-cell-fill" style={{ height: `${Math.max(4, intensity * 100)}%` }} />
+                  </div>
+                  <span className="fp-dow-cell-val">{d.avg > 0 ? formatCurrency(d.avg) : '—'}</span>
+                </div>
+              );
+            })}
+          </div>
+          {topDow && topDow.avg > 0 && (
+            <p className="fp-dow-insight">
+              Il <strong>{topDow.label}</strong> è storicamente il giorno con più uscite — media {formatCurrency(topDow.avg)} ({topDow.count} transazioni registrate)
+            </p>
+          )}
+        </>
+      )}
 
+      {/* ── 4. Burn Rate Giornaliero ── */}
+      {burnRate > 0 && (
+        <>
+          <p className="fp-section-label">Burn Rate · questo mese</p>
+          <div className="fp-burnrate-box">
+            <div className="fp-burnrate-main">
+              <span className="fp-burnrate-val">{formatCurrency(burnRate)}</span>
+              <span className="fp-burnrate-unit">/ giorno</span>
+            </div>
+            <div className="fp-burnrate-row">
+              <span className="fp-burnrate-lbl">Proiezione 30 giorni</span>
+              <span className="fp-burnrate-num">{formatCurrency(burnRate * 30)}</span>
+            </div>
+            <div className="fp-burnrate-row">
+              <span className="fp-burnrate-lbl">Fondo emergenza 3 mesi</span>
+              <span className="fp-burnrate-num">{formatCurrency(burnRate * 90)}</span>
+            </div>
+            <div className="fp-burnrate-row">
+              <span className="fp-burnrate-lbl">Fondo emergenza 6 mesi</span>
+              <span className="fp-burnrate-num">{formatCurrency(burnRate * 180)}</span>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── 5. Analisi dei Picchi ── */}
+      {topPeaks.length > 0 && (
+        <>
+          <p className="fp-section-label">Analisi dei Picchi · top 5 giorni</p>
+          <div className="fp-peaks-list">
+            {topPeaks.map(([date, amount], i) => {
+              const pct = topPeaks[0][1] > 0 ? (amount / topPeaks[0][1]) * 100 : 0;
+              const fmtD = new Date(date + 'T00:00:00').toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' });
+              return (
+                <div key={date} className="fp-peak-row">
+                  <span className="fp-peak-rank">#{i + 1}</span>
+                  <span className="fp-peak-date">{fmtD}</span>
+                  <div className="fp-peak-bar-wrap">
+                    <div className="fp-peak-bar-fill" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="fp-amt--red fp-peak-amt">{formatCurrency(amount)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* ── 6. Previsioni prossimo mese ── */}
+      <p className="fp-section-label">Previsioni · {nextMonthLabel}</p>
       {patterns.length === 0 ? (
         <p className="fp-pred-empty">
           Dati insufficienti. Servono almeno 3 mesi di movimenti per rilevare ricorrenze.
@@ -1301,14 +1870,11 @@ function AnalisiTab() {
         const projInc     = incPatterns.reduce((s, p) => s + p.avgAmount, 0);
         const projExp     = expPatterns.reduce((s, p) => s + p.avgAmount, 0);
         const projBal     = projInc - projExp;
-        // Totali ponderati per probabilità
         const weightedInc = incPatterns.reduce((s, p) => s + p.avgAmount * (p.confidence / 100), 0);
         const weightedExp = expPatterns.reduce((s, p) => s + p.avgAmount * (p.confidence / 100), 0);
         const weightedBal = weightedInc - weightedExp;
-
         return (
           <>
-            {/* KPI totali stimati */}
             <div className="fp-kpi-row">
               <div className="fp-kpi-chip fp-kpi-chip--green">
                 <span className="fp-kpi-label">Entrate stimate</span>
@@ -1323,8 +1889,6 @@ function AnalisiTab() {
                 <span className="fp-kpi-value">{projBal >= 0 ? '+' : ''}{formatCurrency(projBal)}</span>
               </div>
             </div>
-
-            {/* Totali ponderati per probabilità */}
             <div className="fp-weighted-row">
               <span className="fp-weighted-label">Atteso (prob. ponderata)</span>
               <span className="fp-weighted-vals">
@@ -1336,15 +1900,10 @@ function AnalisiTab() {
                 </span>
               </span>
             </div>
-
-            {/* Lista voci */}
             <div className="fp-pred-list">
               {patterns.map((p, i) => (
                 <div key={i} className="fp-pred-row">
-                  <span
-                    className="fp-pred-dot"
-                    style={{ background: p.type === 'income' ? '#34d399' : '#f87171' }}
-                  />
+                  <span className="fp-pred-dot" style={{ background: p.type === 'income' ? '#34d399' : '#f87171' }} />
                   <div className="fp-pred-info">
                     <span className="fp-pred-desc">{p.displayName}</span>
                     <span className="fp-pred-day">~{p.typicalDay} del mese</span>
@@ -1355,13 +1914,10 @@ function AnalisiTab() {
                   <div className="fp-pred-conf-wrap">
                     <span className="fp-pred-conf">{p.confidence}%</span>
                     <div className="fp-pred-conf-bar">
-                      <div
-                        className="fp-pred-conf-fill"
-                        style={{
-                          width: `${p.confidence}%`,
-                          background: p.confidence >= 80 ? '#34d399' : p.confidence >= 65 ? '#fbbf24' : '#f87171',
-                        }}
-                      />
+                      <div className="fp-pred-conf-fill" style={{
+                        width: `${p.confidence}%`,
+                        background: p.confidence >= 80 ? '#34d399' : p.confidence >= 65 ? '#fbbf24' : '#f87171',
+                      }} />
                     </div>
                   </div>
                 </div>
@@ -1378,11 +1934,19 @@ function AnalisiTab() {
 
 export function FinancePanoramaFragment({ params }: { params: Record<string, unknown> }) {
   const [tab, setTab] = useState<TabId>((params.tab as TabId) ?? 'panoramica');
+  const tabbarRef = useRef<HTMLDivElement>(null);
+
+  function onTabbarWheel(e: React.WheelEvent) {
+    if (tabbarRef.current && e.deltaY !== 0) {
+      e.preventDefault();
+      tabbarRef.current.scrollLeft += e.deltaY;
+    }
+  }
 
   return (
     <NebulaCard icon="💰" title="Finanze" variant="finance" closable>
       {/* Tab bar — stile admin */}
-      <div className="admin-tabbar fp-tabbar">
+      <div ref={tabbarRef} className="admin-tabbar fp-tabbar" onWheel={onTabbarWheel}>
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -1397,14 +1961,17 @@ export function FinancePanoramaFragment({ params }: { params: Record<string, unk
       {/* Content */}
       <AnimatePresence mode="wait">
         <motion.div key={tab} {...TAB_ANIM}>
-          {tab === 'panoramica'  && <PanoramaTab />}
-          {tab === 'patrimonio'  && <FinancePatrimonioTab />}
-          {tab === 'budget'      && <BudgetTab />}
-          {tab === 'abbonamenti' && <SubscriptionsTab />}
-          {tab === 'aggiungi'    && <AggiungiTab />}
-          {tab === 'importa'     && <ImportaTab />}
-          {tab === 'categorie'   && <div className="fp-section"><FinanceCategoryContent /></div>}
-          {tab === 'analisi'     && <AnalisiTab />}
+          {tab === 'panoramica'     && <PanoramaTab />}
+          {tab === 'pianificazione' && <PianificazioneTab />}
+          {tab === 'aggiungi'       && <AggiungiImportaTab />}
+          {tab === 'elimina'        && <FinanceDeleteTabContent />}
+          {tab === 'categorie'      && (
+            <div>
+              <SectionDivider title="Categorie" />
+              <div className="fp-section"><FinanceCategoryContent /></div>
+              <AnalisiTab />
+            </div>
+          )}
         </motion.div>
       </AnimatePresence>
     </NebulaCard>

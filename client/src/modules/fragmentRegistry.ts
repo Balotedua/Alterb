@@ -3,7 +3,8 @@ import { FinanceOverviewFragment } from './finance/FinanceOverviewFragment';
 import { FinanceChartFragment }    from './finance/FinanceChartFragment';
 import { FinanceListFragment }     from './finance/FinanceListFragment';
 import { FinanceAddFragment }      from './finance/FinanceAddFragment';
-import { FinanceDeleteFragment }   from './finance/FinanceDeleteFragment';
+import { FinanceDeleteFragment }      from './finance/FinanceDeleteFragment';
+import { FinanceDeleteTabFragment }   from './finance/FinanceDeleteTabFragment';
 import { FinanceCsvFragment }      from './finance/FinanceCsvFragment';
 import { FinanceCategoryFragment }  from './finance/FinanceCategoryFragment';
 import { FinanceLinkFragment }      from './finance/FinanceLinkFragment';
@@ -19,6 +20,7 @@ import { MoodHistoryFragment }     from './psychology/MoodHistoryFragment';
 import { PsychOverviewFragment }   from './psychology/PsychOverviewFragment';
 import { SettingsFragment }        from './settings/SettingsFragment';
 import { HelpFragment }            from './help/HelpFragment';
+import { FinanceManualFragment }   from './help/FinanceManualFragment';
 import { BugReportFragment }       from './bug/BugReportFragment';
 import { AdminFragment }           from './admin/AdminFragment';
 import { RoutineFragment }         from './routine/RoutineFragment';
@@ -31,7 +33,8 @@ export const FRAGMENT_REGISTRY: Record<string, FragmentComponent> = {
   FinanceChart:    FinanceChartFragment,
   FinanceList:     FinanceListFragment,
   FinanceAdd:      FinanceAddFragment,
-  FinanceDelete:   FinanceDeleteFragment,
+  FinanceDelete:      FinanceDeleteFragment,
+  FinanceDeleteTab:   FinanceDeleteTabFragment,
   FinanceCsv:      FinanceCsvFragment,
   FinanceCategory:  FinanceCategoryFragment,
   FinanceLink:      FinanceLinkFragment,
@@ -55,6 +58,7 @@ export const FRAGMENT_REGISTRY: Record<string, FragmentComponent> = {
 
   // Help
   Help:           HelpFragment,
+  FinanceManual:  FinanceManualFragment,
 
   // Bug report
   BugReport:      BugReportFragment,

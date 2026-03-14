@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useTransactions, useFinanceCategories } from '@/hooks/useFinance';
+import { useVisibleTransactions, useFinanceCategories } from '@/hooks/useFinance';
 import { NebulaCard } from '@/components/ui/nebula/NebulaCard';
 import { formatCurrency } from '@/utils/formatters';
 import type { Transaction } from '@/types';
@@ -89,7 +89,7 @@ function buildInsight(
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export function FinanceAnalyticsFragment(_: Props) {
-  const { data: txs = [] } = useTransactions();
+  const txs = useVisibleTransactions();
   const { data: categories = [] } = useFinanceCategories();
 
   // ── Mese corrente ──────────────────────────────────────────────────────────

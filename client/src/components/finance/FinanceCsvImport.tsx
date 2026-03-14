@@ -367,6 +367,7 @@ export function FinanceCsvImport() {
   const [imported,   setImported  ] = useState<number | null>(null);
   const [err,        setErr       ] = useState('');
 
+  const [invertSigns,   setInvertSigns  ] = useState(false);
   const [duplicates,    setDuplicates   ] = useState<DuplicateInfo[]>([]);
   const [pendingInputs, setPendingInputs] = useState<TransactionInput[]>([]);
   const [showDupModal,  setShowDupModal ] = useState(false);
@@ -438,7 +439,7 @@ export function FinanceCsvImport() {
   const reset = () => {
     setHeaders([]); setRawRows([]); setFileName('');
     setColDate(''); setColAmt(''); setColDesc('');
-    setImported(null); setErr(''); setLoading(false);
+    setImported(null); setErr(''); setLoading(false); setInvertSigns(false);
     setDuplicates([]); setPendingInputs([]); setShowDupModal(false);
   };
 
@@ -465,10 +466,15 @@ export function FinanceCsvImport() {
     let description = rawDesc.trim();
     if (!description) description = n < 0 ? 'Pagamento' : n > 0 ? 'Rimborso' : 'Importato';
 
+    const rawType: TransactionType = n < 0 ? 'expense' : 'income';
+    const type: TransactionType = invertSigns
+      ? (rawType === 'expense' ? 'income' : 'expense')
+      : rawType;
+
     return {
       date:        date ?? rawDate,
       amount:      Math.abs(n),
-      type:        n < 0 ? 'expense' : 'income',
+      type,
       description,
       ok,
     };
@@ -662,6 +668,27 @@ export function FinanceCsvImport() {
               </span>
             )}
           </div>
+
+          {valid.length > 0 && (() => {
+            const incomeCount  = valid.filter((r) => r.type === 'income').length;
+            const expenseCount = valid.filter((r) => r.type === 'expense').length;
+            return (
+              <div className="fin-csv-invert-row">
+                <span className="fin-csv-invert-counts">
+                  <span className="fin-csv-invert-income">↑ {incomeCount} entrate</span>
+                  <span className="fin-csv-invert-sep">·</span>
+                  <span className="fin-csv-invert-expense">↓ {expenseCount} uscite</span>
+                </span>
+                <button
+                  className={`fin-csv-invert-btn${invertSigns ? ' fin-csv-invert-btn--active' : ''}`}
+                  onClick={() => setInvertSigns((v) => !v)}
+                  type="button"
+                >
+                  ⇅ {invertSigns ? 'Segni invertiti' : 'Inverti segni'}
+                </button>
+              </div>
+            );
+          })()}
 
           {parsed.length > 0 && (
             <div className="fin-csv-table-wrap">

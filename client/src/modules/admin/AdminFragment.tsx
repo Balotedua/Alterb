@@ -40,6 +40,7 @@ interface BugReport {
   id: string;
   created_at: string;
   user_id: string | null;
+  user_name?: string | null;
   interaction_history: InteractionEntry[];
   user_description: string;
   page_path: string;
@@ -451,7 +452,11 @@ function TicketRow({ report, onStatusChange, onPriorityChange, onComplexityChang
                 </button>
               </div>
 
-              {report.user_id && <p className="admin-uid">UID: {report.user_id}</p>}
+              {report.user_id && (
+                <p className="admin-uid">
+                  {report.user_name ?? `UID: ${report.user_id}`}
+                </p>
+              )}
             </div>
           </motion.div>
         )}
@@ -548,8 +553,23 @@ function TabTickets() {
       .select('*')
       .order('created_at', { ascending: false })
       .limit(300);
-    if (err) setError('Errore: ' + err.message);
-    else { setReports((data as BugReport[]) ?? []); setReviewIdx(0); }
+    if (err) { setError('Errore: ' + err.message); setLoading(false); return; }
+
+    const reports = (data ?? []) as BugReport[];
+
+    // Fetch user names separately to avoid FK schema cache issues
+    const userIds = [...new Set(reports.map(r => r.user_id).filter(Boolean))] as string[];
+    if (userIds.length > 0) {
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .in('id', userIds);
+      const nameMap = Object.fromEntries((profilesData ?? []).map((p: { id: string; name?: string }) => [p.id, p.name ?? null]));
+      reports.forEach(r => { r.user_name = r.user_id ? (nameMap[r.user_id] ?? null) : null; });
+    }
+
+    setReports(reports);
+    setReviewIdx(0);
     setLoading(false);
   }
 

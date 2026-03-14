@@ -44,7 +44,9 @@ export function NebulaWelcome() {
 
   if (chatHistory.length > 0) return null;
 
-  const firstName = (user?.user_metadata?.name as string | undefined)?.split(' ')[0] ?? '';
+  const savedName = localStorage.getItem('alter_display_name')?.trim();
+  const metaName  = (user?.user_metadata?.name as string | undefined)?.split(' ')[0];
+  const firstName = savedName || metaName || '';
   const greetWord = isFirstTime ? 'Benvenuto' : timeGreeting();
   const sub = isFirstTime ? 'Sono Nebula, il tuo assistente.' : 'Come posso aiutarti?';
 

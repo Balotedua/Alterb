@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Tag, ChevronDown, ChevronUp, Plus, ArrowRight, Pencil, Check, X } from 'lucide-react';
+import { Tag, ChevronDown, ChevronUp, Plus, ArrowRight, Pencil, Check, X, Eye, EyeOff } from 'lucide-react';
 import {
   useTransactions,
   useFinanceCategories,
@@ -8,6 +8,7 @@ import {
   useUpdateCategory,
   useUpdateTransactionCategory,
   useRecategorize,
+  useToggleCategoryHidden,
 } from '@/hooks/useFinance';
 import { FINANCE_DEFAULT_CATS } from '@/utils/constants';
 import { NebulaCard } from '@/components/ui/nebula';
@@ -318,10 +319,12 @@ interface CatRowProps {
   pct: number;
   userCats: { id: string; label: string; icon?: string }[];
   isActive: boolean;
+  isHidden: boolean;
   onToggle: () => void;
+  onToggleHidden: () => void;
 }
 
-function CatRow({ catId, total, count, txs, pct, userCats, isActive, onToggle }: CatRowProps) {
+function CatRow({ catId, total, count, txs, pct, userCats, isActive, isHidden, onToggle, onToggleHidden }: CatRowProps) {
   const [recatTx, setRecatTx]   = useState<Transaction | null>(null);
   const [editing, setEditing]    = useState(false);
   const info      = catInfo(catId, userCats);
@@ -333,7 +336,7 @@ function CatRow({ catId, total, count, txs, pct, userCats, isActive, onToggle }:
     txs.filter(t => t.description === tx.description).length;
 
   return (
-    <div className={['cat2-row', isActive ? 'cat2-row--open' : ''].filter(Boolean).join(' ')}>
+    <div className={['cat2-row', isActive ? 'cat2-row--open' : '', isHidden ? 'cat2-row--hidden' : ''].filter(Boolean).join(' ')}>
       {/* ── Summary bar ── */}
       <div className="cat2-header-wrap">
         <button
@@ -350,6 +353,15 @@ function CatRow({ catId, total, count, txs, pct, userCats, isActive, onToggle }:
           </span>
           <span className="cat2-pct">{pct}%</span>
           <span className="cat2-chevron">{isActive ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}</span>
+        </button>
+        <button
+          className={['cat2-edit-btn', isHidden ? 'cat2-edit-btn--hidden' : ''].filter(Boolean).join(' ')}
+          onClick={(e) => { e.stopPropagation(); onToggleHidden(); }}
+          title={isHidden ? 'Includi nei grafici' : 'Escludi dai grafici'}
+          type="button"
+          style={{ opacity: isHidden ? 1 : 0.5, color: isHidden ? '#f87171' : undefined }}
+        >
+          {isHidden ? <EyeOff size={11} /> : <Eye size={11} />}
         </button>
         <button
           className="cat2-edit-btn"
@@ -438,11 +450,13 @@ export function FinanceCategoryContent({ filterType }: { filterType?: Transactio
   const { data: transactions = [] } = useTransactions();
   const { data: userCats = [] }     = useFinanceCategories();
   const [activeCat, setActiveCat]   = useState<string | null>(null);
+  const { mutate: toggleHidden }    = useToggleCategoryHidden();
+  const hiddenCatIds = new Set(userCats.filter(c => c.hidden_from_charts).map(c => c.id));
 
-  const txs = useMemo(() =>
-    filterType ? transactions.filter(t => t.type === filterType) : transactions,
-    [transactions, filterType]
-  );
+  const txs = useMemo(() => {
+    const visible = transactions.filter(t => !t.hidden_from_charts);
+    return filterType ? visible.filter(t => t.type === filterType) : visible;
+  }, [transactions, filterType]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, { total: number; count: number; txs: Transaction[] }>();
@@ -501,7 +515,9 @@ export function FinanceCategoryContent({ filterType }: { filterType?: Transactio
                 pct={pct}
                 userCats={userCats}
                 isActive={activeCat === catId}
+                isHidden={hiddenCatIds.has(catId)}
                 onToggle={() => setActiveCat(prev => prev === catId ? null : catId)}
+                onToggleHidden={() => toggleHidden({ id: catId, hidden: !hiddenCatIds.has(catId) })}
               />
             );
           })}

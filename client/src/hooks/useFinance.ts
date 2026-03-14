@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
 import { useAuth } from './useAuth';
 import { FINANCE_DEFAULT_CAT_IDS } from '@/utils/constants';
-import type { Transaction, TransactionInput, CategoryConfig, FinanceBudget, PatrimonioAsset, PatrimonioAssetInput } from '@/types';
+import type { Transaction, TransactionInput, CategoryConfig, FinanceBudget, PatrimonioAsset, PatrimonioAssetInput, Prestito, PrestitoInput } from '@/types';
 
 const QUERY_KEY = ['transactions'];
 const CAT_QUERY_KEY = ['finance_categories'];
@@ -54,6 +54,21 @@ export function useAddTransaction() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEY });
     },
+  });
+}
+
+// Aggiorna una transazione (importo, descrizione, note, categoria, data, hidden_from_charts)
+export function useUpdateTransaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...fields }: { id: string } & Partial<TransactionInput & { hidden_from_charts: boolean }>) => {
+      const { error } = await supabase
+        .from('transactions')
+        .update(fields)
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: QUERY_KEY }),
   });
 }
 
@@ -196,17 +211,14 @@ export function useDeleteTransactionsBulk() {
       if (!user) throw new Error('Utente non autenticato');
       if (ids.length === 0) return;
       console.log('[bulk-delete] user.id:', user.id, 'ids:', ids);
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('transactions')
         .delete()
         .in('id', ids)
-        .eq('user_id', user.id)
-        .select();
+        .eq('user_id', user.id);
 
-      console.log('[bulk-delete] result:', { data, error });
       if (error) throw error;
-      if (!data || data.length === 0) throw new Error('Nessuna transazione eliminata — permesso negato o ID non validi');
-      return data.length;
+      return ids.length;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEY });
@@ -265,6 +277,29 @@ export function useUpdateCategory() {
   });
 }
 
+// Escludi/includi intera categoria dai grafici (upsert se è una default non ancora in DB)
+export function useToggleCategoryHidden() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ id, hidden }: { id: string; hidden: boolean }) => {
+      if (!user) throw new Error('Utente non autenticato');
+      const { data: updated, error: updErr } = await supabase
+        .from('finance_categories')
+        .update({ hidden_from_charts: hidden })
+        .eq('id', id).eq('user_id', user.id).select();
+      if (updErr) throw updErr;
+      if (!updated || updated.length === 0) {
+        const { error: insErr } = await supabase
+          .from('finance_categories')
+          .insert({ id, user_id: user.id, hidden_from_charts: hidden, color: '#6b7280' });
+        if (insErr) throw insErr;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: CAT_QUERY_KEY }),
+  });
+}
+
 // Crea una nuova categoria
 export function useAddCategory() {
   const qc = useQueryClient();
@@ -287,6 +322,7 @@ export function useAddCategory() {
 // Statistiche per il mese corrente
 export function useMonthlyStats() {
   const { data: transactions } = useTransactions();
+  const { data: cats = [] } = useFinanceCategories();
 
   if (!transactions) {
     return {
@@ -301,8 +337,10 @@ export function useMonthlyStats() {
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
+  const hiddenCatIds = new Set(cats.filter(c => c.hidden_from_charts).map(c => c.id));
+  const visibleTransactions = transactions.filter(t => !t.hidden_from_charts && !hiddenCatIds.has(t.category));
 
-  const monthlyTransactions = transactions.filter(t => {
+  const monthlyTransactions = visibleTransactions.filter(t => {
     const date = new Date(t.date);
     return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
   });
@@ -326,11 +364,11 @@ export function useMonthlyStats() {
   }).reverse();
 
   const dailyData = last30Days.map(date => {
-    const dayIncome = transactions
+    const dayIncome = visibleTransactions
       .filter(t => t.date.startsWith(date) && t.type === 'income')
       .reduce((sum, t) => sum + t.amount, 0);
 
-    const dayExpenses = transactions
+    const dayExpenses = visibleTransactions
       .filter(t => t.date.startsWith(date) && t.type === 'expense')
       .reduce((sum, t) => sum + t.amount, 0);
 
@@ -349,6 +387,14 @@ export function useMonthlyStats() {
     monthlyData: dailyData,
     transactionCount: monthlyTransactions.length,
   };
+}
+
+// Transazioni visibili: esclude hidden_from_charts su singola transazione E su intera categoria
+export function useVisibleTransactions(): Transaction[] {
+  const { data: txs = [] } = useTransactions();
+  const { data: cats = [] } = useFinanceCategories();
+  const hiddenCatIds = new Set(cats.filter(c => c.hidden_from_charts).map(c => c.id));
+  return txs.filter(t => !t.hidden_from_charts && !hiddenCatIds.has(t.category));
 }
 
 // ── Budget hooks ───────────────────────────────────────────────────────────────
@@ -472,5 +518,79 @@ export function useDeletePatrimonioAsset() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: PATRIMONIO_KEY }),
+  });
+}
+
+// ── Prestiti & Puffi hooks ────────────────────────────────────────────────────
+
+const PRESTITI_KEY = ['finance_prestiti'];
+
+export function usePrestiti() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: PRESTITI_KEY,
+    queryFn: async () => {
+      if (!user) throw new Error('Utente non autenticato');
+      const { data, error } = await supabase
+        .from('finance_prestiti')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as Prestito[];
+    },
+    enabled: !!user,
+  });
+}
+
+export function useAddPrestito() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (input: PrestitoInput) => {
+      if (!user) throw new Error('Utente non autenticato');
+      const { data, error } = await supabase
+        .from('finance_prestiti')
+        .insert([{ ...input, user_id: user.id }])
+        .select()
+        .single();
+      if (error) throw error;
+      return data as Prestito;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: PRESTITI_KEY }),
+  });
+}
+
+export function useTogglePrestitoSaldato() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ id, saldato }: { id: string; saldato: boolean }) => {
+      if (!user) throw new Error('Utente non autenticato');
+      const { error } = await supabase
+        .from('finance_prestiti')
+        .update({ saldato })
+        .eq('id', id)
+        .eq('user_id', user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: PRESTITI_KEY }),
+  });
+}
+
+export function useDeletePrestito() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      if (!user) throw new Error('Utente non autenticato');
+      const { error } = await supabase
+        .from('finance_prestiti')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: PRESTITI_KEY }),
   });
 }

@@ -1,5 +1,5 @@
 import { useMemo, useId } from 'react';
-import { useTransactions } from '@/hooks/useFinance';
+import { useVisibleTransactions } from '@/hooks/useFinance';
 import { NebulaCard } from '@/components/ui/nebula/NebulaCard';
 import { formatCurrency } from '@/utils/formatters';
 import type { Transaction } from '@/types';
@@ -171,7 +171,7 @@ export function GroupedBarChart({ months }: BarChartProps) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export function FinanceChartFragment(_: Props) {
-  const { data: txs = [] } = useTransactions();
+  const txs = useVisibleTransactions();
 
   const { months, currentMonth } = useMemo(() => {
     const now = new Date();

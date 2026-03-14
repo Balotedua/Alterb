@@ -6,9 +6,24 @@ import { toast } from 'sonner';
 import { NEBULA_THEMES } from '@/config/nebulaThemes';
 import { useNebulaStore } from '@/store/nebulaStore';
 
+const DISPLAY_NAME_KEY = 'alter_display_name';
+const BIO_KEY          = 'alter_bio';
+
 export function SettingsFragment(_: { params?: Record<string, unknown> }) {
   const { user } = useAuth();
   const { nebulaTheme, setNebulaTheme } = useNebulaStore();
+
+  const [displayName, setDisplayName] = useState(() => localStorage.getItem(DISPLAY_NAME_KEY) ?? '');
+  const [bio, setBio]                 = useState(() => localStorage.getItem(BIO_KEY) ?? '');
+  const [profileSaved, setProfileSaved] = useState(false);
+
+  const saveProfile = () => {
+    localStorage.setItem(DISPLAY_NAME_KEY, displayName.trim());
+    localStorage.setItem(BIO_KEY, bio.trim());
+    setProfileSaved(true);
+    toast.success('Profilo aggiornato');
+    setTimeout(() => setProfileSaved(false), 2000);
+  };
 
   const [showDelete, setShowDelete] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
@@ -39,6 +54,41 @@ export function SettingsFragment(_: { params?: Record<string, unknown> }) {
   return (
     <NebulaCard title="Impostazioni" variant="default" closable={true}>
       <div className="st-body">
+
+        {/* ── Profilo ── */}
+        <div className="st-section-label">Profilo</div>
+
+        <div className="st-profile-form">
+          <div className="st-field">
+            <label className="st-field-label">Nome visualizzato</label>
+            <input
+              className="st-field-input"
+              placeholder="Come vuoi essere chiamato?"
+              value={displayName}
+              onChange={e => setDisplayName(e.target.value)}
+              maxLength={40}
+            />
+          </div>
+          <div className="st-field">
+            <label className="st-field-label">Bio</label>
+            <textarea
+              className="st-field-input st-field-textarea"
+              placeholder="Una breve descrizione di te…"
+              value={bio}
+              onChange={e => setBio(e.target.value)}
+              maxLength={120}
+              rows={3}
+            />
+            <span className="st-field-hint">{bio.length}/120</span>
+          </div>
+          <button
+            className={`st-btn st-btn--save ${profileSaved ? 'st-btn--saved' : ''}`}
+            onClick={saveProfile}
+            disabled={profileSaved}
+          >
+            {profileSaved ? '✓ Salvato' : 'Salva profilo'}
+          </button>
+        </div>
 
         {/* ── Account ── */}
         <div className="st-section-label">Account</div>
