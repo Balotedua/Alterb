@@ -21,6 +21,7 @@ MODULE — quale area di dati coinvolge:
 - FINANCE: soldi, spese, budget, entrate, uscite, risparmi
 - HEALTH: sonno, esercizio, peso, acqua, benessere fisico
 - PSYCH: umore, emozioni, ansia, stress, benessere mentale
+- CONSCIOUSNESS: pensieri, note, appunti, idee, coscienza, inbox, capture
 - NONE: nessun modulo dati
 
 FRAGMENT — nome esatto del componente (solo per VISUAL, ACTION e HYBRID):
@@ -48,6 +49,9 @@ Per PSYCH:
   - "PsychOverview"  → umore attuale + media N giorni (default)
   - "MoodHistory"    → storico umore con grafico
 
+Per CONSCIOUSNESS:
+  - "ConsciousnessInbox" → pannello a 3 tab: Void (capture), Mind (albero/grafo tag), Report (sintesi settimanale AI). Params: { "tab": "void"|"mind"|"report" }. Usa per: appunti, note, pensieri, idee, coscienza, inbox, capture, report settimanale, grafo, tag
+
 Per SETTINGS:
   - "Settings" → impostazioni account, tema, lingua, sicurezza, eliminazione account
 
@@ -55,6 +59,12 @@ Per HELP:
   - "Help" → guida interattiva ai comandi e ai fragment disponibili
 
 Per TALK/senza UI: lascia fragment come stringa vuota "".
+
+ESEMPI CONSCIOUSNESS:
+- "apri appunti" → type:ACTION, module:CONSCIOUSNESS, fragment:"ConsciousnessInbox", params:{}, intensity:0.4
+- "ho un'idea" → type:ACTION, module:CONSCIOUSNESS, fragment:"ConsciousnessInbox", params:{"tab":"void"}, intensity:0.6
+- "mostra i miei tag" → type:VISUAL, module:CONSCIOUSNESS, fragment:"ConsciousnessInbox", params:{"tab":"mind"}, intensity:0.4
+- "voglio il report settimanale" → type:VISUAL, module:CONSCIOUSNESS, fragment:"ConsciousnessInbox", params:{"tab":"report"}, intensity:0.5
 
 PARAMS:
   - { "days": 7 }               → filtra ultimi N giorni

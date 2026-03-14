@@ -24,9 +24,12 @@ import { PsychOverviewFragment }   from './psychology/PsychOverviewFragment';
 import { SettingsFragment }        from './settings/SettingsFragment';
 import { HelpFragment }            from './help/HelpFragment';
 import { FinanceManualFragment }   from './help/FinanceManualFragment';
+import { ConsciousnessManualFragment } from './help/ConsciousnessManualFragment';
+import { WorkoutManualFragment }   from './help/WorkoutManualFragment';
 import { BugReportFragment }       from './bug/BugReportFragment';
 import { AdminFragment }           from './admin/AdminFragment';
-import { RoutineFragment }         from './routine/RoutineFragment';
+import { RoutineFragment }                from './routine/RoutineFragment';
+import { ConsciousnessInboxFragment }    from './consciousness/ConsciousnessInboxFragment';
 
 type FragmentComponent = ComponentType<{ params: Record<string, unknown> }>;
 
@@ -63,8 +66,10 @@ export const FRAGMENT_REGISTRY: Record<string, FragmentComponent> = {
   Settings:       SettingsFragment,
 
   // Help
-  Help:           HelpFragment,
-  FinanceManual:  FinanceManualFragment,
+  Help:                HelpFragment,
+  FinanceManual:       FinanceManualFragment,
+  ConsciousnessManual: ConsciousnessManualFragment,
+  WorkoutManual:       WorkoutManualFragment,
 
   // Bug report
   BugReport:      BugReportFragment,
@@ -74,6 +79,9 @@ export const FRAGMENT_REGISTRY: Record<string, FragmentComponent> = {
 
   // Routine & Appuntamenti
   Routine:        RoutineFragment,
+
+  // Consciousness Inbox
+  ConsciousnessInbox: ConsciousnessInboxFragment,
 };
 
 export type FragmentName = keyof typeof FRAGMENT_REGISTRY;

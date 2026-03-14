@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import type { BodyVital, ExerciseMax, ExerciseUnit, SleepEntry } from '@/types';
+import type { BodyVital, ExerciseMax, ExerciseUnit, SleepEntry, WorkoutSession } from '@/types';
 
 // ── Query key factories ──────────────────────────────────────────────────────
 
@@ -154,6 +154,49 @@ export function latestByExercise(maxes: ExerciseMax[]): ExerciseMax[] {
   return Array.from(map.values());
 }
 
+// ── Workout Sessions ─────────────────────────────────────────────────────────
+
+export interface AddWorkoutSessionInput {
+  date: string;
+  muscles: string[];
+  rpe?: number;
+  duration_m?: number;
+  notes?: string;
+}
+
+export function useWorkoutSessions() {
+  const { user } = useAuth();
+  return useQuery<WorkoutSession[]>({
+    queryKey: ['health', 'workout_sessions', user?.id ?? ''],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('workout_sessions')
+        .select('id, date, rpe, duration_m, notes, muscles')
+        .eq('user_id', user!.id)
+        .order('date', { ascending: false })
+        .limit(180);
+      if (error) throw error;
+      return (data ?? []).map(r => ({ ...r, muscles: r.muscles ?? [] })) as WorkoutSession[];
+    },
+    enabled: !!user?.id,
+    staleTime: 60_000,
+  });
+}
+
+export function useAddWorkoutSession() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation<void, Error, AddWorkoutSessionInput>({
+    mutationFn: async (input) => {
+      const { error } = await supabase
+        .from('workout_sessions')
+        .insert({ user_id: user!.id, ...input });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['health', 'workout_sessions', user?.id ?? ''] }),
+  });
+}
+
 // ── Sleep Entries ────────────────────────────────────────────────────────────
 
 export interface AddSleepInput {
@@ -207,6 +250,53 @@ export function useDeleteSleepEntry() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: K.sleep(user?.id ?? '') }),
+  });
+}
+
+// ── Custom Exercises ─────────────────────────────────────────────────────────
+
+export interface CustomExercise {
+  id: string;
+  name: string;
+  muscle_group: string;
+  unit: ExerciseUnit;
+}
+
+export interface AddCustomExerciseInput {
+  name: string;
+  muscle_group: string;
+  unit: ExerciseUnit;
+}
+
+export function useCustomExercises() {
+  const { user } = useAuth();
+  return useQuery<CustomExercise[]>({
+    queryKey: ['health', 'custom_exercises', user?.id ?? ''],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('custom_exercises')
+        .select('id, name, muscle_group, unit')
+        .eq('user_id', user!.id)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as CustomExercise[];
+    },
+    enabled: !!user?.id,
+    staleTime: 120_000,
+  });
+}
+
+export function useAddCustomExercise() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation<void, Error, AddCustomExerciseInput>({
+    mutationFn: async (input) => {
+      const { error } = await supabase
+        .from('custom_exercises')
+        .insert({ user_id: user!.id, ...input });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['health', 'custom_exercises', user?.id ?? ''] }),
   });
 }
 

@@ -33,6 +33,7 @@ export interface ChatWithSystemPromptResult {
 export async function chatWithSystemPrompt(
   systemPrompt: string,
   history: ChatMessage[],
+  maxTokens = 256,
 ): Promise<ChatWithSystemPromptResult> {
   const apiKey = env.VITE_DEEPSEEK_API_KEY;
   if (!apiKey) throw new DeepSeekError('VITE_DEEPSEEK_API_KEY non configurata nel .env');
@@ -48,7 +49,7 @@ export async function chatWithSystemPrompt(
     body: JSON.stringify({
       model: DEEPSEEK_MODEL,
       messages,
-      max_tokens: 256,
+      max_tokens: maxTokens,
       temperature: 0.3,
     }),
   });

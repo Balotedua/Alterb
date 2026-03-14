@@ -138,6 +138,15 @@ export interface ExerciseMax {
   date: string;
 }
 
+export interface WorkoutSession {
+  id: string;
+  date: string;
+  rpe: number | null;
+  duration_m: number | null;
+  notes: string | null;
+  muscles: string[];
+}
+
 export interface SleepEntry {
   id: string;
   duration_minutes: number;
@@ -160,6 +169,30 @@ export interface NoteInput {
   title: string;
   content: string;
   tags?: string[];
+}
+
+export interface Entry {
+  id: string;
+  user_id: string;
+  raw_text: string;
+  clean_text: string | null;
+  created_at: string;
+  tags: Tag[];
+}
+
+export interface Tag {
+  id: string;
+  user_id?: string;
+  tag_name: string;
+  created_at?: string;
+}
+
+export interface ConsciousnessReport {
+  id: string;
+  user_id: string;
+  content: string;
+  week_start: string;
+  created_at: string;
 }
 
 // ─── Badges / Gamification ───────────────────────────────────────────────────
