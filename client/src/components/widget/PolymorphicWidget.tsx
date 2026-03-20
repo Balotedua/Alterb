@@ -19,21 +19,104 @@ export function inferRenderType(entries: VaultEntry[]): RenderType {
   return 'list';
 }
 
+// ─── Shared sub-components ────────────────────────────────────
+function Stat({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div style={{
+      flex: 1, padding: '12px 14px', borderRadius: 12,
+      background: 'rgba(255,255,255,0.025)',
+      border: `1px solid ${color}12`,
+      boxShadow: `inset 0 1px 0 rgba(255,255,255,0.03)`,
+    }}>
+      <div style={{
+        fontSize: 9, color: '#4b5268',
+        textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 7,
+        fontWeight: 400,
+      }}>
+        {label}
+      </div>
+      <div style={{
+        fontSize: 19, fontWeight: 300, color,
+        textShadow: `0 0 20px ${color}50`,
+        letterSpacing: '0.01em',
+      }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function EntryRow({ entry, color, label, value }: {
+  entry: VaultEntry; color: string; label: string; value: string
+}) {
+  const { setActiveWidget, activeWidget } = useAlterStore();
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await deleteEntry(entry.id);
+    if (activeWidget) {
+      setActiveWidget({
+        ...activeWidget,
+        entries: activeWidget.entries.filter(en => en.id !== entry.id),
+      });
+    }
+  };
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '7px 10px 7px 12px',
+      borderRadius: 8,
+      background: 'rgba(255,255,255,0.018)',
+      borderLeft: `2px solid ${color}35`,
+      transition: 'background 0.15s',
+    }}>
+      <div style={{
+        flex: 1, fontSize: 12, color: '#b0bcd4',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        fontWeight: 300,
+      }}>
+        {label}
+      </div>
+      <div style={{
+        fontSize: 12, color,
+        fontWeight: 400, whiteSpace: 'nowrap',
+        textShadow: `0 0 10px ${color}40`,
+      }}>
+        {value}
+      </div>
+      <button
+        onClick={handleDelete}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: '#3a3f52', padding: 2, opacity: 0.6, fontSize: 9,
+          transition: 'color 0.2s, opacity 0.2s',
+          lineHeight: 1,
+        }}
+        onMouseEnter={e => { (e.target as HTMLElement).style.color = '#f87171'; (e.target as HTMLElement).style.opacity = '1'; }}
+        onMouseLeave={e => { (e.target as HTMLElement).style.color = '#3a3f52'; (e.target as HTMLElement).style.opacity = '0.6'; }}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 // ─── Sub-renderers ────────────────────────────────────────────
 function FinanceStats({ entries, color }: { entries: VaultEntry[]; color: string }) {
   const expenses = entries.filter(e => e.data.type === 'expense');
   const income   = entries.filter(e => e.data.type === 'income');
   const totalOut = expenses.reduce((s, e) => s + ((e.data.amount as number) ?? 0), 0);
-  const totalIn  = income.reduce((s, e) => s + ((e.data.amount as number) ?? 0), 0);
+  const totalIn  = income.reduce((s, e)   => s + ((e.data.amount as number) ?? 0), 0);
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-        <Stat label="Uscite" value={`-€${totalOut.toFixed(2)}`} color="#f87171" />
-        <Stat label="Entrate" value={`+€${totalIn.toFixed(2)}`} color="#4ade80" />
-        <Stat label="Netto" value={`€${(totalIn - totalOut).toFixed(2)}`} color={color} />
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+        <Stat label="Uscite"  value={`-€${totalOut.toFixed(2)}`} color="#f87171" />
+        <Stat label="Entrate" value={`+€${totalIn.toFixed(2)}`}  color="#4ade80" />
+        <Stat label="Netto"   value={`€${(totalIn - totalOut).toFixed(2)}`} color={color} />
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 220, overflowY: 'auto' }}>
         {entries.slice(0, 30).map((e) => (
           <EntryRow key={e.id} entry={e} color={color}
             label={(e.data.label as string) ?? '—'}
@@ -46,7 +129,7 @@ function FinanceStats({ entries, color }: { entries: VaultEntry[]; color: string
 }
 
 function HealthChart({ entries, color }: { entries: VaultEntry[]; color: string }) {
-  const type = entries[0]?.data.type as string;
+  const type     = entries[0]?.data.type as string;
   const valueKey = type === 'sleep' ? 'hours' : type === 'water' ? 'liters' : 'value';
   const unit     = type === 'sleep' ? 'h' : type === 'water' ? 'L' : 'kg';
 
@@ -57,19 +140,28 @@ function HealthChart({ entries, color }: { entries: VaultEntry[]; color: string 
 
   return (
     <div>
-      <ResponsiveContainer width="100%" height={160}>
+      <ResponsiveContainer width="100%" height={150}>
         <LineChart data={chartData}>
-          <XAxis dataKey="date" tick={{ fill: '#8892b0', fontSize: 10 }} />
-          <YAxis tick={{ fill: '#8892b0', fontSize: 10 }} />
+          <XAxis dataKey="date" tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} width={28} />
           <Tooltip
-            contentStyle={{ background: '#0d0d14', border: `1px solid ${color}22`, borderRadius: 8 }}
-            labelStyle={{ color: '#ccd6f6' }}
+            contentStyle={{
+              background: 'rgba(3,3,7,0.95)', border: `1px solid ${color}20`,
+              borderRadius: 10, backdropFilter: 'blur(20px)',
+            }}
+            labelStyle={{ color: '#6b7280', fontSize: 10 }}
+            itemStyle={{ color }}
             formatter={(v: number) => [`${v}${unit}`, '']}
           />
-          <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={{ fill: color, r: 3 }} />
+          <Line
+            type="monotone" dataKey="v" stroke={color} strokeWidth={1.5}
+            dot={{ fill: color, r: 2.5, strokeWidth: 0 }}
+            activeDot={{ r: 4, fill: color, strokeWidth: 0 }}
+            style={{ filter: `drop-shadow(0 0 4px ${color}80)` }}
+          />
         </LineChart>
       </ResponsiveContainer>
-      <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 120, overflowY: 'auto' }}>
+      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 120, overflowY: 'auto' }}>
         {entries.slice(0, 15).map((e) => (
           <EntryRow key={e.id} entry={e} color={color}
             label={type.charAt(0).toUpperCase() + type.slice(1)}
@@ -89,18 +181,27 @@ function MoodChart({ entries, color }: { entries: VaultEntry[]; color: string })
 
   return (
     <div>
-      <ResponsiveContainer width="100%" height={140}>
-        <BarChart data={chartData}>
-          <XAxis dataKey="date" tick={{ fill: '#8892b0', fontSize: 10 }} />
-          <YAxis domain={[0, 10]} tick={{ fill: '#8892b0', fontSize: 10 }} />
+      <ResponsiveContainer width="100%" height={130}>
+        <BarChart data={chartData} barSize={8}>
+          <XAxis dataKey="date" tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} />
+          <YAxis domain={[0, 10]} tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} width={20} />
           <Tooltip
-            contentStyle={{ background: '#0d0d14', border: `1px solid ${color}22`, borderRadius: 8 }}
+            contentStyle={{
+              background: 'rgba(3,3,7,0.95)', border: `1px solid ${color}20`,
+              borderRadius: 10, backdropFilter: 'blur(20px)',
+            }}
+            labelStyle={{ color: '#6b7280', fontSize: 10 }}
+            itemStyle={{ color }}
             formatter={(v: number) => [`${v}/10`, 'Umore']}
           />
-          <Bar dataKey="score" fill={color} radius={[4, 4, 0, 0]} fillOpacity={0.8} />
+          <Bar
+            dataKey="score" fill={color} radius={[3, 3, 0, 0]}
+            fillOpacity={0.75}
+            style={{ filter: `drop-shadow(0 0 3px ${color}60)` }}
+          />
         </BarChart>
       </ResponsiveContainer>
-      <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 120, overflowY: 'auto' }}>
+      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 120, overflowY: 'auto' }}>
         {entries.slice(0, 10).map((e) => (
           <EntryRow key={e.id} entry={e} color={color}
             label={(e.data.note as string) ?? '—'}
@@ -114,7 +215,7 @@ function MoodChart({ entries, color }: { entries: VaultEntry[]; color: string })
 
 function DiaryList({ entries, color }: { entries: VaultEntry[]; color: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 300, overflowY: 'auto' }}>
       {entries.slice(0, 20).map((e) => (
         <EntryRow key={e.id} entry={e} color={color}
           label={(e.data.note as string) ?? (e.data.raw as string) ?? '—'}
@@ -127,10 +228,10 @@ function DiaryList({ entries, color }: { entries: VaultEntry[]; color: string })
 
 function GenericList({ entries, color }: { entries: VaultEntry[]; color: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 280, overflowY: 'auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 280, overflowY: 'auto' }}>
       {entries.slice(0, 25).map((e) => {
-        const val  = e.data.value ?? e.data.amount ?? e.data.score ?? '';
-        const lbl  = e.data.label ?? e.data.raw ?? e.data.note ?? e.category;
+        const val = e.data.value ?? e.data.amount ?? e.data.score ?? '';
+        const lbl = e.data.label ?? e.data.raw ?? e.data.note ?? e.category;
         return (
           <EntryRow key={e.id} entry={e} color={color}
             label={String(lbl)}
@@ -138,47 +239,6 @@ function GenericList({ entries, color }: { entries: VaultEntry[]; color: string 
           />
         );
       })}
-    </div>
-  );
-}
-
-// ─── Shared sub-components ────────────────────────────────────
-function Stat({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div style={{ flex: 1, padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-      <div style={{ fontSize: 10, color: '#8892b0', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 300, color }}>{value}</div>
-    </div>
-  );
-}
-
-function EntryRow({ entry, color, label, value }: { entry: VaultEntry; color: string; label: string; value: string }) {
-  const { setActiveWidget, activeWidget } = useAlterStore();
-
-  const handleDelete = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    await deleteEntry(entry.id);
-    if (activeWidget) {
-      setActiveWidget({
-        ...activeWidget,
-        entries: activeWidget.entries.filter(en => en.id !== entry.id),
-      });
-    }
-  };
-
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 8,
-      padding: '6px 10px', borderRadius: 8,
-      background: 'rgba(255,255,255,0.02)',
-      border: '1px solid rgba(255,255,255,0.04)',
-    }}>
-      <div style={{ flex: 1, fontSize: 13, color: '#ccd6f6', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</div>
-      <div style={{ fontSize: 13, color, fontWeight: 400, whiteSpace: 'nowrap' }}>{value}</div>
-      <button
-        onClick={handleDelete}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8892b0', padding: 2, opacity: 0.5, fontSize: 10 }}
-      >✕</button>
     </div>
   );
 }
@@ -192,51 +252,71 @@ export default function PolymorphicWidget() {
       {activeWidget && (
         <motion.div
           key="widget"
-          initial={{ opacity: 0, y: 40, scale: 0.97 }}
+          initial={{ opacity: 0, y: 48, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 30, scale: 0.97 }}
-          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          exit={{ opacity: 0, y: 32, scale: 0.96 }}
+          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
           style={{
             position: 'fixed',
             bottom: 120,
             left: '50%',
             transform: 'translateX(-50%)',
-            width: 'min(480px, 94vw)',
+            width: 'min(500px, 94vw)',
             maxHeight: '60vh',
             overflowY: 'auto',
-            background: 'rgba(10,10,18,0.92)',
-            border: `1px solid ${activeWidget.color}22`,
-            borderRadius: 20,
+            background: 'rgba(3,3,7,0.97)',
+            border: `1px solid ${activeWidget.color}20`,
+            borderRadius: 22,
             padding: '20px 20px 16px',
-            backdropFilter: 'blur(24px)',
+            backdropFilter: 'blur(36px)',
             zIndex: 100,
-            boxShadow: `0 0 60px ${activeWidget.color}18, 0 20px 40px rgba(0,0,0,0.6)`,
+            boxShadow: [
+              `0 0 80px ${activeWidget.color}12`,
+              `0 0 160px ${activeWidget.color}07`,
+              `0 28px 56px rgba(0,0,0,0.7)`,
+              `inset 0 1px 0 rgba(255,255,255,0.035)`,
+            ].join(', '),
           }}
         >
           {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16, gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 18, gap: 10 }}>
+            {/* Color indicator */}
             <div style={{
-              width: 8, height: 8, borderRadius: '50%',
+              width: 6, height: 6, borderRadius: '50%',
               background: activeWidget.color,
-              boxShadow: `0 0 12px ${activeWidget.color}`,
+              boxShadow: `0 0 8px ${activeWidget.color}, 0 0 16px ${activeWidget.color}60`,
+              flexShrink: 0,
             }} />
-            <span style={{ fontSize: 13, fontWeight: 500, color: '#ccd6f6', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            <span style={{
+              fontSize: 11, fontWeight: 500, color: '#9aa5c4',
+              letterSpacing: '0.1em', textTransform: 'uppercase',
+            }}>
               {activeWidget.label}
             </span>
-            <span style={{ marginLeft: 'auto', fontSize: 11, color: '#8892b0' }}>
-              {activeWidget.entries.length} voci
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: '#2e3347', letterSpacing: '0.05em' }}>
+              {activeWidget.entries.length}
             </span>
             <button
               onClick={() => setActiveWidget(null)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8892b0', padding: 4 }}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: '#2e3347', padding: 4,
+                transition: 'color 0.2s',
+                display: 'flex', alignItems: 'center',
+              }}
+              onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = '#6b7280')}
+              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = '#2e3347')}
             >
-              <X size={14} />
+              <X size={13} />
             </button>
           </div>
 
           {/* Body — polymorphic */}
           {activeWidget.entries.length === 0 ? (
-            <p style={{ color: '#8892b0', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>
+            <p style={{
+              color: '#2e3347', fontSize: 12, textAlign: 'center',
+              padding: '24px 0', letterSpacing: '0.05em',
+            }}>
               Nessun dato ancora.
             </p>
           ) : activeWidget.renderType === 'stats'  ? <FinanceStats entries={activeWidget.entries} color={activeWidget.color} />

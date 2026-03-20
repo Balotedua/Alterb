@@ -15,11 +15,15 @@
       <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/vercelesercizio.iml" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Flusso di coscienza 20-03.md" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/.claude/settings.local.json" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/.gitignore" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/.prettierignore" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/.prettierrc" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/README.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/dist/assets/index-C9pFNzfD.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/dist/assets/index-DLwlvyto.css" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/dist/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/client/dist/index.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/eslint.config.js" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/client/index.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/client/package-lock.json" afterDir="false" />
@@ -85,6 +89,7 @@
       <change beforePath="$PROJECT_DIR$/client/src/components/settings/PanelProfilo.tsx" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/settings/ProfileForm.tsx" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/settings/ThemeSelector.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/components/starfield/StarfieldView.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/starfield/StarfieldView.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/ui/Button.tsx" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/ui/Card.tsx" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/ui/Input.tsx" beforeDir="false" />
@@ -94,6 +99,7 @@
       <change beforePath="$PROJECT_DIR$/client/src/components/ui/nebula/NebulaGraph.tsx" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/ui/nebula/NebulaStat.tsx" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/ui/nebula/index.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/components/widget/PolymorphicWidget.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/widget/PolymorphicWidget.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/config/env.ts" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/config/nebulaThemes.ts" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/context/AuthContext.tsx" beforeDir="false" />
