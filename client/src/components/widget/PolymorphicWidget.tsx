@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import {
@@ -9,9 +10,11 @@ import { deleteEntry } from '../../vault/vaultService';
 import type { VaultEntry, WidgetData, RenderType } from '../../types';
 
 // ─── Render type inference ────────────────────────────────────
-export function inferRenderType(entries: VaultEntry[]): RenderType {
+export function inferRenderType(entries: VaultEntry[], category?: string): RenderType {
+  if (category === 'calendar' || (!entries.length && category === 'calendar')) return 'timeline';
   if (!entries.length) return 'list';
   const data = entries[0].data;
+  if (data.is_event || (entries[0] as VaultEntry & { category?: string }).category === 'calendar') return 'timeline';
   if (data.type === 'mood')   return 'mood';
   if (data.type === 'weight' || data.type === 'sleep' || data.type === 'water') return 'chart';
   if (typeof data.amount === 'number') return 'stats';
@@ -243,28 +246,131 @@ function GenericList({ entries, color }: { entries: VaultEntry[]; color: string 
   );
 }
 
+// ─── Calendar Timeline ────────────────────────────────────────
+function CalendarTimeline({ entries, color }: { entries: VaultEntry[]; color: string }) {
+  const sorted = [...entries].sort((a, b) => {
+    const sa = (a.data.scheduled_at as string) ?? a.created_at;
+    const sb = (b.data.scheduled_at as string) ?? b.created_at;
+    return new Date(sa).getTime() - new Date(sb).getTime();
+  });
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 320, overflowY: 'auto' }}>
+      {sorted.length === 0 && (
+        <p style={{ color: '#2e3347', fontSize: 12, textAlign: 'center', padding: '24px 0' }}>
+          Nessun evento in agenda.
+        </p>
+      )}
+      {sorted.map((e) => {
+        const raw = (e.data.scheduled_at as string) ?? e.created_at;
+        const dt  = new Date(raw);
+        const dateStr = dt.toLocaleDateString('it-IT', { weekday: 'short', day: '2-digit', month: 'short' });
+        const timeStr = dt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+        const title   = (e.data.title as string) ?? (e.data.raw as string) ?? '—';
+        const isPast  = dt < new Date();
+        return (
+          <div key={e.id} style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '8px 12px', borderRadius: 10,
+            background: isPast ? 'rgba(255,255,255,0.01)' : 'rgba(255,255,255,0.028)',
+            borderLeft: `2px solid ${isPast ? color + '25' : color + '60'}`,
+            opacity: isPast ? 0.45 : 1,
+          }}>
+            {/* Timeline dot */}
+            <div style={{
+              flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+              minWidth: 52,
+            }}>
+              <span style={{ fontSize: 9, color: color, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                {dateStr}
+              </span>
+              <span style={{ fontSize: 11, color: isPast ? '#4b5268' : color, fontWeight: 400 }}>
+                {timeStr}
+              </span>
+            </div>
+            <div style={{ flex: 1, fontSize: 12, color: isPast ? '#4b5268' : '#b0bcd4', fontWeight: 300,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {title}
+            </div>
+            <button
+              onClick={async (ev) => {
+                ev.stopPropagation();
+                await deleteEntry(e.id);
+                useAlterStore.getState().setActiveWidget(
+                  useAlterStore.getState().activeWidget
+                    ? { ...useAlterStore.getState().activeWidget!, entries: useAlterStore.getState().activeWidget!.entries.filter(x => x.id !== e.id) }
+                    : null
+                );
+              }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3a3f52', padding: 2, opacity: 0.6, fontSize: 9 }}
+              onMouseEnter={e2 => { (e2.target as HTMLElement).style.color = '#f87171'; (e2.target as HTMLElement).style.opacity = '1'; }}
+              onMouseLeave={e2 => { (e2.target as HTMLElement).style.color = '#3a3f52'; (e2.target as HTMLElement).style.opacity = '0.6'; }}
+            >✕</button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Nebula Insight ───────────────────────────────────────────
+function NebulaInsight({ entries: _entries, color }: { entries: VaultEntry[]; color: string }) {
+  const text = (_entries[0]?.data.insight as string) ?? '';
+  const lines = text.split('\n').filter(Boolean);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {lines.map((line, i) => (
+        <div key={i} style={{
+          fontSize: 12, color: '#b0bcd4', lineHeight: 1.65, fontWeight: 300,
+          padding: '8px 12px', borderRadius: 10,
+          background: 'rgba(255,255,255,0.022)',
+          borderLeft: `2px solid ${color}40`,
+        }}>
+          {line.replace(/^[-•*]\s*/, '')}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Main Widget ──────────────────────────────────────────────
 export default function PolymorphicWidget() {
   const { activeWidget, setActiveWidget } = useAlterStore();
 
+  // Esc to close
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setActiveWidget(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [setActiveWidget]);
+
   return (
-    <AnimatePresence>
+    <>
+      {/* Backdrop */}
       {activeWidget && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 99 }}
+          onClick={() => setActiveWidget(null)}
+        />
+      )}
+
+      <AnimatePresence>
+        {activeWidget && (
         <motion.div
           key="widget"
-          initial={{ opacity: 0, y: 48, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 32, scale: 0.96 }}
+          initial={{ opacity: 0, scale: 0.93, x: '-50%', y: '-50%' }}
+          animate={{ opacity: 1, scale: 1,    x: '-50%', y: '-50%' }}
+          exit={{ opacity: 0, scale: 0.93,    x: '-50%', y: '-50%' }}
           transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
           style={{
             position: 'fixed',
-            bottom: 120,
+            top: '50%',
             left: '50%',
-            transform: 'translateX(-50%)',
-            width: 'min(500px, 94vw)',
-            maxHeight: '60vh',
+            width: 'min(500px, calc(100vw - 16px))',
+            maxHeight: 'min(72vh, calc(100svh - 80px))',
             overflowY: 'auto',
-            background: 'rgba(3,3,7,0.97)',
+            WebkitOverflowScrolling: 'touch' as never,
+            background: 'rgba(0,0,0,0.97)',
             border: `1px solid ${activeWidget.color}20`,
             borderRadius: 22,
             padding: '20px 20px 16px',
@@ -273,7 +379,7 @@ export default function PolymorphicWidget() {
             boxShadow: [
               `0 0 80px ${activeWidget.color}12`,
               `0 0 160px ${activeWidget.color}07`,
-              `0 28px 56px rgba(0,0,0,0.7)`,
+              `0 28px 56px rgba(0,0,0,0.8)`,
               `inset 0 1px 0 rgba(255,255,255,0.035)`,
             ].join(', '),
           }}
@@ -319,13 +425,16 @@ export default function PolymorphicWidget() {
             }}>
               Nessun dato ancora.
             </p>
-          ) : activeWidget.renderType === 'stats'  ? <FinanceStats entries={activeWidget.entries} color={activeWidget.color} />
-          : activeWidget.renderType === 'chart'   ? <HealthChart  entries={activeWidget.entries} color={activeWidget.color} />
-          : activeWidget.renderType === 'mood'    ? <MoodChart    entries={activeWidget.entries} color={activeWidget.color} />
-          : activeWidget.renderType === 'diary'   ? <DiaryList    entries={activeWidget.entries} color={activeWidget.color} />
+          ) : activeWidget.renderType === 'stats'    ? <FinanceStats      entries={activeWidget.entries} color={activeWidget.color} />
+          : activeWidget.renderType === 'chart'    ? <HealthChart       entries={activeWidget.entries} color={activeWidget.color} />
+          : activeWidget.renderType === 'mood'     ? <MoodChart         entries={activeWidget.entries} color={activeWidget.color} />
+          : activeWidget.renderType === 'diary'    ? <DiaryList         entries={activeWidget.entries} color={activeWidget.color} />
+          : activeWidget.renderType === 'timeline' ? <CalendarTimeline  entries={activeWidget.entries} color={activeWidget.color} />
+          : activeWidget.renderType === 'insight'  ? <NebulaInsight     entries={activeWidget.entries} color={activeWidget.color} />
           : <GenericList entries={activeWidget.entries} color={activeWidget.color} />}
         </motion.div>
-      )}
-    </AnimatePresence>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

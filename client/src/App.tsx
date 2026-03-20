@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from './config/supabase';
-import { getCategorySummaries } from './vault/vaultService';
+import { getCategorySummaries, getUpcomingEvents } from './vault/vaultService';
 import { buildStar } from './components/starfield/StarfieldView';
 import { useAlterStore } from './store/alterStore';
 import LoginScreen    from './components/auth/LoginScreen';
@@ -12,7 +12,7 @@ import PolymorphicWidget from './components/widget/PolymorphicWidget';
 export default function App() {
   const [authUser, setAuthUser] = useState<User | null | undefined>(undefined);
   const [authError, setAuthError] = useState<string | null>(null);
-  const { setUser, setStars, upsertStar, addKnownCategory } = useAlterStore();
+  const { setUser, setStars, upsertStar, addKnownCategory, setAlertEvent } = useAlterStore();
 
   // ── Auth listener ────────────────────────────────────────
   useEffect(() => {
@@ -57,6 +57,28 @@ export default function App() {
     });
   }, [authUser, setUser, setStars, upsertStar, addKnownCategory]);
 
+  // ── Sentinel: scan upcoming events every 60s ─────────────
+  useEffect(() => {
+    if (!authUser) return;
+
+    const scan = async () => {
+      const events = await getUpcomingEvents(authUser.id);
+      if (events.length > 0) {
+        const e = events[0];
+        setAlertEvent({
+          title: (e.data.title as string) ?? (e.data.raw as string) ?? 'Evento',
+          scheduledAt: (e.data.scheduled_at as string) ?? e.created_at,
+        });
+        // Auto-dismiss after 15s
+        setTimeout(() => setAlertEvent(null), 15000);
+      }
+    };
+
+    scan();
+    const interval = setInterval(scan, 60000);
+    return () => clearInterval(interval);
+  }, [authUser, setAlertEvent]);
+
   // ── Realtime: update stars on new vault entries ───────────
   useEffect(() => {
     if (!authUser) return;
@@ -83,7 +105,7 @@ export default function App() {
   // ── Loading ───────────────────────────────────────────────
   if (authUser === undefined) {
     return (
-      <div style={{ position: 'fixed', inset: 0, background: '#050508', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'fixed', inset: 0, background: '#000000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#f0c040', boxShadow: '0 0 12px #f0c040' }} />
       </div>
     );

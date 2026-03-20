@@ -29,6 +29,14 @@ interface AlterStore {
 
   knownCategories: string[]; // for localParser training
   addKnownCategory: (cat: string) => void;
+
+  // ── Query feedback ───────────────────────────────────────────
+  highlightedStarId: string | null;  // star lit during a query response
+  setHighlightedStar: (id: string | null) => void;
+
+  // ── Sentinel alert ───────────────────────────────────────────
+  alertEvent: { title: string; scheduledAt: string } | null;
+  setAlertEvent: (e: { title: string; scheduledAt: string } | null) => void;
 }
 
 export const useAlterStore = create<AlterStore>((set) => ({
@@ -63,11 +71,17 @@ export const useAlterStore = create<AlterStore>((set) => ({
   focusMode: false,
   setFocusMode: (focusMode) => set({ focusMode }),
 
-  knownCategories: ['finance', 'health', 'psychology'],
+  knownCategories: ['finance', 'health', 'psychology', 'calendar'],
   addKnownCategory: (cat) =>
     set((s) => ({
       knownCategories: s.knownCategories.includes(cat)
         ? s.knownCategories
         : [...s.knownCategories, cat],
     })),
+
+  highlightedStarId: null,
+  setHighlightedStar: (highlightedStarId) => set({ highlightedStarId }),
+
+  alertEvent: null,
+  setAlertEvent: (alertEvent) => set({ alertEvent }),
 }));

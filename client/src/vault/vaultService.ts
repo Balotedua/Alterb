@@ -61,6 +61,52 @@ export async function getCategorySummaries(userId: string): Promise<CategorySumm
   return Array.from(map.values());
 }
 
+// ─── Read: recent entries across all categories ──────────────
+export async function getRecentAll(userId: string, limit = 30): Promise<VaultEntry[]> {
+  const { data, error } = await supabase
+    .from('vault')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) { console.error('[vault getRecentAll]', error); return []; }
+  return (data ?? []) as VaultEntry[];
+}
+
+// ─── Read: calendar events in a date range (JSONB filter) ────
+export async function queryCalendarByDate(
+  userId: string,
+  from: Date,
+  to: Date
+): Promise<VaultEntry[]> {
+  const { data, error } = await supabase
+    .from('vault')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('category', 'calendar')
+    .gte('data->>scheduled_at', from.toISOString())
+    .lte('data->>scheduled_at', to.toISOString())
+    .order('data->>scheduled_at', { ascending: true });
+  if (error) { console.error('[vault queryCalendarByDate]', error); return []; }
+  return (data ?? []) as VaultEntry[];
+}
+
+// ─── Read: upcoming events (next 30 min) for sentinel ────────
+export async function getUpcomingEvents(userId: string): Promise<VaultEntry[]> {
+  const now  = new Date();
+  const soon = new Date(now.getTime() + 30 * 60 * 1000);
+  const { data, error } = await supabase
+    .from('vault')
+    .select('*')
+    .eq('user_id', userId)
+    .filter('data->>is_event', 'eq', 'true')
+    .gte('data->>scheduled_at', now.toISOString())
+    .lte('data->>scheduled_at', soon.toISOString())
+    .order('data->>scheduled_at', { ascending: true });
+  if (error) { console.error('[vault getUpcomingEvents]', error); return []; }
+  return (data ?? []) as VaultEntry[];
+}
+
 // ─── Delete ──────────────────────────────────────────────────
 export async function deleteEntry(id: string): Promise<boolean> {
   const { error } = await supabase.from('vault').delete().eq('id', id);

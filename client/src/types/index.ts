@@ -38,7 +38,7 @@ export interface Star {
 }
 
 // ─── Widget ──────────────────────────────────────────────────
-export type RenderType = 'chart' | 'list' | 'diary' | 'stats' | 'mood';
+export type RenderType = 'chart' | 'list' | 'diary' | 'stats' | 'mood' | 'timeline' | 'insight';
 
 export interface WidgetData {
   category: string;

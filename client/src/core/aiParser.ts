@@ -33,6 +33,52 @@ interface AiResult {
   meta: CategoryMeta;
 }
 
+async function deepseekChat(messages: { role: string; content: string }[], maxTokens = 256): Promise<string | null> {
+  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
+  if (!apiKey) return null;
+  try {
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'deepseek-chat', messages, temperature: 0.4, max_tokens: maxTokens }),
+    });
+    if (!res.ok) throw new Error(`DeepSeek ${res.status}`);
+    const json = await res.json();
+    return json.choices[0].message.content as string;
+  } catch (e) {
+    console.error('[deepseekChat]', e);
+    return null;
+  }
+}
+
+// ─── Query: answer a question using vault entries as context ──
+export async function aiQuery(question: string, entries: import('../types').VaultEntry[]): Promise<string> {
+  const context = entries.slice(0, 20).map(e =>
+    `[${new Date(e.created_at).toLocaleDateString('it-IT')} · ${e.category}] ${JSON.stringify(e.data)}`
+  ).join('\n');
+
+  const reply = await deepseekChat([
+    { role: 'system', content: `Sei Nebula, l'assistente di Alter OS. Rispondi in italiano in modo conciso (max 3 righe) usando SOLO i dati forniti. Se non ci sono dati pertinenti, dillo chiaramente. Non inventare.` },
+    { role: 'user', content: `Dati disponibili:\n${context || '(nessun dato)'}\n\nDomanda: ${question}` },
+  ], 200);
+
+  return reply ?? 'Nessun dato trovato per questa query.';
+}
+
+// ─── Analyse: cross-category insight ──────────────────────────
+export async function analyzeGalaxy(entries: import('../types').VaultEntry[]): Promise<string> {
+  const context = entries.map(e =>
+    `[${new Date(e.created_at).toLocaleDateString('it-IT')} · ${e.category}] ${JSON.stringify(e.data)}`
+  ).join('\n');
+
+  const reply = await deepseekChat([
+    { role: 'system', content: `Sei Nebula, l'analista di Alter OS. Analizza i dati dell'utente e trova correlazioni tra salute, finanze e umore. Rispondi in italiano con 2-4 bullet points insights concreti. Sii diretto e utile.` },
+    { role: 'user', content: `Ultimi dati:\n${context || '(nessun dato)'}` },
+  ], 400);
+
+  return reply ?? 'Dati insufficienti per un\'analisi significativa.';
+}
+
 export async function aiParse(text: string): Promise<Omit<ParsedIntent, 'source' | 'rawText'> | null> {
   const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
   if (!apiKey) {
@@ -43,31 +89,19 @@ export async function aiParse(text: string): Promise<Omit<ParsedIntent, 'source'
   try {
     const res = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model: 'deepseek-chat',
-        messages: [
-          { role: 'system', content: SYSTEM },
-          { role: 'user', content: text },
-        ],
+        messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: text }],
         response_format: { type: 'json_object' },
         temperature: 0.2,
         max_tokens: 256,
       }),
     });
-
     if (!res.ok) throw new Error(`DeepSeek ${res.status}`);
     const json = await res.json();
     const parsed: AiResult = JSON.parse(json.choices[0].message.content);
-
-    return {
-      category: parsed.category,
-      data: parsed.data,
-      categoryMeta: parsed.meta,
-    };
+    return { category: parsed.category, data: parsed.data, categoryMeta: parsed.meta };
   } catch (e) {
     console.error('[aiParser]', e);
     return null;
