@@ -36,6 +36,50 @@ async function extractPdf(file: File): Promise<OcrResult> {
     if (pageText) pageTexts.push(pageText);
   }
 
+  const digitalText = pageTexts.join('\n\n');
+
+  // If no digital text found, the PDF is likely scanned — fallback to OCR
+  if (!digitalText.trim()) {
+    return extractPdfViaOcr(pdf, file.name);
+  }
+
+  return {
+    text: digitalText,
+    pageCount: pdf.numPages,
+    mimeType: 'application/pdf',
+  };
+}
+
+// ── PDF OCR fallback: render each page to canvas → Tesseract ──
+async function extractPdfViaOcr(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  pdf: any,
+  _filename: string
+): Promise<OcrResult> {
+  const { createWorker } = await import('tesseract.js');
+  const worker = await createWorker('ita+eng');
+
+  const pageTexts: string[] = [];
+  try {
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 2.0 }); // higher scale = better OCR
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d')!;
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      const blob = await new Promise<Blob>((res) =>
+        canvas.toBlob((b) => res(b!), 'image/png')
+      );
+      const { data } = await worker.recognize(blob);
+      if (data.text.trim()) pageTexts.push(data.text.trim());
+    }
+  } finally {
+    await worker.terminate();
+  }
+
   return {
     text: pageTexts.join('\n\n'),
     pageCount: pdf.numPages,

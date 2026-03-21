@@ -235,6 +235,67 @@ export async function searchDocuments(userId: string, keyword: string): Promise<
   return (data ?? []) as VaultEntry[];
 }
 
+// ─── Admin: global stats (no user_id filter) ─────────────────
+export interface AdminStats {
+  totalEntries: number;
+  byCategory: { category: string; count: number }[];
+  aiCalls: number;
+  totalSizeMB: number;
+}
+
+export interface ActiveUser {
+  userId: string;
+  lastActivity: string;
+  entryCount: number;
+}
+
+export async function getAdminStats(): Promise<AdminStats> {
+  const { data, error } = await supabase
+    .from('vault')
+    .select('category, created_at, data')
+    .order('created_at', { ascending: false });
+
+  if (error || !data) return { totalEntries: 0, byCategory: [], aiCalls: 0, totalSizeMB: 0 };
+
+  const map = new Map<string, number>();
+  let totalBytes = 0;
+  for (const row of data) {
+    map.set(row.category, (map.get(row.category) ?? 0) + 1);
+    totalBytes += new Blob([JSON.stringify(row.data ?? {})]).size;
+  }
+  const byCategory = Array.from(map.entries())
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const aiCalls = parseInt(localStorage.getItem('_alter_ai_calls') ?? '0', 10);
+  const totalSizeMB = totalBytes / (1024 * 1024);
+  return { totalEntries: data.length, byCategory, aiCalls, totalSizeMB };
+}
+
+export async function getLastActiveUsers(): Promise<ActiveUser[]> {
+  const { data, error } = await supabase
+    .from('vault')
+    .select('user_id, created_at')
+    .order('created_at', { ascending: false })
+    .limit(500);
+
+  if (error || !data) return [];
+
+  const map = new Map<string, { lastActivity: string; count: number }>();
+  for (const row of data) {
+    const existing = map.get(row.user_id);
+    if (!existing) {
+      map.set(row.user_id, { lastActivity: row.created_at, count: 1 });
+    } else {
+      existing.count++;
+    }
+  }
+  return Array.from(map.entries())
+    .map(([userId, v]) => ({ userId, lastActivity: v.lastActivity, entryCount: v.count }))
+    .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
+    .slice(0, 20);
+}
+
 // ─── Delete: last entry of a category ────────────────────────
 export async function deleteLastInCategory(
   userId: string,

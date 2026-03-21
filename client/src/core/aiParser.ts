@@ -48,6 +48,7 @@ async function deepseekChat(messages: { role: string; content: string }[], maxTo
     clearTimeout(timeout);
     if (!res.ok) throw new Error(`DeepSeek ${res.status}`);
     const json = await res.json();
+    localStorage.setItem('_alter_ai_calls', String(parseInt(localStorage.getItem('_alter_ai_calls') ?? '0', 10) + 1));
     return json.choices[0].message.content as string;
   } catch (e) {
     console.error('[deepseekChat]', e);
@@ -133,6 +134,7 @@ export async function aiParse(text: string): Promise<Omit<ParsedIntent, 'source'
       }),
     });
     if (!res.ok) throw new Error(`DeepSeek ${res.status}`);
+    localStorage.setItem('_alter_ai_calls', String(parseInt(localStorage.getItem('_alter_ai_calls') ?? '0', 10) + 1));
     const json = await res.json();
     const parsed: AiResult = JSON.parse(json.choices[0].message.content);
     return { category: parsed.category, data: parsed.data, categoryMeta: parsed.meta };

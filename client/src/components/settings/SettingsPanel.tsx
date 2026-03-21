@@ -1,10 +1,12 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAlterStore } from '../../store/alterStore';
 import type { Theme } from '../../types';
 import { importBankCsv, parseBankCsv } from '../../import/bankCsvImport';
 import type { BankTransaction } from '../../import/bankCsvImport';
 import { importAppleHealthXml, importHealthConnectJson } from '../../import/healthImport';
+import { getAdminStats, getLastActiveUsers } from '../../vault/vaultService';
+import type { AdminStats, ActiveUser } from '../../vault/vaultService';
 
 const THEMES: { id: Theme; label: string; desc: string; preview: string[] }[] = [
   {
@@ -350,6 +352,9 @@ export default function SettingsPanel() {
                 📤 Esporta dati vault
               </div>
             </Section>
+
+            {/* Admin section */}
+            <AdminSection />
           </motion.div>
         </>
       )}
@@ -486,6 +491,223 @@ function ImportButton({ label, icon, onClick, disabled }: {
       <span style={{ fontSize: 16 }}>{icon}</span>
       <span style={{ fontSize: 12, color: 'var(--text)' }}>{label}</span>
     </button>
+  );
+}
+
+const ADMIN_PASSWORD = 'provaqwerty';
+
+function AdminSection() {
+  const [open, setOpen] = useState(false);
+  const [pwInput, setPwInput] = useState('');
+  const [unlocked, setUnlocked] = useState(false);
+  const [pwError, setPwError] = useState(false);
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [users, setUsers] = useState<ActiveUser[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!unlocked) return;
+    setLoading(true);
+    Promise.all([getAdminStats(), getLastActiveUsers()]).then(([s, u]) => {
+      setStats(s);
+      setUsers(u);
+      setLoading(false);
+    });
+  }, [unlocked]);
+
+  function tryUnlock() {
+    if (pwInput === ADMIN_PASSWORD) {
+      setUnlocked(true);
+      setPwError(false);
+    } else {
+      setPwError(true);
+      setTimeout(() => setPwError(false), 1200);
+    }
+  }
+
+  function fmtTime(iso: string) {
+    const d = new Date(iso);
+    return d.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function shortId(id: string) {
+    return id.slice(0, 8) + '…';
+  }
+
+  return (
+    <div style={{ marginTop: 4 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%',
+          background: 'none',
+          border: '1px solid rgba(167,139,250,0.15)',
+          borderRadius: 10,
+          padding: '9px 14px',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          color: 'rgba(167,139,250,0.5)',
+          fontSize: 10.5,
+          fontWeight: 600,
+          letterSpacing: '0.14em',
+          transition: 'border-color 0.2s, color 0.2s',
+        }}
+      >
+        <span>⬡ ADMIN</span>
+        <span style={{ fontSize: 12, opacity: 0.6 }}>{open ? '▲' : '▼'}</span>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            key="admin-body"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.22 }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div style={{ paddingTop: 12 }}>
+              {!unlocked ? (
+                <div>
+                  <div style={{ fontSize: 10.5, color: 'var(--text-dim)', marginBottom: 8, letterSpacing: '0.08em' }}>
+                    Password admin
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      type="password"
+                      value={pwInput}
+                      onChange={e => setPwInput(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && tryUnlock()}
+                      placeholder="••••••••"
+                      style={{
+                        flex: 1,
+                        background: pwError ? 'rgba(240,80,80,0.08)' : 'rgba(255,255,255,0.05)',
+                        border: `1px solid ${pwError ? 'rgba(240,80,80,0.4)' : 'var(--border)'}`,
+                        borderRadius: 10,
+                        padding: '9px 14px',
+                        fontSize: 13,
+                        color: 'var(--text)',
+                        outline: 'none',
+                        transition: 'border-color 0.2s, background 0.2s',
+                      }}
+                    />
+                    <button
+                      onClick={tryUnlock}
+                      style={{
+                        background: 'rgba(167,139,250,0.1)',
+                        border: '1px solid rgba(167,139,250,0.25)',
+                        borderRadius: 10,
+                        padding: '9px 16px',
+                        fontSize: 12,
+                        color: '#a78bfa',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                    >
+                      Entra
+                    </button>
+                  </div>
+                  {pwError && (
+                    <div style={{ marginTop: 7, fontSize: 11, color: '#f08080' }}>Password errata</div>
+                  )}
+                </div>
+              ) : loading ? (
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', padding: '8px 0' }}>Caricamento...</div>
+              ) : (
+                <div>
+                  {/* DB Stats */}
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.14em', color: 'rgba(167,139,250,0.6)', marginBottom: 8 }}>
+                      DATABASE
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
+                      <StatTile label="Totale record" value={String(stats?.totalEntries ?? 0)} />
+                      <StatTile label="Chiamate AI" value={String(stats?.aiCalls ?? 0)} />
+                      <StatTile label="Peso DB" value={stats ? (stats.totalSizeMB < 0.01 ? '<0.01 MB' : `${stats.totalSizeMB.toFixed(2)} MB`) : '—'} />
+                    </div>
+                    <div style={{
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid rgba(255,255,255,0.07)',
+                      borderRadius: 10,
+                      overflow: 'hidden',
+                    }}>
+                      {(stats?.byCategory ?? []).slice(0, 8).map(({ category, count }) => (
+                        <div key={category} style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          padding: '5px 12px',
+                          borderBottom: '1px solid rgba(255,255,255,0.04)',
+                          fontSize: 11,
+                        }}>
+                          <span style={{ color: 'var(--text)', opacity: 0.75 }}>{category}</span>
+                          <span style={{ color: '#a78bfa', fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+                        </div>
+                      ))}
+                      {(stats?.byCategory.length ?? 0) === 0 && (
+                        <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-dim)' }}>
+                          Nessun dato (RLS attivo)
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Last active users */}
+                  <div>
+                    <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.14em', color: 'rgba(167,139,250,0.6)', marginBottom: 8 }}>
+                      ULTIMI UTENTI ATTIVI
+                    </div>
+                    <div style={{
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid rgba(255,255,255,0.07)',
+                      borderRadius: 10,
+                      overflow: 'hidden',
+                    }}>
+                      {users.slice(0, 10).map(u => (
+                        <div key={u.userId} style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr auto auto',
+                          gap: 8,
+                          padding: '5px 12px',
+                          borderBottom: '1px solid rgba(255,255,255,0.04)',
+                          fontSize: 10.5,
+                          alignItems: 'center',
+                        }}>
+                          <span style={{ color: 'var(--text)', opacity: 0.6, fontFamily: 'monospace' }}>{shortId(u.userId)}</span>
+                          <span style={{ color: 'var(--text-dim)' }}>{u.entryCount} record</span>
+                          <span style={{ color: '#a78bfa', whiteSpace: 'nowrap' }}>{fmtTime(u.lastActivity)}</span>
+                        </div>
+                      ))}
+                      {users.length === 0 && (
+                        <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-dim)' }}>
+                          Nessun dato (RLS attivo)
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function StatTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{
+      background: 'rgba(167,139,250,0.06)',
+      border: '1px solid rgba(167,139,250,0.15)',
+      borderRadius: 10,
+      padding: '10px 12px',
+    }}>
+      <div style={{ fontSize: 18, fontWeight: 700, color: '#a78bfa', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>{label}</div>
+    </div>
   );
 }
 

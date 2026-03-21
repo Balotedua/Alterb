@@ -8,11 +8,13 @@
       <change beforePath="$PROJECT_DIR$/.claude/settings.local.json" beforeDir="false" afterPath="$PROJECT_DIR$/.claude/settings.local.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/STATO_ATTUALE.md" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-BOBV1yRL.js" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-BhYahvB8.css" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-BvIcRllm.css" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-BxBpokYP.js" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-CR7xr5Ff.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/dist/assets/index-Ci75h-8o.js" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-CxZaikif.js" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-D1bc4Oh0.js" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-DJAV1e-N.js" beforeDir="false" />
@@ -36,10 +38,12 @@
       <change beforePath="$PROJECT_DIR$/client/src/core/localParser.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/core/localParser.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/core/orchestrator.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/core/orchestrator.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/import/bankCsvImport.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/import/bankCsvImport.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/import/documentOcr.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/import/documentOcr.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/index.css" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/index.css" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/store/alterStore.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/store/alterStore.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/types/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/types/index.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/vault/vaultService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/vault/vaultService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/tsconfig.tsbuildinfo" beforeDir="false" afterPath="$PROJECT_DIR$/client/tsconfig.tsbuildinfo" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

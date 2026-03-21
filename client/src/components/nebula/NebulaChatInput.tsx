@@ -551,6 +551,8 @@ export default function NebulaCore() {
     const onGlobalKey = (e: KeyboardEvent) => {
       if (document.activeElement === inputRef.current) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const tag = (document.activeElement as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement as HTMLElement)?.isContentEditable) return;
       if (e.key.length === 1 && !isProcessing) {
         inputRef.current?.focus();
       }
