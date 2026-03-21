@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { nebulaCameraRef } from './nebulaCamera';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff } from 'lucide-react';
 import { orchestrate } from '../../core/orchestrator';
@@ -35,8 +36,17 @@ export default function NebulaCore() {
   const [showShockwave,    setShowShockwave]    = useState(false);
   const [ray,              setRay]              = useState<Ray | null>(null);
   const [evolveSuggestion, setEvolveSuggestion] = useState<string | null>(null);
-  const inputRef      = useRef<HTMLInputElement>(null);
+  const inputRef       = useRef<HTMLInputElement>(null);
   const evolveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const anchorRef      = useRef<HTMLDivElement>(null);
+  const nebulaWrapRef  = useRef<HTMLDivElement>(null);
+
+  // Register anchors with the camera sync system
+  useEffect(() => {
+    nebulaCameraRef.el     = anchorRef.current;
+    nebulaCameraRef.nebula = nebulaWrapRef.current;
+    return () => { nebulaCameraRef.el = null; nebulaCameraRef.nebula = null; };
+  }, []);
 
   const {
     user, isProcessing, setProcessing,
@@ -243,6 +253,19 @@ export default function NebulaCore() {
     }
   }, [input, isProcessing, user, knownCategories, focusMode, upsertStar, removeStar, addKnownCategory, setFocusMode, setProcessing, addMessage, setHighlightedStar, setActiveWidget, setNexusBeam]);
 
+  // ── Global keypress auto-focus ────────────────────────────
+  useEffect(() => {
+    const onGlobalKey = (e: KeyboardEvent) => {
+      if (document.activeElement === inputRef.current) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key.length === 1 && !isProcessing) {
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onGlobalKey);
+    return () => window.removeEventListener('keydown', onGlobalKey);
+  }, [isProcessing]);
+
   // ── Voice input ────────────────────────────────────────────
   const toggleVoice = useCallback(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -264,25 +287,27 @@ export default function NebulaCore() {
     if (e.key === 'Escape') { setIsActive(false); setInput(''); inputRef.current?.blur(); }
   };
 
+  const openInput = () => {
+    setIsActive(true);
+    setTimeout(() => inputRef.current?.focus(), 60);
+  };
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, pointerEvents: 'none' }}>
 
-      {/* ── Immersive blur backdrop when active ── */}
+      {/* ── Vignette when active ── */}
       <AnimatePresence>
         {isActive && (
           <motion.div
-            key="blur-backdrop"
+            key="vignette"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.35 }}
+            transition={{ duration: 0.5 }}
             style={{
               position: 'absolute', inset: 0,
-              backdropFilter: 'blur(40px)',
-              WebkitBackdropFilter: 'blur(40px)',
-              background: 'rgba(5,5,8,0.22)',
+              background: 'radial-gradient(ellipse 70% 70% at 50% 50%, transparent 30%, rgba(5,5,8,0.55) 100%)',
               pointerEvents: 'none',
-              zIndex: 0,
             }}
           />
         )}
@@ -290,39 +315,24 @@ export default function NebulaCore() {
 
       {/* ── Shockwave rings ── */}
       <AnimatePresence>
-        {showShockwave && (
-          <>
-            <motion.div
-              key="sw-flash"
-              initial={{ opacity: 0.35 }} animate={{ opacity: 0 }} exit={{}}
-              transition={{ duration: 0.9, ease: 'easeOut' }}
-              style={{
-                position: 'absolute', inset: 0,
-                background: 'radial-gradient(circle at center, rgba(240,249,255,0.12) 0%, transparent 65%)',
-                pointerEvents: 'none',
-              }}
-            />
-            {([
-              { scale: 14, op: 0.8, dur: 1.4, delay: 0 },
-              { scale: 22, op: 0.4, dur: 2.0, delay: 0.1 },
-              { scale: 32, op: 0.2, dur: 2.6, delay: 0.22 },
-            ] as const).map((sw, i) => (
-              <motion.div
-                key={`sw${i}`}
-                initial={{ scale: 0.4, opacity: sw.op }}
-                animate={{ scale: sw.scale, opacity: 0 }} exit={{}}
-                transition={{ duration: sw.dur, ease: [0.22, 1, 0.36, 1], delay: sw.delay }}
-                style={{
-                  position: 'absolute', top: '50%', left: '50%',
-                  marginTop: -46, marginLeft: -46,
-                  width: 92, height: 92, borderRadius: '50%',
-                  border: '1px solid rgba(240,249,255,0.55)',
-                  pointerEvents: 'none',
-                }}
-              />
-            ))}
-          </>
-        )}
+        {showShockwave && ([
+          { scale: 10, op: 0.45, dur: 1.0, delay: 0 },
+          { scale: 18, op: 0.2,  dur: 1.6, delay: 0.1 },
+        ] as const).map((sw, i) => (
+          <motion.div
+            key={`sw${i}`}
+            initial={{ scale: 0.5, opacity: sw.op }}
+            animate={{ scale: sw.scale, opacity: 0 }} exit={{}}
+            transition={{ duration: sw.dur, ease: [0.22, 1, 0.36, 1], delay: sw.delay }}
+            style={{
+              position: 'absolute', top: '50%', left: '50%',
+              marginTop: -24, marginLeft: -24,
+              width: 48, height: 48, borderRadius: '50%',
+              border: '1px solid rgba(240,249,255,0.3)',
+              pointerEvents: 'none',
+            }}
+          />
+        ))}
       </AnimatePresence>
 
       {/* ── Ray of light: center → star ── */}
@@ -330,13 +340,13 @@ export default function NebulaCore() {
         {ray && (
           <motion.div
             key="ray"
-            initial={{ opacity: 0.85, scaleX: 0 }}
+            initial={{ opacity: 0.65, scaleX: 0 }}
             animate={{ opacity: 0, scaleX: 1 }}
-            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
             style={{
               position: 'absolute', top: '50%', left: '50%',
-              width: ray.length, height: 1.5,
-              background: `linear-gradient(to right, ${ray.color}cc, transparent)`,
+              width: ray.length, height: 1,
+              background: `linear-gradient(to right, ${ray.color}aa, transparent)`,
               transformOrigin: 'left center',
               transform: `rotate(${ray.angle}deg)`,
               pointerEvents: 'none',
@@ -345,241 +355,234 @@ export default function NebulaCore() {
         )}
       </AnimatePresence>
 
-      {/* ── Ghost text — floats above Nebula, zero box ── */}
-      <div
-        style={{
-          position: 'fixed',
-          top: 'calc(50% - 82px)',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 202,
-          pointerEvents: 'none',
-          textAlign: 'center',
-          minWidth: 220,
-        }}
-      >
+      {/* ── World-space anchor (camera sync — invisible) ── */}
+      <div ref={anchorRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', willChange: 'transform' }} />
+
+      {/* ── Central nebula + expandable input ── */}
+      <div ref={nebulaWrapRef} style={{
+        position: 'fixed',
+        top: '50%', left: '50%',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 202,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 20,
+        pointerEvents: 'none',
+      }}>
+
+        {/* Status / hint text above the nebula */}
         <AnimatePresence mode="wait">
-          {isActive && (
+          {lastReply && !isActive ? (
             <motion.div
-              key="ghost-input"
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
-              transition={{ duration: 0.22 }}
+              key={`reply-${lastReply}`}
+              initial={{ opacity: 0, y: 4, filter: 'blur(4px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, y: 4, filter: 'blur(4px)' }}
+              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
               style={{
-                display: 'inline-flex', alignItems: 'baseline', gap: 0,
+                fontSize: 11,
+                color: 'rgba(170,185,225,0.6)',
+                letterSpacing: '0.07em',
                 fontFamily: '"JetBrains Mono", "Fira Code", ui-monospace, monospace',
                 fontWeight: 300,
-                fontSize: 14,
-                letterSpacing: '0.04em',
-                color: 'rgba(255,255,255,0.92)',
+                textAlign: 'center',
+                pointerEvents: 'none',
                 whiteSpace: 'nowrap',
               }}
             >
-              {input ? (
-                <span>{input}</span>
-              ) : (
-                <AnimatePresence mode="wait">
-                  <motion.span
-                    key={hintIdx}
-                    initial={{ opacity: 0 }} animate={{ opacity: 0.22 }} exit={{ opacity: 0 }}
-                    transition={{ duration: 0.4 }}
-                    style={{ color: 'rgba(200,220,255,0.22)' }}
-                  >
-                    {HINTS[hintIdx]}
-                  </motion.span>
-                </AnimatePresence>
-              )}
-              {/* Blinking cursor */}
-              <motion.span
-                animate={{ opacity: [1, 0, 1] }}
-                transition={{ duration: 0.9, repeat: Infinity, ease: 'linear' }}
-                style={{ color: 'rgba(240,249,255,0.65)', marginLeft: 1 }}
-              >_</motion.span>
+              {lastReply}
+            </motion.div>
+          ) : evolveSuggestion && !isActive ? (
+            <motion.div
+              key="evolve"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.35 }}
+              onClick={() => {
+                const stars = useAlterStore.getState().stars;
+                if (stars.length >= 2) {
+                  const [a, b] = stars.slice(0, 2);
+                  setInput(`correlazione ${a.id} ${b.id}`);
+                  setEvolveSuggestion(null);
+                  openInput();
+                }
+              }}
+              style={{
+                fontSize: 9,
+                color: 'rgba(167,139,250,0.55)',
+                letterSpacing: '0.07em',
+                fontFamily: '"JetBrains Mono", "Fira Code", ui-monospace, monospace',
+                fontWeight: 300,
+                cursor: 'pointer',
+                pointerEvents: 'all',
+                textAlign: 'center',
+                padding: '3px 12px',
+                borderRadius: 20,
+                border: '1px solid rgba(167,139,250,0.08)',
+                background: 'rgba(5,5,8,0.5)',
+              }}
+            >
+              ✦ {evolveSuggestion}
+            </motion.div>
+          ) : !isActive ? (
+            <motion.div
+              key={`hint-${hintIdx}`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+              style={{
+                fontSize: 10,
+                color: 'rgba(200,220,255,0.1)',
+                fontFamily: '"JetBrains Mono", "Fira Code", ui-monospace, monospace',
+                letterSpacing: '0.07em',
+                fontWeight: 300,
+                pointerEvents: 'none',
+                textAlign: 'center',
+              }}
+            >
+              {HINTS[hintIdx]}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
+        {/* ── Nebula orb — large, clickable ── */}
+        <motion.div
+          onClick={isActive ? undefined : openInput}
+          animate={
+            isProcessing
+              ? { scale: [1, 1.25, 1], opacity: [0.95, 1, 0.95] }
+              : isActive
+                ? { scale: 1, opacity: 0.72 }
+                : { scale: [0.88, 1.10, 0.88], opacity: [0.45, 0.75, 0.45] }
+          }
+          transition={
+            isProcessing
+              ? { duration: 0.5, repeat: Infinity, ease: 'easeInOut' }
+              : isActive
+                ? { duration: 0.4, ease: [0.22, 1, 0.36, 1] }
+                : { duration: 6, repeat: Infinity, ease: 'easeInOut' }
+          }
+          style={{
+            width: 58, height: 58,
+            borderRadius: '50%',
+            flexShrink: 0,
+            background: isProcessing
+              ? 'radial-gradient(circle at 38% 38%, #ffe08a 0%, #f0c040 40%, rgba(240,192,64,0.15) 75%, transparent 100%)'
+              : 'radial-gradient(circle at 38% 38%, rgba(255,255,255,0.98) 0%, rgba(210,230,255,0.7) 35%, rgba(170,200,255,0.18) 65%, transparent 100%)',
+            boxShadow: isProcessing
+              ? '0 0 28px rgba(240,192,64,0.55), 0 0 70px rgba(240,192,64,0.18), inset 0 0 12px rgba(255,255,255,0.3)'
+              : '0 0 22px rgba(200,220,255,0.28), 0 0 60px rgba(180,210,255,0.10), inset 0 0 10px rgba(255,255,255,0.25)',
+            pointerEvents: isActive ? 'none' : 'all',
+            cursor: isActive ? 'default' : 'pointer',
+          }}
+        />
+
+        {/* ── Expandable input ── */}
+        <AnimatePresence>
+          {isActive && (
+            <motion.div
+              key="input-bar"
+              initial={{ opacity: 0, scaleY: 0.85, y: -6 }}
+              animate={{ opacity: 1, scaleY: 1, y: 0 }}
+              exit={{ opacity: 0, scaleY: 0.85, y: -6 }}
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              style={{
+                width: 'min(480px, calc(100vw - 40px))',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                background: 'rgba(6,6,14,0.94)',
+                border: '1px solid rgba(255,255,255,0.07)',
+                borderRadius: 10,
+                padding: '11px 16px',
+                backdropFilter: 'blur(48px)',
+                WebkitBackdropFilter: 'blur(48px)',
+                pointerEvents: 'all',
+                boxShadow: '0 8px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04)',
+                transformOrigin: 'top center',
+              }}
+            >
+              {/* Status dot */}
+              <motion.div
+                animate={{
+                  background: isProcessing ? '#f0c040' : 'rgba(240,249,255,0.55)',
+                  boxShadow: isProcessing ? '0 0 8px #f0c040' : '0 0 5px rgba(240,249,255,0.25)',
+                  scale: isProcessing ? [1, 1.6, 1] : 1,
+                }}
+                transition={isProcessing ? { scale: { duration: 0.55, repeat: Infinity } } : { duration: 0.3 }}
+                style={{ width: 4, height: 4, borderRadius: '50%', flexShrink: 0 }}
+              />
+
+              {/* Input field */}
+              <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+                <input
+                  ref={inputRef}
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={handleKey}
+                  onFocus={() => setIsActive(true)}
+                  onBlur={() => { if (!isProcessing) setIsActive(false); }}
+                  disabled={isProcessing}
+                  style={{
+                    width: '100%',
+                    background: 'transparent',
+                    border: 'none', outline: 'none',
+                    color: 'rgba(255,255,255,0.9)',
+                    fontFamily: '"JetBrains Mono", "Fira Code", ui-monospace, monospace',
+                    fontSize: 12, fontWeight: 300,
+                    letterSpacing: '0.04em',
+                    caretColor: 'rgba(200,220,255,0.6)',
+                  }}
+                />
+                {!input && (
+                  <AnimatePresence mode="wait">
+                    <motion.span
+                      key={`ph-${hintIdx}`}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.4 }}
+                      style={{
+                        position: 'absolute', left: 0, top: 0,
+                        fontFamily: '"JetBrains Mono", "Fira Code", ui-monospace, monospace',
+                        fontSize: 12, fontWeight: 300,
+                        letterSpacing: '0.04em',
+                        color: 'rgba(200,220,255,0.14)',
+                        pointerEvents: 'none',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        width: '100%',
+                      }}
+                    >
+                      {HINTS[hintIdx]}
+                    </motion.span>
+                  </AnimatePresence>
+                )}
+              </div>
+
+              {/* Mic */}
+              <button
+                onMouseDown={e => { e.preventDefault(); toggleVoice(); }}
+                onTouchStart={e => { e.preventDefault(); toggleVoice(); }}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: listening ? '#f87171' : 'rgba(240,249,255,0.18)',
+                  padding: '2px 0', flexShrink: 0,
+                  display: 'flex', alignItems: 'center',
+                  transition: 'color 0.2s',
+                }}
+              >
+                {listening ? <MicOff size={12} /> : <Mic size={12} />}
+              </button>
             </motion.div>
           )}
         </AnimatePresence>
+
       </div>
-
-      {/* ── Nebula reply ── */}
-      <AnimatePresence>
-        {lastReply && (
-          <motion.div
-            key={lastReply}
-            initial={{ opacity: 0, filter: 'blur(8px)' }}
-            animate={{ opacity: 1, filter: 'blur(0px)' }}
-            exit={{ opacity: 0, filter: 'blur(8px)' }}
-            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-            style={{
-              position: 'fixed',
-              top: 'calc(50% + 72px)',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              fontSize: 10, color: 'rgba(180,192,230,0.4)',
-              letterSpacing: '0.10em', textAlign: 'center',
-              fontFamily: '"JetBrains Mono", "Fira Code", ui-monospace, monospace',
-              pointerEvents: 'none', whiteSpace: 'nowrap', fontWeight: 300,
-            }}
-          >
-            {lastReply}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Evolve suggestion ── */}
-      <AnimatePresence>
-        {evolveSuggestion && !isActive && (
-          <motion.div
-            key="evolve"
-            initial={{ opacity: 0, y: 8, filter: 'blur(6px)' }}
-            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-            exit={{ opacity: 0, y: 8, filter: 'blur(6px)' }}
-            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-            onClick={() => {
-              const stars = useAlterStore.getState().stars;
-              if (stars.length >= 2) {
-                const [a, b] = stars.slice(0, 2);
-                setInput(`correlazione ${a.id} ${b.id}`);
-                setEvolveSuggestion(null);
-                inputRef.current?.focus();
-              }
-            }}
-            style={{
-              position: 'fixed',
-              top: 'calc(50% + 100px)',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              fontSize: 9,
-              color: 'rgba(167,139,250,0.55)',
-              letterSpacing: '0.08em',
-              textAlign: 'center',
-              fontFamily: '"JetBrains Mono", "Fira Code", ui-monospace, monospace',
-              pointerEvents: 'all',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              fontWeight: 300,
-              padding: '5px 14px',
-              borderRadius: 20,
-              border: '1px solid rgba(167,139,250,0.12)',
-              background: 'rgba(5,5,8,0.6)',
-              backdropFilter: 'blur(10px)',
-              zIndex: 202,
-            }}
-          >
-            ✦ {evolveSuggestion}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Click-outside backdrop ── */}
-      {isActive && (
-        <div
-          style={{ position: 'absolute', inset: 0, pointerEvents: 'all', zIndex: 0 }}
-          onClick={() => { setIsActive(false); setInput(''); inputRef.current?.blur(); }}
-        />
-      )}
-
-      {/* ── The Nebula Core — ALWAYS fixed at dead center ── */}
-      <div
-        style={{
-          position: 'fixed',
-          top: '50%', left: '50%',
-          transform: 'translate(-50%, -50%)',
-          zIndex: 1,
-        }}
-      >
-        <motion.div
-          animate={{ scale: isProcessing ? [1, 1.08, 1] : isActive ? 1.04 : [0.97, 1.03, 0.97] }}
-          transition={
-            isProcessing
-              ? { scale: { duration: 0.6, repeat: Infinity, ease: 'easeInOut' } }
-              : isActive
-                ? { duration: 0.35, ease: [0.22, 1, 0.36, 1] }
-                : { scale: { duration: 4, repeat: Infinity, ease: 'easeInOut' } }
-          }
-          style={{
-            width: 92, height: 92,
-            borderRadius: '50%',
-            background: isProcessing
-              ? 'radial-gradient(circle at 50% 50%, rgba(240,192,64,0.55) 0%, rgba(240,192,64,0.08) 45%, transparent 72%)'
-              : 'radial-gradient(circle at 50% 50%, rgba(255,215,0,0.30) 0%, rgba(240,249,255,0.90) 28%, rgba(240,249,255,0.10) 56%, transparent 78%)',
-            boxShadow: isProcessing
-              ? '0 0 50px rgba(240,192,64,0.65), 0 0 110px rgba(240,192,64,0.35), 0 0 220px rgba(240,192,64,0.12)'
-              : isActive
-                ? '0 0 55px rgba(240,249,255,0.75), 0 0 110px rgba(240,249,255,0.38), 0 0 220px rgba(240,249,255,0.14)'
-                : '0 0 44px rgba(240,249,255,0.55), 0 0 88px rgba(240,249,255,0.28), 0 0 176px rgba(240,249,255,0.10), 0 0 350px rgba(240,249,255,0.04)',
-            border: `0.5px solid rgba(240,249,255,${isActive ? '0.42' : '0.18'})`,
-            cursor: isActive ? 'text' : 'pointer',
-            pointerEvents: 'all',
-            position: 'relative',
-          }}
-        >
-          {/* Input — invisible, covers full orb, captures tap → keyboard */}
-          <input
-            ref={inputRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={handleKey}
-            onFocus={() => setIsActive(true)}
-            onBlur={() => { if (!isProcessing) setIsActive(false); }}
-            disabled={isProcessing}
-            style={{
-              position: 'absolute', inset: 0,
-              width: '100%', height: '100%',
-              borderRadius: '50%',
-              opacity: 0,
-              background: 'transparent',
-              border: 'none', outline: 'none',
-              cursor: isActive ? 'text' : 'pointer',
-              zIndex: 10,
-              fontSize: 16, // prevents iOS auto-zoom
-            }}
-          />
-
-          {/* Processing pulse dot */}
-          {isProcessing && (
-            <motion.div
-              animate={{ scale: [1, 1.7, 1], opacity: [0.9, 0.1, 0.9] }}
-              transition={{ duration: 0.7, repeat: Infinity }}
-              style={{
-                position: 'absolute', top: '50%', left: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: 9, height: 9, borderRadius: '50%',
-                background: '#f0c040',
-                boxShadow: '0 0 14px #f0c040, 0 0 28px #f0c04080',
-                pointerEvents: 'none',
-              }}
-            />
-          )}
-        </motion.div>
-      </div>
-
-      {/* ── Mic — below orb, only when active ── */}
-      <AnimatePresence>
-        {isActive && (
-          <motion.button
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.2 }}
-            onMouseDown={e => { e.preventDefault(); toggleVoice(); }} // mousedown to avoid blur
-            style={{
-              position: 'fixed',
-              top: 'calc(50% + 58px)',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: listening ? '#f87171' : 'rgba(240,249,255,0.28)',
-              padding: 6,
-              pointerEvents: 'all',
-              zIndex: 202,
-              transition: 'color 0.25s',
-            }}
-          >
-            {listening ? <MicOff size={13} /> : <Mic size={13} />}
-          </motion.button>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

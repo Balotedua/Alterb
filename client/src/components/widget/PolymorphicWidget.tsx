@@ -83,7 +83,7 @@ function Stat({ label, value, color }: { label: string; value: string; color: st
         {label}
       </div>
       <div style={{
-        fontSize: 19, fontWeight: 300, color,
+        fontSize: 19, fontWeight: 100, color,
         textShadow: `0 0 20px ${color}50`,
         letterSpacing: '0.01em',
       }}>
@@ -540,9 +540,9 @@ export default function PolymorphicWidget() {
         <motion.div
           key="widget"
           initial={{ clipPath: 'circle(0% at 50% 50%)', opacity: 0, x: '-50%', y: '-50%' }}
-          animate={{ clipPath: 'circle(75% at 50% 50%)', opacity: 1, x: '-50%', y: '-50%' }}
+          animate={{ clipPath: 'circle(150% at 50% 50%)', opacity: 1, x: '-50%', y: '-50%' }}
           exit={{   clipPath: 'circle(0% at 50% 50%)', opacity: 0, x: '-50%', y: '-50%' }}
-          transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
           style={{
             position: 'fixed',
             top: '50%',
@@ -555,8 +555,8 @@ export default function PolymorphicWidget() {
             border: `0.5px solid rgba(192,192,200,0.45)`,
             borderRadius: 22,
             padding: '20px 20px 16px',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
+            backdropFilter: 'blur(40px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(40px) saturate(180%)',
             zIndex: 100,
             boxShadow: [
               `0 0 80px ${activeWidget.color}10`,

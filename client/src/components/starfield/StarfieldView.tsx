@@ -4,20 +4,21 @@ import { useAlterStore } from '../../store/alterStore';
 import { getByCategory } from '../../vault/vaultService';
 import { inferRenderType } from '../widget/PolymorphicWidget';
 import type { Star } from '../../types';
+import { nebulaCameraRef } from '../nebula/nebulaCamera';
 
 // ─── Category meta registry ───────────────────────────────────
 export const CATEGORY_META: Record<string, { label: string; color: string; icon: string }> = {
-  finance:    { label: 'Finanza',     color: '#f0c040', icon: '💰' },
-  health:     { label: 'Salute',      color: '#40e0d0', icon: '💪' },
-  psychology: { label: 'Psiche',      color: '#a78bfa', icon: '🧠' },
-  calendar:   { label: 'Calendario',  color: '#60a5fa', icon: '📅' },
+  finance:    { label: 'Finanza',     color: '#e8d090', icon: '💰' },
+  health:     { label: 'Salute',      color: '#90d8d2', icon: '💪' },
+  psychology: { label: 'Psiche',      color: '#c4b2f5', icon: '🧠' },
+  calendar:   { label: 'Calendario',  color: '#92bef5', icon: '📅' },
 };
 
 export function getCategoryMeta(cat: string) {
   if (CATEGORY_META[cat]) return CATEGORY_META[cat];
   let hash = 0;
   for (const c of cat) hash = ((hash << 5) - hash) + c.charCodeAt(0);
-  const PALETTE = ['#f472b6','#fb923c','#4ade80','#38bdf8','#e879f9','#facc15'];
+  const PALETTE = ['#f0b8d0','#f5c898','#a0d8a8','#90c8f0','#d0a8f0','#f0e0a0'];
   const ICONS   = ['⭐','🌿','🎯','📚','✈️','🐾','🎵','🔮'];
   const color   = PALETTE[Math.abs(hash) % PALETTE.length];
   const icon    = ICONS[Math.abs(hash >> 4) % ICONS.length];
@@ -82,6 +83,7 @@ interface CanvasState {
   panX: number;
   panY: number;
   scale: number;
+  targetScale: number; // smooth zoom target
   dragging: boolean;
   dragX: number;
   dragY: number;
@@ -100,7 +102,7 @@ export default function StarfieldView() {
   const stateRef = useRef<CanvasState>({
     particles: initParticles(isMobile ? 90 : 180),
     raf: 0, hovered: null, t: 0,
-    panX: 0, panY: 0, scale: 1,
+    panX: 0, panY: 0, scale: 1, targetScale: 1,
     dragging: false, dragX: 0, dragY: 0, didDrag: false,
     pinchDist: -1, pinchMidX: 0, pinchMidY: 0,
     constellationAlpha: 0,
@@ -143,11 +145,18 @@ export default function StarfieldView() {
     const ctx = canvas.getContext('2d')!;
     const W = canvas.width, H = canvas.height;
     const state = stateRef.current;
-    const { scale } = state;
     state.t += 0.007;
 
-    // Void absolute
-    ctx.fillStyle = '#000000';
+    // Smooth zoom: lerp toward targetScale
+    if (Math.abs(state.scale - state.targetScale) > 0.0005) {
+      state.scale += (state.targetScale - state.scale) * 0.1;
+    } else {
+      state.scale = state.targetScale;
+    }
+    const { scale } = state;
+
+    // Deep space background
+    ctx.fillStyle = '#050508';
     ctx.fillRect(0, 0, W, H);
 
     // ── Constellation alpha: fade in when idle, out when dragging ──
@@ -213,48 +222,115 @@ export default function StarfieldView() {
         : isAlert
           ? Math.sin(state.t * 4) * 0.25 + 0.85
           : Math.sin(state.t * 1.4 + star.x * 18) * 0.05 + 0.95;
+      // Atmospheric shimmer: independent slow oscillation on scale
+      const scaleTwinkle = (isHighlit || isAlert)
+        ? 1.0
+        : Math.sin(state.t * 0.75 + star.y * 14.7) * 0.035 + 1.0;
       const glowBoost  = isHighlit ? 2.2 : isAlert ? 2.4 : 1;
 
-      // Outer corona
-      const coronaR = (isHov ? 160 : 110) * (0.25 + intensity * 0.75) * pulse * s * glowBoost;
-      const corona  = ctx.createRadialGradient(px, py, 0, px, py, coronaR);
-      corona.addColorStop(0,   `rgba(${r},${g},${b},${0.14 * intensity})`);
-      corona.addColorStop(0.5, `rgba(${r},${g},${b},${0.05 * intensity})`);
-      corona.addColorStop(1,   'rgba(0,0,0,0)');
-      ctx.beginPath(); ctx.arc(px, py, coronaR, 0, Math.PI * 2);
-      ctx.fillStyle = corona; ctx.fill();
+      // Twinkle: smooth slow oscillation
+      const twinkle  = Math.sin(state.t * (1.1 + star.x * 3.7) + star.y * 8.3) * 0.5 + 0.5;
+      const alpha    = isHighlit || isAlert
+        ? pulse
+        : (0.55 + intensity * 0.45 + twinkle * 0.18) * pulse;
 
-      // Main glow
-      const glowR = (isHov ? 90 : 55) * (0.45 + intensity * 0.55) * pulse * s * glowBoost;
-      const grd   = ctx.createRadialGradient(px, py, 0, px, py, glowR);
-      grd.addColorStop(0,    `rgba(${r},${g},${b},${0.85 * intensity})`);
-      grd.addColorStop(0.35, `rgba(${r},${g},${b},${0.35 * intensity})`);
-      grd.addColorStop(1,    'rgba(0,0,0,0)');
+      // ── Outer nebula glow ──────────────────────────────────
+      const glowR = (isHov ? 52 : isHighlit || isAlert ? 44 : 28 + intensity * 18) * s * glowBoost;
+      const glow  = ctx.createRadialGradient(px, py, 0, px, py, glowR);
+      glow.addColorStop(0,    `rgba(${r},${g},${b},${0.28 * alpha})`);
+      glow.addColorStop(0.35, `rgba(${r},${g},${b},${0.10 * alpha})`);
+      glow.addColorStop(1,    'rgba(0,0,0,0)');
       ctx.beginPath(); ctx.arc(px, py, glowR, 0, Math.PI * 2);
-      ctx.fillStyle = grd; ctx.fill();
+      ctx.fillStyle = glow; ctx.fill();
 
-      // Core
-      const coreR  = (isHov ? 7 : 3 + intensity * 4) * pulse * s;
-      const coreGrd = ctx.createRadialGradient(px, py, 0, px, py, coreR);
-      coreGrd.addColorStop(0,    `rgba(255,255,255,${0.95 * intensity})`);
-      coreGrd.addColorStop(0.25, `rgba(${r},${g},${b},1)`);
-      coreGrd.addColorStop(1,    `rgba(${r},${g},${b},0.3)`);
+      // ── Diffraction spikes (4-pointed star shape) ─────────
+      const spikeLen = (isHov ? 22 : 10 + intensity * 10) * s * glowBoost * (0.85 + twinkle * 0.3);
+      const spikeW   = spikeLen * 0.09;
+      const spikeA   = alpha * (0.6 + twinkle * 0.4);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      [0, Math.PI / 2].forEach((angle) => {
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(angle);
+        const sp = ctx.createLinearGradient(-spikeLen, 0, spikeLen, 0);
+        sp.addColorStop(0,    'rgba(0,0,0,0)');
+        sp.addColorStop(0.42, `rgba(${r},${g},${b},${spikeA * 0.5})`);
+        sp.addColorStop(0.5,  `rgba(${r},${g},${b},${spikeA})`);
+        sp.addColorStop(0.58, `rgba(${r},${g},${b},${spikeA * 0.5})`);
+        sp.addColorStop(1,    'rgba(0,0,0,0)');
+        ctx.beginPath();
+        ctx.moveTo(-spikeLen, 0);
+        ctx.bezierCurveTo(-spikeLen * 0.5, spikeW, spikeLen * 0.5, spikeW, spikeLen, 0);
+        ctx.bezierCurveTo(spikeLen * 0.5, -spikeW, -spikeLen * 0.5, -spikeW, -spikeLen, 0);
+        ctx.fillStyle = sp;
+        ctx.fill();
+        ctx.restore();
+      });
+      ctx.restore();
+
+      // ── Bright circular core ───────────────────────────────
+      const coreR = (isHov ? 5.5 : 2.5 + intensity * 2) * s * glowBoost * scaleTwinkle;
+      const core  = ctx.createRadialGradient(px, py, 0, px, py, coreR);
+      core.addColorStop(0,   `rgba(255,255,255,${alpha})`);
+      core.addColorStop(0.3, `rgba(${r},${g},${b},${alpha * 0.9})`);
+      core.addColorStop(1,   `rgba(${r},${g},${b},0)`);
       ctx.beginPath(); ctx.arc(px, py, coreR, 0, Math.PI * 2);
-      ctx.fillStyle = coreGrd; ctx.fill();
+      ctx.fillStyle = core; ctx.fill();
 
-      // Decay ring
-      if (intensity < 0.22) {
-        ctx.beginPath(); ctx.arc(px, py, coreR + 6 * s, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(${r},${g},${b},0.1)`;
-        ctx.lineWidth = 0.5; ctx.setLineDash([2, 4]);
-        ctx.stroke(); ctx.setLineDash([]);
+      // ── Orbiting child stars (one dot per entry, up to 12) ──
+      const childCount = Math.min(star.entryCount ?? 0, 12);
+      if (childCount > 0) {
+        // deterministic phase offset per category
+        let phaseHash = 0;
+        for (const c of star.id) phaseHash = ((phaseHash << 3) - phaseHash) + c.charCodeAt(0);
+        const phaseOffset = (Math.abs(phaseHash) % 628) / 100;
+        const orbitR  = (18 + intensity * 14) * s;
+        const childSz = Math.max(0.8, (1.1 + intensity * 0.4) * s);
+        for (let i = 0; i < childCount; i++) {
+          const angle  = state.t * 0.20 + (i / childCount) * Math.PI * 2 + phaseOffset;
+          const cpx    = px + Math.cos(angle) * orbitR;
+          const cpy    = py + Math.sin(angle) * orbitR;
+          const cpulse = Math.sin(state.t * 1.8 + i * 1.1) * 0.25 + 0.75;
+          // micro glow
+          const cGlow = ctx.createRadialGradient(cpx, cpy, 0, cpx, cpy, childSz * 3.5);
+          cGlow.addColorStop(0, `rgba(${r},${g},${b},${0.22 * cpulse})`);
+          cGlow.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.beginPath(); ctx.arc(cpx, cpy, childSz * 3.5, 0, Math.PI * 2);
+          ctx.fillStyle = cGlow; ctx.fill();
+          // dot core
+          ctx.beginPath(); ctx.arc(cpx, cpy, childSz, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${r},${g},${b},${0.65 * cpulse})`; ctx.fill();
+        }
+      }
+
+      // ── Subtle outer ring on mother stars (entryCount ≥ 3) ──
+      if ((star.entryCount ?? 0) >= 3) {
+        const ringR = (coreR + 6 + intensity * 4) * 1.0;
+        const ringPulse = Math.sin(state.t * 0.9 + star.x * 5) * 0.5 + 0.5;
+        ctx.beginPath(); ctx.arc(px, py, ringR, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${r},${g},${b},${0.12 * ringPulse})`;
+        ctx.lineWidth = 0.6;
+        ctx.stroke();
+      }
+
+      // ── Category label below star ──────────────────────────
+      const labelOpacity = (isHov ? 0.85 : 0.38) * Math.min(1, alpha * 1.4);
+      if (labelOpacity > 0.04) {
+        const fontSize = Math.round(Math.max(8, 9 * s));
+        ctx.save();
+        ctx.font = `300 ${fontSize}px -apple-system, "SF Pro Display", system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = `rgba(${r},${g},${b},${labelOpacity})`;
+        ctx.fillText(star.label.toUpperCase(), px, py + coreR + 14 * s);
+        ctx.restore();
       }
     });
 
     // ── Constellation lines between nearby stars ──
     if (state.constellationAlpha > 0.002 && starsNow.length > 1) {
       ctx.save();
-      ctx.lineWidth = 0.3;
+      ctx.lineWidth = 0.4;
       for (let i = 0; i < starsNow.length; i++) {
         for (let j = i + 1; j < starsNow.length; j++) {
           const a = starsNow[i], b = starsNow[j];
@@ -262,11 +338,16 @@ export default function StarfieldView() {
           const pb = toScreen(b.x, b.y, W, H);
           const dist = Math.hypot(pa.sx - pb.sx, pa.sy - pb.sy);
           if (dist < 320) {
-            const fade = (1 - dist / 320) * state.constellationAlpha;
+            const fade = (1 - dist / 320) * state.constellationAlpha * 1.2;
+            const [rA, gA, bA] = hexToRgb(a.color);
+            const [rB, gB, bB] = hexToRgb(b.color);
+            const grad = ctx.createLinearGradient(pa.sx, pa.sy, pb.sx, pb.sy);
+            grad.addColorStop(0, `rgba(${rA},${gA},${bA},${fade})`);
+            grad.addColorStop(1, `rgba(${rB},${gB},${bB},${fade})`);
             ctx.beginPath();
             ctx.moveTo(pa.sx, pa.sy);
             ctx.lineTo(pb.sx, pb.sy);
-            ctx.strokeStyle = `rgba(200,215,255,${fade})`;
+            ctx.strokeStyle = grad;
             ctx.stroke();
           }
         }
@@ -312,6 +393,39 @@ export default function StarfieldView() {
       }
     }
 
+    // ── Nebula Compass: indicator when central orb is off-screen ──
+    const nebulaScreenX = W / 2 + state.panX;
+    const nebulaScreenY = H / 2 + state.panY;
+    const pad = 44;
+    if (nebulaScreenX < pad || nebulaScreenX > W - pad || nebulaScreenY < pad || nebulaScreenY > H - pad) {
+      const angle = Math.atan2(nebulaScreenY - H / 2, nebulaScreenX - W / 2);
+      const tX = Math.abs((W / 2 - 32) / Math.cos(angle));
+      const tY = Math.abs((H / 2 - 32) / Math.sin(angle));
+      const t  = Math.min(tX, tY);
+      const ex = W / 2 + Math.cos(angle) * t;
+      const ey = H / 2 + Math.sin(angle) * t;
+      const cp = Math.sin(state.t * 2.4) * 0.28 + 0.72;
+      // glow halo
+      const cGrd = ctx.createRadialGradient(ex, ey, 0, ex, ey, 22);
+      cGrd.addColorStop(0, `rgba(167,139,250,${0.55 * cp})`);
+      cGrd.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.beginPath(); ctx.arc(ex, ey, 22, 0, Math.PI * 2);
+      ctx.fillStyle = cGrd; ctx.fill();
+      // core dot
+      ctx.beginPath(); ctx.arc(ex, ey, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(220,205,255,${cp})`; ctx.fill();
+      // arrow chevron pointing toward nebula
+      const ax = ex + Math.cos(angle) * 12;
+      const ay = ey + Math.sin(angle) * 12;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax - Math.cos(angle - 0.55) * 7, ay - Math.sin(angle - 0.55) * 7);
+      ctx.lineTo(ax - Math.cos(angle + 0.55) * 7, ay - Math.sin(angle + 0.55) * 7);
+      ctx.closePath();
+      ctx.fillStyle = `rgba(200,180,255,${0.75 * cp})`;
+      ctx.fill();
+    }
+
     state.raf = requestAnimationFrame(draw);
   }, [toScreen]);
 
@@ -346,6 +460,8 @@ export default function StarfieldView() {
       state.dragY = e.clientY;
       state.didDrag = true;
       canvas.style.cursor = 'grabbing';
+      if (nebulaCameraRef.el) nebulaCameraRef.el.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
+      if (nebulaCameraRef.nebula) nebulaCameraRef.nebula.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
       return;
     }
 
@@ -404,13 +520,16 @@ export default function StarfieldView() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const W = canvas.width, H = canvas.height;
-    const factor   = e.deltaY > 0 ? 0.9 : 1.1;
-    const newScale = Math.max(0.25, Math.min(5, state.scale * factor));
+    const factor     = e.deltaY > 0 ? 0.92 : 1.09;
+    const newTarget  = Math.max(0.35, Math.min(4, state.targetScale * factor));
     const cx = e.clientX - W / 2;
     const cy = e.clientY - H / 2;
-    state.panX = cx + (state.panX - cx) * (newScale / state.scale);
-    state.panY = cy + (state.panY - cy) * (newScale / state.scale);
-    state.scale = newScale;
+    // Adjust pan so zoom anchors at cursor position
+    state.panX = cx + (state.panX - cx) * (newTarget / state.targetScale);
+    state.panY = cy + (state.panY - cy) * (newTarget / state.targetScale);
+    state.targetScale = newTarget;
+    if (nebulaCameraRef.el) nebulaCameraRef.el.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
+    if (nebulaCameraRef.nebula) nebulaCameraRef.nebula.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
   }, []);
 
   const openWidget = useCallback(async (star: { id: string; label: string; color: string }) => {
@@ -474,6 +593,8 @@ export default function StarfieldView() {
       state.dragX   = tx;
       state.dragY   = ty;
       state.didDrag = true;
+      if (nebulaCameraRef.el) nebulaCameraRef.el.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
+      if (nebulaCameraRef.nebula) nebulaCameraRef.nebula.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
     } else if (e.touches.length === 2 && state.pinchDist > 0) {
       const dx      = e.touches[0].clientX - e.touches[1].clientX;
       const dy      = e.touches[0].clientY - e.touches[1].clientY;
@@ -491,6 +612,8 @@ export default function StarfieldView() {
       state.pinchDist = newDist;
       state.pinchMidX = midX;
       state.pinchMidY = midY;
+      if (nebulaCameraRef.el) nebulaCameraRef.el.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
+      if (nebulaCameraRef.nebula) nebulaCameraRef.nebula.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
     }
   }, []);
 

@@ -9,9 +9,11 @@
       <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-D1bc4Oh0.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/dist/assets/index-DJAV1e-N.js" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-DbmjFQOT.js" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-PoVGF862.css" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/client/dist/index.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/client/index.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/App.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/nebula/NebulaChatInput.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/nebula/NebulaChatInput.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/starfield/StarfieldView.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/starfield/StarfieldView.tsx" afterDir="false" />
@@ -23,6 +25,7 @@
       <change beforePath="$PROJECT_DIR$/client/src/store/alterStore.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/store/alterStore.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/types/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/types/index.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/vault/vaultService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/vault/vaultService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/tsconfig.tsbuildinfo" beforeDir="false" afterPath="$PROJECT_DIR$/client/tsconfig.tsbuildinfo" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
