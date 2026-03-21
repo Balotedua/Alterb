@@ -166,6 +166,33 @@ export async function deleteCategory(userId: string, category: string): Promise<
   return !error;
 }
 
+// ─── Chat sessions (stored in vault category='chat') ─────────
+export async function saveChatSession(
+  userId: string,
+  title: string,
+  messages: { role: string; text: string; ts: number }[]
+): Promise<VaultEntry | null> {
+  const { data: row, error } = await supabase
+    .from('vault')
+    .insert({ user_id: userId, category: 'chat', data: { title, messages } })
+    .select()
+    .single();
+  if (error) { console.error('[chat save]', error); return null; }
+  return row as VaultEntry;
+}
+
+export async function updateChatSession(
+  sessionId: string,
+  title: string,
+  messages: { role: string; text: string; ts: number }[]
+): Promise<void> {
+  await supabase.from('vault').update({ data: { title, messages } }).eq('id', sessionId);
+}
+
+export async function getChatSessions(userId: string): Promise<VaultEntry[]> {
+  return getByCategory(userId, 'chat', 50);
+}
+
 // ─── Delete: last entry of a category ────────────────────────
 export async function deleteLastInCategory(
   userId: string,

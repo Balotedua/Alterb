@@ -138,6 +138,18 @@ export async function orchestrate(
   if (CHAT_PATTERN.test(trimmed))
     return { type: 'chat', raw: trimmed };
 
+  // ── Single-word category lookup ───────────────────────────
+  const CAT_ALIASES: Record<string, string> = {
+    finance: 'finance', finanza: 'finance', spese: 'finance', soldi: 'finance',
+    health: 'health', salute: 'health',
+    psychology: 'psychology', psico: 'psychology', umore: 'psychology',
+    calendar: 'calendar', calendario: 'calendar',
+  };
+  const catMatch = CAT_ALIASES[lower.replace(/[^a-z]/g, '')];
+  if (catMatch) {
+    return { type: 'query', raw: trimmed, category: catMatch, dateRange: null };
+  }
+
   // ── L1: Local parser (zero API cost) ─────────────────────
   const local = localParse(trimmed, knownCategories);
   if (local) {

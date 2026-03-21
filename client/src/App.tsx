@@ -13,13 +13,15 @@ import NebulaChatInput from './components/nebula/NebulaChatInput';
 import PolymorphicWidget from './components/widget/PolymorphicWidget';
 import TabBar from './components/layout/TabBar';
 import ChatView from './components/chat/ChatView';
+import ChatHistorySidebar from './components/chat/ChatHistorySidebar';
 import DashboardView from './components/dashboard/DashboardView';
+import DataAnalyticsView from './components/dashboard/DataAnalyticsView';
 import SettingsPanel from './components/settings/SettingsPanel';
 
 export default function App() {
   const [authUser, setAuthUser] = useState<User | null | undefined>(undefined);
   const [authError, setAuthError] = useState<string | null>(null);
-  const { setUser, setStars, upsertStar, removeStar, addKnownCategory, setAlertEvent, activeWidget, viewMode, theme, showSettings, setShowSettings } = useAlterStore();
+  const { setUser, setStars, upsertStar, removeStar, addKnownCategory, setAlertEvent, activeWidget, viewMode, theme, activeDataCategory } = useAlterStore();
 
   // Apply theme to document root
   useEffect(() => {
@@ -73,6 +75,7 @@ export default function App() {
       });
 
       summaries.forEach(({ category, count, lastEntry }) => {
+        if (category === 'chat') return; // skip chat sessions — not a star
         const star = buildStar(category, count, lastEntry);
         upsertStar({ ...star, isInsight: category === 'insight' });
         if (category !== 'insight') addKnownCategory(category);
@@ -145,28 +148,6 @@ export default function App() {
 
   return (
     <>
-      {/* ── Settings gear button (top-left) ── */}
-      <button
-        onClick={() => setShowSettings(!showSettings)}
-        style={{
-          position: 'fixed',
-          top: 14,
-          left: 16,
-          zIndex: 500,
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          fontSize: 18,
-          lineHeight: 1,
-          padding: 4,
-          opacity: showSettings ? 1 : 0.4,
-          transition: 'opacity 0.2s',
-        }}
-        title="Impostazioni"
-      >
-        ⚙
-      </button>
-
       {/* ── Chat view (default) ── */}
       <AnimatePresence>
         {viewMode === 'chat' && <ChatView />}
@@ -186,13 +167,19 @@ export default function App() {
         {viewMode === 'dashboard' && <DashboardView />}
       </AnimatePresence>
 
-      {/* ── Input (always visible except when widget open) ── */}
+      {/* ── Data Analytics overlay ── */}
       <AnimatePresence>
-        {!activeWidget && <NebulaChatInput key="nebula-core" />}
+        {activeDataCategory && <DataAnalyticsView key="data-analytics" />}
+      </AnimatePresence>
+
+      {/* ── Input (always visible except when widget open or analytics open) ── */}
+      <AnimatePresence>
+        {!activeWidget && !activeDataCategory && <NebulaChatInput key="nebula-core" />}
       </AnimatePresence>
 
       <PolymorphicWidget />
       <SettingsPanel />
+      <ChatHistorySidebar />
       <TabBar />
     </>
   );

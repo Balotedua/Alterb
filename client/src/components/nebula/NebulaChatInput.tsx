@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { nebulaCameraRef } from './nebulaCamera';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, ArrowUp } from 'lucide-react';
+import { Mic, MicOff, ArrowUp, Menu } from 'lucide-react';
 import { orchestrate } from '../../core/orchestrator';
 import { quickConnect } from '../../core/insightEngine';
-import { saveEntry, getByCategory, queryCalendarByDate, getRecentAll, deleteCategory } from '../../vault/vaultService';
+import { saveEntry, getByCategory, queryCalendarByDate, getRecentAll, deleteCategory, saveChatSession, updateChatSession } from '../../vault/vaultService';
 import { aiQuery, analyzeGalaxy, aiChat } from '../../core/aiParser';
 import { buildStar, getCategoryMeta, starPosition } from '../starfield/StarfieldView';
 import { useAlterStore } from '../../store/alterStore';
@@ -55,6 +55,8 @@ export default function NebulaCore() {
     setFocusMode, focusMode, addMessage,
     setHighlightedStar, setActiveWidget, setNexusBeam,
     ghostStarPrompt, setGhostStarPrompt,
+    showChatSidebar, setShowChatSidebar,
+    currentSessionId, setCurrentSessionId,
   } = useAlterStore();
 
   // ── Ghost star → pre-fill input ───────────────────────────
@@ -333,9 +335,25 @@ export default function NebulaCore() {
         setLastReply(msg); addMessage('nebula', msg);
       }
     } finally {
+      // Persist chat session in vault (fire-and-forget)
+      if (user) {
+        const allMsgs = useAlterStore.getState().messages;
+        if (allMsgs.length >= 2) {
+          const title = allMsgs.find(m => m.role === 'user')?.text.slice(0, 50) ?? 'Chat';
+          const sessionMsgs = allMsgs.map(m => ({ role: m.role, text: m.text, ts: m.ts }));
+          const sid = useAlterStore.getState().currentSessionId;
+          if (!sid) {
+            saveChatSession(user.id, title, sessionMsgs).then(saved => {
+              if (saved) setCurrentSessionId(saved.id);
+            });
+          } else {
+            updateChatSession(sid, title, sessionMsgs);
+          }
+        }
+      }
       setProcessing(false);
     }
-  }, [input, isProcessing, user, knownCategories, focusMode, upsertStar, removeStar, addKnownCategory, setFocusMode, setProcessing, addMessage, setHighlightedStar, setActiveWidget, setNexusBeam]);
+  }, [input, isProcessing, user, knownCategories, focusMode, upsertStar, removeStar, addKnownCategory, setFocusMode, setProcessing, addMessage, setHighlightedStar, setActiveWidget, setNexusBeam, setCurrentSessionId]);
 
   // ── Global keypress auto-focus ────────────────────────────
   useEffect(() => {
@@ -383,6 +401,28 @@ export default function NebulaCore() {
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, pointerEvents: 'none' }}>
+
+      {/* ── Hamburger: chat history ── */}
+      <button
+        onMouseDown={e => { e.preventDefault(); setShowChatSidebar(!showChatSidebar); }}
+        onTouchStart={e => { e.preventDefault(); setShowChatSidebar(!showChatSidebar); }}
+        style={{
+          position: 'fixed', top: 12, left: 16, zIndex: 202,
+          background: 'rgba(8,8,18,0.70)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 10, padding: 9,
+          cursor: 'pointer',
+          color: showChatSidebar ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.40)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          transition: 'color 0.2s, background 0.2s',
+          pointerEvents: 'all',
+        }}
+        title="Cronologia chat"
+      >
+        <Menu size={15} />
+      </button>
 
       {/* ── Ray of light: center → star (white, monochrome) ── */}
       <AnimatePresence>

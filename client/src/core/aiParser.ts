@@ -37,11 +37,15 @@ async function deepseekChat(messages: { role: string; content: string }[], maxTo
   const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
   if (!apiKey) return null;
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
     const res = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({ model: 'deepseek-chat', messages, temperature: 0.4, max_tokens: maxTokens }),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     if (!res.ok) throw new Error(`DeepSeek ${res.status}`);
     const json = await res.json();
     return json.choices[0].message.content as string;

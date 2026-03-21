@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAlterStore } from '../../store/alterStore';
 import type { Theme } from '../../types';
+import { importBankCsv } from '../../import/bankCsvImport';
+import { importAppleHealthXml, importHealthConnectJson } from '../../import/healthImport';
 
 const THEMES: { id: Theme; label: string; desc: string; preview: string[] }[] = [
   {
@@ -30,10 +32,35 @@ const THEMES: { id: Theme; label: string; desc: string; preview: string[] }[] = 
   },
 ];
 
+type ImportStatus = { label: string; ok: boolean } | null;
+
 export default function SettingsPanel() {
   const { showSettings, setShowSettings, theme, setTheme, username, setUsername, user } = useAlterStore();
   const [nameInput, setNameInput] = useState(username);
   const [nameSaved, setNameSaved] = useState(false);
+  const [importStatus, setImportStatus] = useState<ImportStatus>(null);
+  const [importing, setImporting] = useState(false);
+  const csvRef  = useRef<HTMLInputElement>(null);
+  const xmlRef  = useRef<HTMLInputElement>(null);
+  const jsonRef = useRef<HTMLInputElement>(null);
+
+  async function handleImport(
+    file: File,
+    fn: (text: string, userId: string) => Promise<number>
+  ) {
+    if (!user) return;
+    setImporting(true);
+    setImportStatus(null);
+    try {
+      const text = await file.text();
+      const count = await fn(text, user.id);
+      setImportStatus({ label: `${count} record importati`, ok: true });
+    } catch {
+      setImportStatus({ label: 'Errore durante l\'import', ok: false });
+    } finally {
+      setImporting(false);
+    }
+  }
 
   const saveUsername = () => {
     setUsername(nameInput.trim());
@@ -70,8 +97,10 @@ export default function SettingsPanel() {
             style={{
               position: 'fixed',
               bottom: 60,
-              left: '50%',
-              transform: 'translateX(-50%)',
+              left: 0,
+              right: 0,
+              marginLeft: 'auto',
+              marginRight: 'auto',
               width: 'min(420px, calc(100vw - 24px))',
               maxHeight: 'calc(100vh - 100px)',
               overflowY: 'auto',
@@ -155,6 +184,42 @@ export default function SettingsPanel() {
                   />
                 ))}
               </div>
+            </Section>
+
+            {/* Import section */}
+            <Section label="IMPORTA DATI">
+              {/* Hidden file inputs */}
+              <input ref={csvRef}  type="file" accept=".csv,.txt" style={{ display: 'none' }}
+                onChange={e => e.target.files?.[0] && handleImport(e.target.files[0], importBankCsv)} />
+              <input ref={xmlRef}  type="file" accept=".xml" style={{ display: 'none' }}
+                onChange={e => e.target.files?.[0] && handleImport(e.target.files[0], importAppleHealthXml)} />
+              <input ref={jsonRef} type="file" accept=".json" style={{ display: 'none' }}
+                onChange={e => e.target.files?.[0] && handleImport(e.target.files[0], importHealthConnectJson)} />
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <ImportButton label="Estratto conto banca (CSV)" icon="🏦" disabled={importing}
+                  onClick={() => csvRef.current?.click()} />
+                <ImportButton label="Apple Health (export.xml)" icon="🍎" disabled={importing}
+                  onClick={() => xmlRef.current?.click()} />
+                <ImportButton label="Health Connect (JSON)" icon="🤖" disabled={importing}
+                  onClick={() => jsonRef.current?.click()} />
+              </div>
+
+              {importStatus && (
+                <div style={{
+                  marginTop: 10, fontSize: 11.5, padding: '7px 12px', borderRadius: 8,
+                  background: importStatus.ok ? 'rgba(80,200,120,0.12)' : 'rgba(240,80,80,0.12)',
+                  color: importStatus.ok ? '#4ecb71' : '#f08080',
+                  border: `1px solid ${importStatus.ok ? 'rgba(80,200,120,0.25)' : 'rgba(240,80,80,0.25)'}`,
+                }}>
+                  {importing ? 'Importando...' : importStatus.label}
+                </div>
+              )}
+              {importing && (
+                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-dim)' }}>
+                  Importazione in corso...
+                </div>
+              )}
             </Section>
 
             {/* Placeholder for future features */}
@@ -274,6 +339,33 @@ function ThemeCard({ theme, active, onSelect }: {
       <div style={{ fontSize: 10, color: 'var(--text-dim)', lineHeight: 1.4 }}>
         {theme.desc}
       </div>
+    </button>
+  );
+}
+
+function ImportButton({ label, icon, onClick, disabled }: {
+  label: string; icon: string; onClick: () => void; disabled: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        background: 'rgba(255,255,255,0.04)',
+        border: '1px solid var(--border)',
+        borderRadius: 10,
+        padding: '9px 14px',
+        cursor: disabled ? 'default' : 'pointer',
+        textAlign: 'left',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        opacity: disabled ? 0.5 : 1,
+        transition: 'opacity 0.2s',
+      }}
+    >
+      <span style={{ fontSize: 16 }}>{icon}</span>
+      <span style={{ fontSize: 12, color: 'var(--text)' }}>{label}</span>
     </button>
   );
 }

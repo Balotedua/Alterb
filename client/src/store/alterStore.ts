@@ -20,6 +20,13 @@ interface AlterStore {
   // ── Chat history ─────────────────────────────────────────
   messages: ChatMessage[];
   addMessage: (role: 'user' | 'nebula', text: string) => void;
+  setMessages: (msgs: ChatMessage[]) => void;
+
+  // ── Chat sidebar ─────────────────────────────────────────
+  showChatSidebar: boolean;
+  setShowChatSidebar: (v: boolean) => void;
+  currentSessionId: string | null;
+  setCurrentSessionId: (id: string | null) => void;
 
   // ── UI states ────────────────────────────────────────────
   isProcessing: boolean;
@@ -54,6 +61,10 @@ interface AlterStore {
   // ── View mode ─────────────────────────────────────────────────
   viewMode: 'chat' | 'galaxy' | 'dashboard';
   setViewMode: (mode: 'chat' | 'galaxy' | 'dashboard') => void;
+
+  // ── Data Analytics ────────────────────────────────────────────
+  activeDataCategory: string | null;
+  setActiveDataCategory: (cat: string | null) => void;
 
   // ── Settings ──────────────────────────────────────────────────
   theme: Theme;
@@ -91,6 +102,12 @@ export const useAlterStore = create<AlterStore>((set) => ({
     set((s) => ({
       messages: [...s.messages, { role, text, ts: Date.now() }],
     })),
+  setMessages: (messages) => set({ messages }),
+
+  showChatSidebar: false,
+  setShowChatSidebar: (showChatSidebar) => set({ showChatSidebar }),
+  currentSessionId: null,
+  setCurrentSessionId: (currentSessionId) => set({ currentSessionId }),
 
   isProcessing: false,
   setProcessing: (isProcessing) => set({ isProcessing }),
@@ -123,6 +140,9 @@ export const useAlterStore = create<AlterStore>((set) => ({
 
   viewMode: 'chat',
   setViewMode: (viewMode) => set({ viewMode }),
+
+  activeDataCategory: null,
+  setActiveDataCategory: (activeDataCategory) => set({ activeDataCategory }),
 
   theme: (localStorage.getItem('alter-theme') as Theme) ?? 'dark',
   setTheme: (theme) => { localStorage.setItem('alter-theme', theme); set({ theme }); },

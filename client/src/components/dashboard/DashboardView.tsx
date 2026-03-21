@@ -33,7 +33,7 @@ function relativeTime(iso: string): string {
 }
 
 function DashboardCard({ star, isLast }: { star: Star; isLast: boolean }) {
-  const { user, setActiveWidget } = useAlterStore();
+  const { user } = useAlterStore();
   const [metric, setMetric] = useState<string>('');
 
   useEffect(() => {
@@ -45,17 +45,8 @@ function DashboardCard({ star, isLast }: { star: Star; isLast: boolean }) {
     });
   }, [star.id, user]);
 
-  const handleClick = async () => {
-    if (!user) return;
-    const entries = await getByCategory(user.id, star.id, 20);
-    const { inferRenderType } = await import('../widget/PolymorphicWidget');
-    setActiveWidget({
-      category: star.id,
-      label: star.label,
-      color: star.color,
-      entries,
-      renderType: inferRenderType(entries, star.id),
-    });
+  const handleClick = () => {
+    useAlterStore.getState().setActiveDataCategory(star.id);
   };
 
   return (

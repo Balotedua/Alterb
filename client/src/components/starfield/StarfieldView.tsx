@@ -108,12 +108,8 @@ export default function StarfieldView() {
 
   const { stars, focusMode, setActiveWidget, user, markStarSeen, highlightedStarId, alertEvent, setSemanticLinks, setGhostStarPrompt } = useAlterStore();
 
-  // Star suction animation before widget opens
-  const [suckStar, setSuckStar] = useState<{ id: string; color: string; dx: number; dy: number } | null>(null);
-
-  // Full-screen supernova flash
-  const [flashActive, setFlashActive] = useState(false);
-  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Subtle ripple at click position
+  const [clickRipple, setClickRipple] = useState<{ x: number; y: number; color: string } | null>(null);
 
   // Load semantic links whenever the star count changes
   useEffect(() => {
@@ -121,13 +117,10 @@ export default function StarfieldView() {
     getSemanticLinks(user.id).then(links => setSemanticLinks(links));
   }, [user, stars.length, setSemanticLinks]);
 
+  // Mark new stars as seen immediately (no animation needed)
   useEffect(() => {
-    if (stars.some(s => s.isNew)) {
-      setFlashActive(true);
-      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
-      flashTimerRef.current = setTimeout(() => setFlashActive(false), 900);
-    }
-  }, [stars]);
+    stars.filter(s => s.isNew).forEach(s => markStarSeen(s.id));
+  }, [stars, markStarSeen]);
 
   // ── Camera: normalized → screen coords ────────────────────
   const toScreen = useCallback((nx: number, ny: number, W: number, H: number) => {
@@ -149,7 +142,7 @@ export default function StarfieldView() {
 
     // Smooth zoom: lerp toward targetScale
     if (Math.abs(state.scale - state.targetScale) > 0.0005) {
-      state.scale += (state.targetScale - state.scale) * 0.06;
+      state.scale += (state.targetScale - state.scale) * 0.14;
     } else {
       state.scale = state.targetScale;
     }
@@ -487,13 +480,25 @@ export default function StarfieldView() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const W = canvas.width, H = canvas.height;
-    const factor     = e.deltaY > 0 ? 0.96 : 1.04;
-    const newTarget  = Math.max(0.35, Math.min(4, state.targetScale * factor));
-    const cx = e.clientX - W / 2;
-    const cy = e.clientY - H / 2;
-    // Adjust pan so zoom anchors at cursor position
-    state.panX = cx + (state.panX - cx) * (newTarget / state.targetScale);
-    state.panY = cy + (state.panY - cy) * (newTarget / state.targetScale);
+    const rect = canvas.getBoundingClientRect();
+
+    // Normalize deltaY across deltaMode (pixel / line / page)
+    let delta = e.deltaY;
+    if (e.deltaMode === 1) delta *= 16;   // line mode → pixels
+    if (e.deltaMode === 2) delta *= 400;  // page mode → pixels
+
+    // Trackpad pinch fires wheel with ctrlKey — use finer sensitivity
+    const sensitivity = e.ctrlKey ? 0.008 : 0.0018;
+    const factor = Math.exp(-delta * sensitivity);
+    const newTarget = Math.max(0.35, Math.min(4, state.targetScale * factor));
+    if (newTarget === state.targetScale) return;
+
+    // Anchor zoom at cursor position (relative to canvas center)
+    const cx = (e.clientX - rect.left) * (W / rect.width) - W / 2;
+    const cy = (e.clientY - rect.top)  * (H / rect.height) - H / 2;
+    const ratio = newTarget / state.targetScale;
+    state.panX = cx + (state.panX - cx) * ratio;
+    state.panY = cy + (state.panY - cy) * ratio;
     state.targetScale = newTarget;
     if (nebulaCameraRef.el) nebulaCameraRef.el.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
     if (nebulaCameraRef.nebula) nebulaCameraRef.nebula.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
@@ -520,8 +525,8 @@ export default function StarfieldView() {
     for (const star of starsNow) {
       const { sx, sy } = toScreen(star.x, star.y, W, H);
       if (Math.hypot(sx - e.clientX, sy - e.clientY) < 22) {
-        setSuckStar({ id: star.id, color: star.color, dx: sx - cx, dy: sy - cy });
-        setTimeout(() => { setSuckStar(null); openWidget(star); }, 480);
+        setClickRipple({ x: sx, y: sy, color: star.color });
+        openWidget(star);
         return;
       }
     }
@@ -586,15 +591,15 @@ export default function StarfieldView() {
       const dy      = e.touches[0].clientY - e.touches[1].clientY;
       const newDist = Math.hypot(dx, dy);
       const factor  = newDist / state.pinchDist;
-      const newScale = Math.max(0.25, Math.min(5, state.scale * factor));
+      const newScale = Math.max(0.25, Math.min(5, state.targetScale * factor));
       const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
       const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
       const cx = midX - W / 2, cy = midY - H / 2;
-      state.panX = cx + (state.panX - cx) * (newScale / state.scale);
-      state.panY = cy + (state.panY - cy) * (newScale / state.scale);
+      state.panX = cx + (state.panX - cx) * (newScale / state.targetScale);
+      state.panY = cy + (state.panY - cy) * (newScale / state.targetScale);
       state.panX += midX - state.pinchMidX;
       state.panY += midY - state.pinchMidY;
-      state.scale     = newScale;
+      state.targetScale = newScale;
       state.pinchDist = newDist;
       state.pinchMidX = midX;
       state.pinchMidY = midY;
@@ -616,8 +621,8 @@ export default function StarfieldView() {
         for (const star of starsNow) {
           const { sx, sy } = toScreen(star.x, star.y, W, H);
           if (Math.hypot(sx - state.touchStartX, sy - state.touchStartY) < 36) {
-            setSuckStar({ id: star.id, color: star.color, dx: sx - cx, dy: sy - cy });
-            setTimeout(() => { setSuckStar(null); openWidget(star); }, 480);
+            setClickRipple({ x: sx, y: sy, color: star.color });
+            openWidget(star);
             touchHit = true;
             break;
           }
@@ -692,48 +697,6 @@ export default function StarfieldView() {
         ))}
       </AnimatePresence>
 
-      {/* Subtle flash on new star */}
-      <AnimatePresence>
-        {flashActive && (
-          <motion.div
-            key="nova-flash"
-            initial={{ opacity: 0.12 }}
-            animate={{ opacity: 0 }}
-            exit={{}}
-            transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
-            style={{
-              position: 'absolute', inset: 0,
-              background: 'white',
-              pointerEvents: 'none',
-              zIndex: 90,
-            }}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Minimal supernova pulse on new stars */}
-      <AnimatePresence>
-        {stars.filter(s => s.isNew).map((star) => (
-          <motion.div
-            key={`nova-${star.id}`}
-            initial={{ scale: 0.2, opacity: 0.6 }}
-            animate={{ scale: 18, opacity: 0 }}
-            exit={{}}
-            onAnimationComplete={() => markStarSeen(star.id)}
-            style={{
-              position: 'absolute',
-              left:  `${star.x * 100}%`,
-              top:   `${star.y * 100}%`,
-              transform: 'translate(-50%, -50%)',
-              width: 16, height: 16, borderRadius: '50%',
-              background: `radial-gradient(circle, ${star.color}90 0%, transparent 70%)`,
-              pointerEvents: 'none',
-              zIndex: 80,
-            }}
-            transition={{ duration: 1.4, ease: [0.22, 1, 0.36, 1] }}
-          />
-        ))}
-      </AnimatePresence>
 
       {/* Sentinel alert banner */}
       <AnimatePresence>
@@ -765,22 +728,22 @@ export default function StarfieldView() {
         )}
       </AnimatePresence>
 
-      {/* Star suction: animates star particle toward center before widget opens */}
+      {/* Subtle click ripple */}
       <AnimatePresence>
-        {suckStar && (
+        {clickRipple && (
           <motion.div
-            key={`suck-${suckStar.id}`}
-            initial={{ x: suckStar.dx, y: suckStar.dy, scale: 1.6, opacity: 1 }}
-            animate={{ x: 0, y: 0, scale: 0, opacity: 0 }}
+            key={`ripple-${clickRipple.x}-${clickRipple.y}`}
+            initial={{ scale: 0.6, opacity: 0.5 }}
+            animate={{ scale: 2.8, opacity: 0 }}
             exit={{}}
-            transition={{ duration: 0.45, ease: [0.55, 0, 1, 0.8] }}
+            onAnimationComplete={() => setClickRipple(null)}
+            transition={{ duration: 0.35, ease: 'easeOut' }}
             style={{
               position: 'absolute',
-              left: '50%', top: '50%',
-              marginLeft: -8, marginTop: -8,
-              width: 16, height: 16, borderRadius: '50%',
-              background: `radial-gradient(circle, white 0%, ${suckStar.color} 55%, transparent 100%)`,
-              boxShadow: `0 0 20px ${suckStar.color}, 0 0 40px ${suckStar.color}80`,
+              left: clickRipple.x, top: clickRipple.y,
+              marginLeft: -18, marginTop: -18,
+              width: 36, height: 36, borderRadius: '50%',
+              border: `1.5px solid ${clickRipple.color}`,
               pointerEvents: 'none',
               zIndex: 95,
             }}
