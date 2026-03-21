@@ -2,7 +2,8 @@ import { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAlterStore } from '../../store/alterStore';
 import type { Theme } from '../../types';
-import { importBankCsv } from '../../import/bankCsvImport';
+import { importBankCsv, parseBankCsv } from '../../import/bankCsvImport';
+import type { BankTransaction } from '../../import/bankCsvImport';
 import { importAppleHealthXml, importHealthConnectJson } from '../../import/healthImport';
 
 const THEMES: { id: Theme; label: string; desc: string; preview: string[] }[] = [
@@ -40,6 +41,9 @@ export default function SettingsPanel() {
   const [nameSaved, setNameSaved] = useState(false);
   const [importStatus, setImportStatus] = useState<ImportStatus>(null);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
+  const [csvPreview, setCsvPreview] = useState<BankTransaction[] | null>(null);
+  const [csvRawText, setCsvRawText] = useState('');
   const csvRef  = useRef<HTMLInputElement>(null);
   const xmlRef  = useRef<HTMLInputElement>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
@@ -59,6 +63,37 @@ export default function SettingsPanel() {
       setImportStatus({ label: 'Errore durante l\'import', ok: false });
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function handleCsvUpload(file: File) {
+    const text = await file.text();
+    const txs = parseBankCsv(text);
+    if (txs.length === 0) {
+      setImportStatus({ label: 'Nessuna transazione trovata nel file', ok: false });
+      return;
+    }
+    setCsvRawText(text);
+    setCsvPreview(txs);
+  }
+
+  async function confirmCsvImport() {
+    if (!user || !csvRawText) return;
+    setCsvPreview(null);
+    setImporting(true);
+    setImportProgress(null);
+    setImportStatus(null);
+    try {
+      const count = await importBankCsv(csvRawText, user.id, (done, total) => {
+        setImportProgress({ done, total });
+      });
+      setImportStatus({ label: `${count} transazioni importate`, ok: true });
+    } catch {
+      setImportStatus({ label: 'Errore durante l\'import', ok: false });
+    } finally {
+      setImporting(false);
+      setImportProgress(null);
+      setCsvRawText('');
     }
   }
 
@@ -190,7 +225,7 @@ export default function SettingsPanel() {
             <Section label="IMPORTA DATI">
               {/* Hidden file inputs */}
               <input ref={csvRef}  type="file" accept=".csv,.txt" style={{ display: 'none' }}
-                onChange={e => e.target.files?.[0] && handleImport(e.target.files[0], importBankCsv)} />
+                onChange={e => { if (e.target.files?.[0]) { handleCsvUpload(e.target.files[0]); e.target.value = ''; } }} />
               <input ref={xmlRef}  type="file" accept=".xml" style={{ display: 'none' }}
                 onChange={e => e.target.files?.[0] && handleImport(e.target.files[0], importAppleHealthXml)} />
               <input ref={jsonRef} type="file" accept=".json" style={{ display: 'none' }}
@@ -205,19 +240,103 @@ export default function SettingsPanel() {
                   onClick={() => jsonRef.current?.click()} />
               </div>
 
-              {importStatus && (
+              {/* CSV Preview */}
+              <AnimatePresence>
+                {csvPreview && (
+                  <motion.div
+                    key="csv-preview"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    style={{
+                      marginTop: 10,
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid rgba(255,255,255,0.09)',
+                      borderRadius: 12,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div style={{ padding: '10px 12px 6px', fontSize: 10.5, color: 'var(--text-dim)', letterSpacing: '0.1em' }}>
+                      ANTEPRIMA · {csvPreview.length} TRANSAZIONI
+                    </div>
+                    <div style={{ maxHeight: 160, overflowY: 'auto' }}>
+                      {csvPreview.slice(0, 12).map((tx, i) => (
+                        <div key={i} style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '5px 12px',
+                          borderTop: '1px solid rgba(255,255,255,0.04)',
+                          fontSize: 11,
+                        }}>
+                          <span style={{ color: 'var(--text)', opacity: 0.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '68%' }}>
+                            {tx.description}
+                          </span>
+                          <span style={{ color: tx.type === 'income' ? '#4ecb71' : '#f08080', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                            {tx.type === 'income' ? '+' : '-'}{Math.abs(tx.amount).toFixed(2)}€
+                          </span>
+                        </div>
+                      ))}
+                      {csvPreview.length > 12 && (
+                        <div style={{ padding: '5px 12px', fontSize: 10, color: 'var(--text-dim)', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                          +{csvPreview.length - 12} altre...
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, padding: '8px 12px 10px' }}>
+                      <button
+                        onClick={confirmCsvImport}
+                        style={{
+                          flex: 1, background: 'rgba(240,192,64,0.12)', border: '1px solid rgba(240,192,64,0.28)',
+                          borderRadius: 9, padding: '7px', fontSize: 11.5, fontWeight: 600,
+                          color: '#f0c040', cursor: 'pointer', letterSpacing: '0.04em',
+                        }}
+                      >
+                        Importa {csvPreview.length} transazioni
+                      </button>
+                      <button
+                        onClick={() => { setCsvPreview(null); setCsvRawText(''); }}
+                        style={{
+                          background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)',
+                          borderRadius: 9, padding: '7px 12px', fontSize: 11.5,
+                          color: 'var(--text-dim)', cursor: 'pointer',
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Progress bar */}
+              {importing && importProgress && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: 'var(--text-dim)', marginBottom: 5 }}>
+                    <span>Importazione in corso...</span>
+                    <span>{importProgress.done} / {importProgress.total}</span>
+                  </div>
+                  <div style={{ height: 3, background: 'rgba(255,255,255,0.07)', borderRadius: 2, overflow: 'hidden' }}>
+                    <motion.div
+                      animate={{ width: `${(importProgress.done / importProgress.total) * 100}%` }}
+                      transition={{ duration: 0.3 }}
+                      style={{ height: '100%', background: 'var(--accent)', borderRadius: 2 }}
+                    />
+                  </div>
+                </div>
+              )}
+              {importing && !importProgress && (
+                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-dim)' }}>
+                  Categorizzazione AI in corso...
+                </div>
+              )}
+
+              {importStatus && !importing && (
                 <div style={{
                   marginTop: 10, fontSize: 11.5, padding: '7px 12px', borderRadius: 8,
                   background: importStatus.ok ? 'rgba(80,200,120,0.12)' : 'rgba(240,80,80,0.12)',
                   color: importStatus.ok ? '#4ecb71' : '#f08080',
                   border: `1px solid ${importStatus.ok ? 'rgba(80,200,120,0.25)' : 'rgba(240,80,80,0.25)'}`,
                 }}>
-                  {importing ? 'Importando...' : importStatus.label}
-                </div>
-              )}
-              {importing && (
-                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-dim)' }}>
-                  Importazione in corso...
+                  {importStatus.label}
                 </div>
               )}
             </Section>

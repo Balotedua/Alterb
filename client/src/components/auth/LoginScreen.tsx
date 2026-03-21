@@ -76,8 +76,32 @@ export default function LoginScreen({ initialError }: { initialError?: string | 
 
         {/* brand */}
         <div className="lp-brand">
-          <span className="lp-symbol">✦</span>
+          <div className="lp-entity">
+            <svg viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+              {/* static tracks */}
+              <circle cx="28" cy="28" r="24" stroke="rgba(255,255,255,0.04)" strokeWidth="1.5"/>
+              <circle cx="28" cy="28" r="15" stroke="rgba(255,255,255,0.03)" strokeWidth="1"/>
+              {/* animated arcs */}
+              <circle cx="28" cy="28" r="24"
+                stroke="url(#entityGrad)" strokeWidth="1.5"
+                strokeDasharray="150.8" strokeDashoffset="37.7"
+                strokeLinecap="round" className="lp-arc-outer"/>
+              <circle cx="28" cy="28" r="15"
+                stroke="#a78bfa" strokeWidth="1"
+                strokeDasharray="94.2" strokeDashoffset="70.6"
+                strokeLinecap="round" className="lp-arc-inner"/>
+              {/* center pulse */}
+              <circle cx="28" cy="28" r="2.5" fill="rgba(240,192,64,0.65)" className="lp-dot-pulse"/>
+              <defs>
+                <linearGradient id="entityGrad" x1="4" y1="4" x2="52" y2="52" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stopColor="#f0c040"/>
+                  <stop offset="100%" stopColor="#40e0d0"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
           <span className="lp-wordmark">Alter</span>
+          <span className="lp-tagline">Il tuo universo personale</span>
         </div>
 
         {/* tabs */}

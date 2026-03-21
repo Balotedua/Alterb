@@ -4,7 +4,8 @@ import { X } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar,
   AreaChart, Area,
-  XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell,
+  XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { useAlterStore } from '../../store/alterStore';
 import { deleteEntry } from '../../vault/vaultService';
@@ -16,9 +17,17 @@ export function inferRenderType(entries: VaultEntry[], category?: string): Rende
   if (!entries.length) return 'list';
   const data = entries[0].data;
   if (data.is_event || (entries[0] as VaultEntry & { category?: string }).category === 'calendar') return 'timeline';
-  if (data.type === 'mood')   return 'mood';
+  if (data.type === 'mood') return 'mood';
   if (data.type === 'weight' || data.type === 'sleep' || data.type === 'water') return 'chart';
-  if (typeof data.amount === 'number') return 'stats';
+  // Sport/activity data → bar chart
+  if (data.type === 'activity') return 'activity';
+  // Finance → pie if many distinct labels, otherwise stats
+  if (typeof data.amount === 'number') {
+    const labels = new Set(entries.map(e => e.data.label as string).filter(Boolean));
+    return labels.size >= 4 ? 'pie' : 'stats';
+  }
+  // Custom categories with numeric value → trend chart
+  if (typeof data.value === 'number') return 'numeric';
   if (typeof data.note === 'string' && !data.score) return 'diary';
   return 'list';
 }
@@ -150,6 +159,8 @@ function EntryRow({ entry, color, label, value }: {
 }
 
 // ─── Sub-renderers ────────────────────────────────────────────
+const PIE_PALETTE = ['#f87171','#fb923c','#fbbf24','#a78bfa','#60a5fa','#34d399','#f472b6','#a3e635'];
+
 function FinanceStats({ entries, color }: { entries: VaultEntry[]; color: string }) {
   const expenses = entries.filter(e => e.data.type === 'expense');
   const income   = entries.filter(e => e.data.type === 'income');
@@ -165,11 +176,21 @@ function FinanceStats({ entries, color }: { entries: VaultEntry[]; color: string
   const chartData = Array.from(dayMap.entries()).map(([date, v]) => ({ date, v })).slice(-20);
   const values    = chartData.map(d => d.v);
 
+  // Pie: expense breakdown by label
+  const labelMap = new Map<string, number>();
+  for (const e of expenses) {
+    const lbl = (e.data.label as string) || 'altro';
+    labelMap.set(lbl, (labelMap.get(lbl) ?? 0) + ((e.data.amount as number) ?? 0));
+  }
+  const pieData = [...labelMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 7)
+    .map(([name, value]) => ({ name, value }));
+
   return (
     <div>
+      {/* Area chart over time */}
       {chartData.length >= 2 && (
         <div style={{ marginBottom: 14 }}>
-          <ResponsiveContainer width="100%" height={130}>
+          <ResponsiveContainer width="100%" height={120}>
             <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="fingrad" x1="0" y1="0" x2="0" y2="1">
@@ -180,31 +201,59 @@ function FinanceStats({ entries, color }: { entries: VaultEntry[]; color: string
               <XAxis dataKey="date" tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} width={32} />
               <Tooltip
-                contentStyle={{
-                  background: 'rgba(3,3,7,0.97)', border: '1px solid rgba(248,113,113,0.25)',
-                  borderRadius: 10, backdropFilter: 'blur(20px)',
-                }}
+                contentStyle={{ background: 'rgba(3,3,7,0.97)', border: '1px solid rgba(248,113,113,0.25)', borderRadius: 10, backdropFilter: 'blur(20px)' }}
                 labelStyle={{ color: '#6b7280', fontSize: 10 }}
                 itemStyle={{ color: '#f87171' }}
                 formatter={(v: number) => [`€${v.toFixed(2)}`, 'Spese']}
               />
-              <Area
-                type="monotone" dataKey="v" stroke="#f87171" strokeWidth={1.5}
-                fill="url(#fingrad)"
-                dot={{ fill: '#f87171', r: 2.5, strokeWidth: 0 }}
-                activeDot={{ r: 4, fill: '#f87171', strokeWidth: 0 }}
-              />
+              <Area type="monotone" dataKey="v" stroke="#f87171" strokeWidth={1.5} fill="url(#fingrad)"
+                dot={{ fill: '#f87171', r: 2, strokeWidth: 0 }} activeDot={{ r: 4, fill: '#f87171', strokeWidth: 0 }} />
             </AreaChart>
           </ResponsiveContainer>
           <SurgicalInsight values={values} unit="€" category="finance" color="#f87171" />
         </div>
       )}
+
+      {/* Stats row */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
         <Stat label="Uscite"  value={`-€${totalOut.toFixed(2)}`} color="#f87171" />
         <Stat label="Entrate" value={`+€${totalIn.toFixed(2)}`}  color="#4ade80" />
         <Stat label="Netto"   value={`€${(totalIn - totalOut).toFixed(2)}`} color={color} />
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 160, overflowY: 'auto' }}>
+
+      {/* Pie breakdown (only when enough labels) */}
+      {pieData.length >= 3 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 9, color: '#3a3f52', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+            Distribuzione spese
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <ResponsiveContainer width={110} height={110}>
+              <PieChart>
+                <Pie data={pieData} cx="50%" cy="50%" innerRadius={28} outerRadius={50} dataKey="value" strokeWidth={0}>
+                  {pieData.map((_, i) => <Cell key={i} fill={PIE_PALETTE[i % PIE_PALETTE.length]} fillOpacity={0.85} />)}
+                </Pie>
+                <Tooltip
+                  contentStyle={{ background: 'rgba(3,3,7,0.97)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, fontSize: 10 }}
+                  formatter={(v: number, _: string, entry: { name?: string }) => [`€${v.toFixed(2)}`, entry.name ?? '']}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {pieData.map((d, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: PIE_PALETTE[i % PIE_PALETTE.length], flexShrink: 0 }} />
+                  <span style={{ color: '#6b7280', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                  <span style={{ color: PIE_PALETTE[i % PIE_PALETTE.length], fontWeight: 500 }}>€{d.value.toFixed(0)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Entry list */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 140, overflowY: 'auto' }}>
         {entries.slice(0, 30).map((e) => (
           <EntryRow key={e.id} entry={e} color={color}
             label={(e.data.label as string) ?? '—'}
@@ -264,6 +313,160 @@ function HealthChart({ entries, color }: { entries: VaultEntry[]; color: string 
           <EntryRow key={e.id} entry={e} color={color}
             label={type.charAt(0).toUpperCase() + type.slice(1)}
             value={`${(e.data[valueKey] as number) ?? '?'}${unit}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Activity / Sport Chart ───────────────────────────────────
+function ActivityChart({ entries, color }: { entries: VaultEntry[]; color: string }) {
+  // Count by activity label
+  const typeMap = new Map<string, { count: number; total: number }>();
+  for (const e of entries) {
+    const lbl = (e.data.label as string)?.replace(/\d+([.,]\d+)?\s*(km|m|min|h)?\s*/gi, '').trim() || 'attività';
+    const key = lbl.slice(0, 20);
+    const prev = typeMap.get(key) ?? { count: 0, total: 0 };
+    typeMap.set(key, { count: prev.count + 1, total: prev.total + ((e.data.value as number) ?? 0) });
+  }
+  const typeData = [...typeMap.entries()]
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 8)
+    .map(([name, { count }]) => ({ name, count }));
+
+  // Timeline if has numeric values (km, min, etc.)
+  const hasNumeric = entries.some(e => typeof e.data.value === 'number' && (e.data.value as number) > 0);
+  const timelineData = hasNumeric
+    ? [...entries].reverse().slice(-20).map(e => ({
+        date: new Date(e.created_at).toLocaleDateString('it-IT', { month: '2-digit', day: '2-digit' }),
+        v: (e.data.value as number) ?? 1,
+      }))
+    : [];
+
+  const unit = (entries[0]?.data.label as string ?? '').match(/\d+(km|m|min|h)/i)?.[1] ?? '';
+
+  return (
+    <div>
+      {/* Trend over time (if numeric) */}
+      {timelineData.length >= 3 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 9, color: '#3a3f52', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+            Progressione nel tempo
+          </div>
+          <ResponsiveContainer width="100%" height={120}>
+            <AreaChart data={timelineData}>
+              <defs>
+                <linearGradient id="actgrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor={color} stopOpacity={0.35} />
+                  <stop offset="95%" stopColor={color} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="date" tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} width={28} />
+              <Tooltip
+                contentStyle={{ background: 'rgba(3,3,7,0.97)', border: `1px solid ${color}25`, borderRadius: 10 }}
+                labelStyle={{ color: '#6b7280', fontSize: 10 }}
+                itemStyle={{ color }}
+                formatter={(v: number) => [`${v}${unit}`, '']}
+              />
+              <Area type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} fill="url(#actgrad)"
+                dot={{ fill: color, r: 2, strokeWidth: 0 }} activeDot={{ r: 4, fill: color, strokeWidth: 0 }}
+                style={{ filter: `drop-shadow(0 0 4px ${color}80)` }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Bar chart by activity type */}
+      {typeData.length >= 2 && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 9, color: '#3a3f52', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+            Frequenza per attività
+          </div>
+          <ResponsiveContainer width="100%" height={100}>
+            <BarChart data={typeData} layout="vertical" barSize={8}>
+              <XAxis type="number" tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" tick={{ fill: '#6b7280', fontSize: 9 }} axisLine={false} tickLine={false} width={80} />
+              <Tooltip
+                contentStyle={{ background: 'rgba(3,3,7,0.97)', border: `1px solid ${color}25`, borderRadius: 8 }}
+                labelStyle={{ color: '#6b7280', fontSize: 10 }}
+                itemStyle={{ color }}
+                formatter={(v: number) => [`${v}x`, 'sessioni']}
+              />
+              <Bar dataKey="count" fill={color} radius={[0, 3, 3, 0]} fillOpacity={0.75}
+                style={{ filter: `drop-shadow(0 0 3px ${color}60)` }} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 110, overflowY: 'auto' }}>
+        {entries.slice(0, 15).map((e) => (
+          <EntryRow key={e.id} entry={e} color={color}
+            label={(e.data.label as string) || 'attività'}
+            value={e.data.value ? `${e.data.value}${unit}` : new Date(e.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Generic Numeric Chart ─────────────────────────────────────
+function NumericChart({ entries, color, label: catLabel }: { entries: VaultEntry[]; color: string; label: string }) {
+  const unit = (entries[0]?.data.unit as string) ?? '';
+  const chartData = [...entries].reverse().slice(-25).map(e => ({
+    date: new Date(e.created_at).toLocaleDateString('it-IT', { month: '2-digit', day: '2-digit' }),
+    v: (e.data.value as number) ?? 0,
+    note: (e.data.label as string) ?? (e.data.raw as string) ?? '',
+  }));
+  const values = chartData.map(d => d.v);
+  const avg = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+  const max = values.length ? Math.max(...values) : 0;
+  const min = values.length ? Math.min(...values) : 0;
+
+  return (
+    <div>
+      {chartData.length >= 2 ? (
+        <div style={{ marginBottom: 14 }}>
+          <ResponsiveContainer width="100%" height={150}>
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="numgrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor={color} stopOpacity={0.35} />
+                  <stop offset="95%" stopColor={color} stopOpacity={0}    />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="date" tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} width={32} />
+              <Tooltip
+                contentStyle={{ background: 'rgba(3,3,7,0.97)', border: `1px solid ${color}25`, borderRadius: 10 }}
+                labelStyle={{ color: '#6b7280', fontSize: 10 }}
+                itemStyle={{ color }}
+                formatter={(v: number, _: string, entry: { payload?: { note?: string } }) => [`${v}${unit}`, entry.payload?.note || catLabel]}
+              />
+              <Area type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} fill="url(#numgrad)"
+                dot={{ fill: color, r: 2.5, strokeWidth: 0 }} activeDot={{ r: 4, fill: color, strokeWidth: 0 }}
+                style={{ filter: `drop-shadow(0 0 5px ${color}90)` }} />
+            </AreaChart>
+          </ResponsiveContainer>
+          <SurgicalInsight values={values} unit={unit} category={catLabel} color={color} />
+        </div>
+      ) : null}
+
+      {/* Stats */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+        <Stat label="Media"  value={`${avg.toFixed(1)}${unit}`}  color={color} />
+        <Stat label="Massimo" value={`${max}${unit}`}            color={color} />
+        <Stat label="Minimo"  value={`${min}${unit}`}            color={color} />
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 110, overflowY: 'auto' }}>
+        {entries.slice(0, 20).map((e) => (
+          <EntryRow key={e.id} entry={e} color={color}
+            label={(e.data.label as string) ?? (e.data.raw as string) ?? catLabel}
+            value={`${e.data.value ?? '?'}${unit}`}
           />
         ))}
       </div>
@@ -337,6 +540,65 @@ function GenericList({ entries, color }: { entries: VaultEntry[]; color: string 
           />
         );
       })}
+    </div>
+  );
+}
+
+// ─── Generic Pie Renderer (Finance with many labels) ──────────
+function PieRenderer({ entries, color }: { entries: VaultEntry[]; color: string }) {
+  const expenses = entries.filter(e => e.data.type === 'expense');
+  const income   = entries.filter(e => e.data.type === 'income');
+  const totalOut = expenses.reduce((s, e) => s + ((e.data.amount as number) ?? 0), 0);
+  const totalIn  = income.reduce((s, e)   => s + ((e.data.amount as number) ?? 0), 0);
+
+  const labelMap = new Map<string, number>();
+  for (const e of expenses) {
+    const lbl = (e.data.label as string) || 'altro';
+    labelMap.set(lbl, (labelMap.get(lbl) ?? 0) + ((e.data.amount as number) ?? 0));
+  }
+  const pieData = [...labelMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
+    .map(([name, value]) => ({ name, value }));
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+        <Stat label="Uscite"  value={`-€${totalOut.toFixed(2)}`} color="#f87171" />
+        <Stat label="Entrate" value={`+€${totalIn.toFixed(2)}`}  color="#4ade80" />
+        <Stat label="Netto"   value={`€${(totalIn - totalOut).toFixed(2)}`} color={color} />
+      </div>
+      <div style={{ fontSize: 9, color: '#3a3f52', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
+        Distribuzione spese
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <ResponsiveContainer width={130} height={130}>
+          <PieChart>
+            <Pie data={pieData} cx="50%" cy="50%" innerRadius={34} outerRadius={60} dataKey="value" strokeWidth={0}>
+              {pieData.map((_, i) => <Cell key={i} fill={PIE_PALETTE[i % PIE_PALETTE.length]} fillOpacity={0.88} />)}
+            </Pie>
+            <Tooltip
+              contentStyle={{ background: 'rgba(3,3,7,0.97)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, fontSize: 10 }}
+              formatter={(v: number, _: string, entry: { name?: string }) => [`€${v.toFixed(2)}`, entry.name ?? '']}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {pieData.map((d, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10 }}>
+              <div style={{ width: 7, height: 7, borderRadius: '50%', background: PIE_PALETTE[i % PIE_PALETTE.length], flexShrink: 0 }} />
+              <span style={{ color: '#6b7280', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+              <span style={{ color: PIE_PALETTE[i % PIE_PALETTE.length], fontWeight: 500, fontSize: 11 }}>€{d.value.toFixed(0)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 130, overflowY: 'auto' }}>
+        {entries.slice(0, 25).map((e) => (
+          <EntryRow key={e.id} entry={e} color={color}
+            label={(e.data.label as string) ?? '—'}
+            value={`${e.data.type === 'income' ? '+' : '-'}€${(e.data.amount as number)?.toFixed(2) ?? '?'}`}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -631,7 +893,10 @@ export default function PolymorphicWidget() {
               Nessun dato ancora.
             </p>
           ) : activeWidget.renderType === 'stats'    ? <FinanceStats      entries={activeWidget.entries} color={activeWidget.color} />
+          : activeWidget.renderType === 'pie'      ? <PieRenderer       entries={activeWidget.entries} color={activeWidget.color} />
           : activeWidget.renderType === 'chart'    ? <HealthChart       entries={activeWidget.entries} color={activeWidget.color} />
+          : activeWidget.renderType === 'activity' ? <ActivityChart     entries={activeWidget.entries} color={activeWidget.color} />
+          : activeWidget.renderType === 'numeric'  ? <NumericChart      entries={activeWidget.entries} color={activeWidget.color} label={activeWidget.label} />
           : activeWidget.renderType === 'mood'     ? <MoodChart         entries={activeWidget.entries} color={activeWidget.color} />
           : activeWidget.renderType === 'diary'    ? <DiaryList         entries={activeWidget.entries} color={activeWidget.color} />
           : activeWidget.renderType === 'timeline' ? <CalendarTimeline  entries={activeWidget.entries} color={activeWidget.color} />

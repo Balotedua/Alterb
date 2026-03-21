@@ -37,13 +37,83 @@ export default function ChatView() {
             textAlign: 'center',
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
           }}>
-            <div style={{ fontSize: 36, opacity: 0.6 }}>✦</div>
-            <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.65)', fontWeight: 300, lineHeight: 1.7, margin: 0 }}>
-              Ciao. Scrivi qualcosa o usa la voce.
+            <div style={{ filter: 'drop-shadow(0 0 18px rgba(240,192,64,0.18))', marginBottom: 8 }}>
+              <svg width="72" height="72" viewBox="0 0 72 72" fill="none" style={{ display: 'block' }}>
+                <style>{`
+                  @keyframes cv-spin-outer {
+                    0%   { transform: rotate(0deg); }
+                    55%  { transform: rotate(290deg); }
+                    65%  { transform: rotate(265deg); }
+                    75%  { transform: rotate(278deg); }
+                    88%  { transform: rotate(355deg); }
+                    93%  { transform: rotate(340deg); }
+                    100% { transform: rotate(360deg); }
+                  }
+                  @keyframes cv-spin-inner {
+                    0%   { transform: rotate(0deg); }
+                    40%  { transform: rotate(-180deg); }
+                    52%  { transform: rotate(-155deg); }
+                    62%  { transform: rotate(-175deg); }
+                    100% { transform: rotate(-360deg); }
+                  }
+                  @keyframes cv-pulse-dot {
+                    0%, 100% { opacity: 0.4; transform: scale(1); }
+                    50%       { opacity: 0.9; transform: scale(1.6); }
+                  }
+                  .cv-arc-outer {
+                    transform-box: fill-box;
+                    transform-origin: center;
+                    animation: cv-spin-outer 5.2s ease-in-out infinite;
+                  }
+                  .cv-arc-inner {
+                    transform-box: fill-box;
+                    transform-origin: center;
+                    animation: cv-spin-inner 7.5s ease-in-out infinite;
+                  }
+                  .cv-dot-pulse {
+                    transform-box: fill-box;
+                    transform-origin: center;
+                    animation: cv-pulse-dot 2.8s ease-in-out infinite;
+                  }
+                `}</style>
+                {/* static tracks */}
+                <circle cx="36" cy="36" r="30" stroke="rgba(255,255,255,0.04)" strokeWidth="1.5"/>
+                <circle cx="36" cy="36" r="19" stroke="rgba(255,255,255,0.03)" strokeWidth="1"/>
+                {/* outer arc */}
+                <circle
+                  cx="36" cy="36" r="30"
+                  stroke="url(#cvGrad)" strokeWidth="1.5"
+                  strokeDasharray="188.4" strokeDashoffset="47"
+                  strokeLinecap="round"
+                  className="cv-arc-outer"
+                />
+                {/* inner arc */}
+                <circle
+                  cx="36" cy="36" r="19"
+                  stroke="#a78bfa" strokeWidth="1"
+                  strokeDasharray="119.4" strokeDashoffset="89"
+                  strokeLinecap="round"
+                  className="cv-arc-inner"
+                />
+                {/* center pulse */}
+                <circle
+                  cx="36" cy="36" r="3"
+                  fill="rgba(240,192,64,0.65)"
+                  className="cv-dot-pulse"
+                />
+                <defs>
+                  <linearGradient id="cvGrad" x1="6" y1="6" x2="66" y2="66" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor="#f0c040"/>
+                    <stop offset="100%" stopColor="#40e0d0"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+            <p style={{ fontSize: 16, fontWeight: 100, letterSpacing: '0.03em', color: 'rgba(200,210,234,0.58)', margin: '4px 0 0' }}>
+              Di cosa vuoi tenere traccia?
             </p>
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.22)', letterSpacing: '0.04em', margin: 0, lineHeight: 1.8 }}>
-              "15 pizza" · "peso 82kg"<br />
-              "umore 8" · "riunione lunedì 15:00"
+            <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.16)', letterSpacing: '0.14em', textTransform: 'uppercase', margin: 0, lineHeight: 2.2 }}>
+              "15 pizza" · "peso 82kg" · "umore 8"
             </p>
           </div>
         ) : messages.map((msg, i) => {

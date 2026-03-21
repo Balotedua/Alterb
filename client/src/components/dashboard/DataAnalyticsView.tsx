@@ -11,31 +11,43 @@ import { analyseData, localAnalyse } from '../../core/dataAnalyser';
 import type { ChartSpec, AnalysisResult } from '../../core/dataAnalyser';
 import type { VaultEntry } from '../../types';
 
+function hexToRgb(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `${r},${g},${b}`;
+}
+
 // ─── Number card ─────────────────────────────────────────────
 function NumberCard({ spec }: { spec: ChartSpec }) {
+  const accent = spec.color ?? '#40e0d0';
   return (
-    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
       {spec.data.map((item, i) => {
         const val = Number(item.value ?? 0);
         const label = String(item.label ?? '');
         const isNegative = val < 0;
+        const numColor = isNegative ? '#f08080' : accent;
         return (
           <div key={i} style={{
             flex: '1 1 100px',
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: 10,
-            padding: '14px 16px',
+            background: 'rgba(255,255,255,0.03)',
+            border: `1px solid rgba(255,255,255,0.08)`,
+            borderRadius: 12,
+            padding: '16px 18px',
           }}>
             <div style={{
-              fontSize: 26,
-              fontWeight: 200,
-              color: isNegative ? '#f08080' : 'rgba(255,255,255,0.9)',
+              fontSize: 30,
+              fontWeight: 100,
+              color: numColor,
               fontVariantNumeric: 'tabular-nums',
+              letterSpacing: '-0.02em',
+              lineHeight: 1,
+              textShadow: `0 0 20px ${numColor}60`,
             }}>
-              {val > 0 && !isNegative ? '' : ''}{val.toLocaleString('it-IT')}{spec.unit ?? ''}
+              {val.toLocaleString('it-IT')}{spec.unit ?? ''}
             </div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 4, letterSpacing: '0.08em' }}>
+            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.28)', marginTop: 8, letterSpacing: '0.14em' }}>
               {label.toUpperCase()}
             </div>
           </div>
@@ -53,18 +65,25 @@ function ChartCard({ spec }: { spec: ChartSpec }) {
 
   return (
     <div style={{
-      background: 'rgba(255,255,255,0.025)',
-      border: '1px solid rgba(255,255,255,0.07)',
-      borderRadius: 12,
-      padding: '16px 8px 12px',
-      marginBottom: 12,
+      background: 'rgba(255,255,255,0.03)',
+      border: `1px solid rgba(255,255,255,0.08)`,
+      borderRadius: 16,
+      padding: '18px 12px 14px',
+      marginBottom: 14,
+      overflow: 'hidden',
+      position: 'relative',
     }}>
-      <div style={{ paddingLeft: 8, marginBottom: 12 }}>
-        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.08em' }}>
+      {/* subtle top accent line */}
+      <div style={{
+        position: 'absolute', top: 0, left: 20, right: 20, height: 1,
+        background: `linear-gradient(90deg, transparent, ${color}55, transparent)`,
+      }} />
+      <div style={{ paddingLeft: 6, marginBottom: 14 }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: color, letterSpacing: '0.14em', opacity: 0.85 }}>
           {spec.title.toUpperCase()}
         </div>
         {spec.insight && (
-          <div style={{ fontSize: 12, color, marginTop: 4, opacity: 0.8 }}>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 5, lineHeight: 1.5 }}>
             {spec.insight}
           </div>
         )}
@@ -220,18 +239,19 @@ export default function DataAnalyticsView() {
         return;
       }
 
-      // Show local analysis immediately
       setResult(localAnalyse(data, category));
 
-      // Enhance with AI in background if key is available
       const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
       if (apiKey) {
         setLoading(true);
-        const aiResult = await analyseData(data);
-        setLoading(false);
-        if (aiResult) setResult(aiResult);
+        try {
+          const aiResult = await analyseData(data);
+          if (aiResult) setResult(aiResult);
+        } finally {
+          setLoading(false);
+        }
       }
-    });
+    }).catch(() => setLoading(false));
   }, [user, category]);
 
   const handleQuery = useCallback(async (query: string) => {
@@ -250,11 +270,11 @@ export default function DataAnalyticsView() {
       crossEntries = allCross.flat();
     }
 
-    const aiResult = await analyseData(entries, query, crossEntries);
-    setLoading(false);
-
-    if (aiResult) {
-      setResult(aiResult);
+    try {
+      const aiResult = await analyseData(entries, query, crossEntries);
+      if (aiResult) setResult(aiResult);
+    } finally {
+      setLoading(false);
     }
   }, [user, category, entries, stars]);
 
@@ -282,39 +302,38 @@ export default function DataAnalyticsView() {
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 12,
-          padding: '16px 16px 12px',
+          gap: 14,
+          padding: '14px 16px 14px',
           borderBottom: '1px solid rgba(255,255,255,0.06)',
           flexShrink: 0,
+          background: meta ? `linear-gradient(180deg, rgba(${hexToRgb(meta.color)},0.06) 0%, transparent 100%)` : undefined,
         }}>
           <button
             onClick={() => setActiveDataCategory(null)}
             style={{
-              background: 'none',
-              border: 'none',
-              color: 'rgba(255,255,255,0.45)',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 8,
+              color: 'rgba(255,255,255,0.5)',
               cursor: 'pointer',
-              fontSize: 18,
+              fontSize: 15,
               lineHeight: 1,
-              padding: '4px 6px',
+              padding: '5px 9px',
             }}
           >
             ←
           </button>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{
-              width: 8, height: 8, borderRadius: '50%',
-              background: meta?.color ?? '#ffffff',
-              boxShadow: `0 0 8px ${meta?.color ?? '#ffffff'}`,
-            }} />
-            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', letterSpacing: '0.08em' }}>
+          <span style={{ fontSize: 26, lineHeight: 1 }}>{meta?.icon ?? '✦'}</span>
+
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: meta?.color ?? '#fff', letterSpacing: '0.06em' }}>
               {(meta?.label ?? category).toUpperCase()}
-            </span>
+            </div>
             {star && (
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginLeft: 4 }}>
-                {star.entryCount} entry
-              </span>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>
+                {star.entryCount} {star.entryCount === 1 ? 'entry' : 'entries'}
+              </div>
             )}
           </div>
         </div>
@@ -339,13 +358,13 @@ export default function DataAnalyticsView() {
           {result && result.summary && (
             <div style={{
               fontSize: 12,
-              color: 'rgba(255,255,255,0.38)',
-              lineHeight: 1.6,
-              marginBottom: 16,
-              padding: '10px 12px',
-              background: 'rgba(255,255,255,0.025)',
-              borderRadius: 8,
-              borderLeft: `2px solid ${meta?.color ?? '#40e0d0'}`,
+              color: 'rgba(255,255,255,0.55)',
+              lineHeight: 1.7,
+              marginBottom: 18,
+              padding: '12px 14px',
+              background: meta ? `rgba(${hexToRgb(meta.color)},0.06)` : 'rgba(255,255,255,0.03)',
+              borderRadius: 12,
+              border: `1px solid ${meta ? `rgba(${hexToRgb(meta.color)},0.15)` : 'rgba(255,255,255,0.07)'}`,
             }}>
               {result.summary}
             </div>

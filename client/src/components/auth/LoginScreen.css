@@ -46,38 +46,97 @@
 .lp-card {
   position: relative;
   width: min(380px, 94vw);
-  padding: 36px 30px 28px;
+  padding: 40px 32px 30px;
   background: rgba(3,3,7,0.97);
-  border: 1px solid rgba(255,255,255,0.055);
+  border: 1px solid rgba(255,255,255,0.065);
   border-radius: 24px;
   backdrop-filter: blur(40px);
   box-shadow:
-    0 0 80px rgba(0,0,0,0.6),
-    0 0 160px rgba(240,192,64,0.02),
-    inset 0 1px 0 rgba(255,255,255,0.04);
+    0 0 100px rgba(0,0,0,0.7),
+    0 0 200px rgba(240,192,64,0.025),
+    inset 0 1px 0 rgba(255,255,255,0.055);
+}
+
+.lp-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 24px;
+  background: linear-gradient(155deg, rgba(255,255,255,0.018) 0%, transparent 45%);
+  pointer-events: none;
 }
 
 /* ── Brand ──────────────────────────────────────────────── */
 .lp-brand {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin-bottom: 30px;
+  gap: 14px;
+  margin-bottom: 34px;
 }
 
-.lp-symbol {
-  font-size: 18px;
-  color: #f0c040;
-  text-shadow: 0 0 16px rgba(240,192,64,0.6), 0 0 32px rgba(240,192,64,0.2);
+/* ── Entity (animated logo) ─────────────────────────────── */
+.lp-entity {
+  width: 56px;
+  height: 56px;
+  filter: drop-shadow(0 0 14px rgba(240,192,64,0.18));
+}
+
+.lp-arc-outer {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lp-spin-outer 5.2s ease-in-out infinite;
+}
+
+.lp-arc-inner {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lp-spin-inner 7.5s ease-in-out infinite;
+}
+
+.lp-dot-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lp-pulse-dot 2.8s ease-in-out infinite;
+}
+
+@keyframes lp-spin-outer {
+  0%   { transform: rotate(0deg); }
+  55%  { transform: rotate(290deg); }
+  65%  { transform: rotate(265deg); }
+  75%  { transform: rotate(278deg); }
+  88%  { transform: rotate(355deg); }
+  93%  { transform: rotate(340deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes lp-spin-inner {
+  0%   { transform: rotate(0deg); }
+  40%  { transform: rotate(-180deg); }
+  52%  { transform: rotate(-155deg); }
+  62%  { transform: rotate(-175deg); }
+  100% { transform: rotate(-360deg); }
+}
+
+@keyframes lp-pulse-dot {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50%       { opacity: 0.9; transform: scale(1.6); }
 }
 
 .lp-wordmark {
-  font-size: 16px;
-  font-weight: 300;
-  letter-spacing: 0.28em;
-  color: #7a859e;
+  font-size: 12px;
+  font-weight: 200;
+  letter-spacing: 0.52em;
+  color: rgba(200,210,234,0.65);
   text-transform: uppercase;
+}
+
+.lp-tagline {
+  font-size: 9.5px;
+  font-weight: 300;
+  letter-spacing: 0.07em;
+  color: rgba(58,63,82,0.75);
+  margin-top: -4px;
 }
 
 /* ── Tabs ───────────────────────────────────────────────── */
@@ -175,9 +234,9 @@
 
 .lp-label {
   font-size: 9px;
-  font-weight: 400;
-  letter-spacing: 0.1em;
-  color: #2e3347;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: rgba(58,63,82,0.9);
   text-transform: uppercase;
 }
 
@@ -283,7 +342,7 @@
 .lp-switch__link {
   background: none;
   border: none;
-  color: #5a4fa0;
+  color: rgba(167,139,250,0.55);
   font-size: 11px;
   font-family: 'Inter', sans-serif;
   cursor: pointer;

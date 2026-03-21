@@ -4,6 +4,13 @@ import { useAlterStore } from '../../store/alterStore';
 import { getByCategory } from '../../vault/vaultService';
 import type { Star, VaultEntry } from '../../types';
 
+function hexToRgb(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `${r},${g},${b}`;
+}
+
 function getMetricLabel(category: string, data: Record<string, unknown>): string {
   if (category === 'finance') {
     const amt = data.amount as number;
@@ -51,58 +58,53 @@ function DashboardCard({ star, isLast }: { star: Star; isLast: boolean }) {
 
   return (
     <motion.div
-      whileTap={{ scale: 0.98 }}
+      whileTap={{ scale: 0.97 }}
       onClick={handleClick}
       style={{
-        borderLeft: `2px solid ${star.color}`,
-        borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.05)',
-        padding: '14px 16px',
+        background: `linear-gradient(135deg, rgba(${hexToRgb(star.color)},0.07) 0%, rgba(10,10,18,0.6) 100%)`,
+        border: `1px solid rgba(${hexToRgb(star.color)},0.18)`,
+        boxShadow: `0 0 18px rgba(${hexToRgb(star.color)},0.08)`,
+        borderRadius: 14,
+        padding: '14px 18px',
+        marginBottom: isLast ? 0 : 10,
         cursor: 'pointer',
         display: 'flex',
-        alignItems: 'baseline',
-        justifyContent: 'space-between',
-        gap: 12,
+        alignItems: 'center',
+        gap: 14,
       }}
     >
-      {/* Category label */}
-      <span style={{
-        fontSize: 9,
-        fontWeight: 500,
-        letterSpacing: '0.12em',
-        color: star.color,
-        opacity: 0.70,
-        flexShrink: 0,
-        minWidth: 64,
-      }}>
-        {star.label.toUpperCase()}
+      {/* Icon */}
+      <span style={{ fontSize: 22, lineHeight: 1, flexShrink: 0 }}>
+        {star.icon}
       </span>
+
+      {/* Label + timestamp */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: 10,
+          fontWeight: 600,
+          letterSpacing: '0.14em',
+          color: star.color,
+          marginBottom: 2,
+        }}>
+          {star.label.toUpperCase()}
+        </div>
+        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.22)' }}>
+          {star.lastEntry ? relativeTime(star.lastEntry) : '—'}
+        </div>
+      </div>
 
       {/* Dominant metric */}
       <span style={{
-        flex: 1,
-        fontSize: 28,
+        fontSize: 26,
         fontWeight: 200,
         color: 'rgba(255,255,255,0.90)',
         fontVariantNumeric: 'tabular-nums',
-        letterSpacing: '-0.01em',
+        letterSpacing: '-0.02em',
         lineHeight: 1,
-        textAlign: 'right',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
+        flexShrink: 0,
       }}>
         {metric || `${star.entryCount}`}
-      </span>
-
-      {/* Timestamp */}
-      <span style={{
-        fontSize: 10,
-        color: 'rgba(255,255,255,0.22)',
-        flexShrink: 0,
-        minWidth: 36,
-        textAlign: 'right',
-      }}>
-        {star.lastEntry ? relativeTime(star.lastEntry) : '—'}
       </span>
     </motion.div>
   );

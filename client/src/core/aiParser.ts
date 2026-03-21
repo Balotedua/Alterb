@@ -92,6 +92,27 @@ export async function analyzeGalaxy(entries: import('../types').VaultEntry[]): P
   return reply ?? 'Dati insufficienti per un\'analisi significativa.';
 }
 
+// ─── Document query: answer questions about stored documents ──
+export async function aiDocumentQuery(question: string, docs: import('../types').VaultEntry[]): Promise<string> {
+  if (docs.length === 0) return 'Nessun documento trovato nel vault.';
+
+  const context = docs.map(e => {
+    const d = e.data as Record<string, unknown>;
+    const date = new Date(e.created_at).toLocaleDateString('it-IT');
+    const label = (d.docTypeLabel as string) ?? (d.docType as string) ?? 'documento';
+    const name  = (d.filename as string) ?? '';
+    const text  = ((d.extractedText as string) ?? '').slice(0, 800);
+    return `[${date} · ${label}${name ? ' · ' + name : ''}]\n${text}`;
+  }).join('\n\n---\n\n');
+
+  const reply = await deepseekChat([
+    { role: 'system', content: `Sei Nebula, l'assistente di Alter OS. Rispondi in italiano in modo conciso (max 4 righe) basandoti SOLO sui documenti forniti. Se trovi importi, date o nomi rilevanti, citali esplicitamente. Non inventare nulla che non sia nel testo.` },
+    { role: 'user',   content: `Documenti:\n${context}\n\nDomanda: ${question}` },
+  ], 300);
+
+  return reply ?? 'Non riesco a rispondere con i documenti disponibili.';
+}
+
 export async function aiParse(text: string): Promise<Omit<ParsedIntent, 'source' | 'rawText'> | null> {
   const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
   if (!apiKey) {

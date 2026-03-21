@@ -2,6 +2,27 @@ import { localParse } from './localParser';
 import { aiParse }   from './aiParser';
 import type { ParsedIntent } from '../types';
 
+// ── Document retrieval / query patterns ──────────────────────
+const DOC_RETRIEVE_PATTERN = /\b(carta\s*d[i']?\s*identit|codice\s*fiscale|passaporto|patente|ci\b|cf\b)/i;
+const DOC_LIST_PATTERN     = /^(mostrami|dammi|cerca|trova|recupera|restituiscimi|apri|elenca)\s+(i\s+miei\s+|tutti\s+i\s+)?documenti?/i;
+const DOC_QUERY_PATTERN    = /\b(bolletta|fattura|contratto|ricevuta|estratto\s*conto|documento\s+medico|referto)\b.*(di|del|della|per|a)\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre|\d{4})/i;
+const DOC_CONTENT_PATTERN  = /cosa\s+(diceva|c[''è]\s+scritto|c[''è])\s+(nel|nella|sul|sulla|il|la)\s+(contratto|bolletta|fattura|documento|referto)/i;
+
+function extractDocTypeFromQuery(text: string): string | null {
+  const t = text.toLowerCase();
+  if (/carta\s*d[i']?\s*identit|ci\b/.test(t)) return 'identity';
+  if (/codice\s*fiscale|cf\b/.test(t))          return 'identity';
+  if (/passaporto/.test(t))                      return 'identity';
+  if (/patente/.test(t))                         return 'identity';
+  if (/bolletta/.test(t))                        return 'utility_bill';
+  if (/estratto\s*conto/.test(t))               return 'bank_statement';
+  if (/contratto/.test(t))                       return 'contract';
+  if (/fattura/.test(t))                         return 'invoice';
+  if (/ricevuta/.test(t))                        return 'receipt';
+  if (/referto|medico/.test(t))                  return 'medical';
+  return null;
+}
+
 const HELP_TRIGGERS    = ['?', 'aiuto', 'help', 'cosa sai fare', 'cosa puoi fare'];
 const DELETE_PATTERN   = /^(cancella|elimina|rimuovi|delete)\s+/i;
 const ANALYSIS_PATTERN = /^(analizza|analisi|riassumi|riassunto|report|insight|come sto nel complesso)/i;
@@ -19,6 +40,9 @@ function extractNexusCategories(text: string): [string | null, string | null] {
 
 // Pure conversation — no data to save
 const CHAT_PATTERN = /^(ciao|salve|buongiorno|buonasera|buona\s*notte|hey|hello|hi|hola|come\s+stai|come\s+va|cosa\s+pensi|chi\s+sei|come\s+ti\s+chiami|grazie|prego|ok|okay|bene|perfetto|capito|va\s+bene|sì|si|no|ah|eh|oh|uh|hmm|mh|dai|esatto|giusto|certo|assolutamente|fantastico|ottimo|bravo|brava)[\s!.?]*$/i;
+
+// Conversational questions / opinions — route to aiChat, not vault
+const CONVERSATIONAL_PATTERN = /^(cosa\s+ne\s+pensi|che\s+ne\s+pensi|cosa\s+pensi\s+(di|del|della|dei|degli)|secondo\s+te|parlami\s+di|dimmi\s+(qualcosa\s+(su|di)|di\s+più)|cos['\s]+è|che\s+cos['\s]+è|chi\s+è|chi\s+sono|come\s+funziona|mi\s+(spieghi|puoi\s+spiegare|dici)|raccontami|hai\s+(mai|sentito|visto)|conosci|sai\s+(qualcosa\s+su|chi\s+è|cos['\s]+è)|qual\s*è\s+(il\s+tuo|la\s+tua)|ti\s+piace|ti\s+piacciono|cosa\s+(ti|ne)\s+(piace|pensi)|perché|quando\s+è\s+(stato|nata|nato|fondato)|dove\s+si\s+trova)/i;
 
 function extractDeleteCategory(text: string): string | null {
   const m = text.match(/^(?:cancella|elimina|rimuovi|delete)\s+(?:la\s+)?(?:stella|categoria|category)?\s*(.+)$/i);
@@ -93,14 +117,17 @@ export function inferQueryDateRange(text: string): [Date, Date] | null {
 }
 
 export type OrchestratorAction =
-  | { type: 'save';     intent: ParsedIntent }
+  | { type: 'save';         intent: ParsedIntent }
   | { type: 'help' }
-  | { type: 'chat';     raw: string }
-  | { type: 'delete';   raw: string; category: string | null }
-  | { type: 'query';    raw: string; category: string | null; dateRange: [Date, Date] | null }
-  | { type: 'analyse';  raw: string }
-  | { type: 'nexus';    raw: string; catA: string | null; catB: string | null }
-  | { type: 'unknown';  raw: string };
+  | { type: 'chat';         raw: string }
+  | { type: 'delete';       raw: string; category: string | null }
+  | { type: 'query';        raw: string; category: string | null; dateRange: [Date, Date] | null }
+  | { type: 'analyse';      raw: string }
+  | { type: 'nexus';        raw: string; catA: string | null; catB: string | null }
+  | { type: 'doc_list';     raw: string }
+  | { type: 'doc_retrieve'; raw: string; docType: string | null }
+  | { type: 'doc_query';    raw: string; docType: string | null; keyword: string }
+  | { type: 'unknown';      raw: string };
 
 export async function orchestrate(
   text: string,
@@ -110,6 +137,19 @@ export async function orchestrate(
   if (!trimmed) return { type: 'unknown', raw: trimmed };
 
   const lower = trimmed.toLowerCase();
+
+  // ── Document commands ────────────────────────────────────
+  if (DOC_LIST_PATTERN.test(trimmed))
+    return { type: 'doc_list', raw: trimmed };
+
+  if (DOC_RETRIEVE_PATTERN.test(trimmed))
+    return { type: 'doc_retrieve', raw: trimmed, docType: extractDocTypeFromQuery(trimmed) };
+
+  if (DOC_CONTENT_PATTERN.test(trimmed))
+    return { type: 'doc_query', raw: trimmed, docType: extractDocTypeFromQuery(trimmed), keyword: trimmed };
+
+  if (DOC_QUERY_PATTERN.test(trimmed))
+    return { type: 'doc_query', raw: trimmed, docType: extractDocTypeFromQuery(trimmed), keyword: trimmed };
 
   // ── Special commands ─────────────────────────────────────
   if (HELP_TRIGGERS.some(h => lower === h || lower.startsWith(h)))
@@ -158,6 +198,10 @@ export async function orchestrate(
       intent: { ...local, source: 'local', rawText: trimmed },
     };
   }
+
+  // ── Conversational question: route to aiChat before L2 ───
+  if (CONVERSATIONAL_PATTERN.test(trimmed))
+    return { type: 'chat', raw: trimmed };
 
   // ── L2: AI parser ────────────────────────────────────────
   const ai = await aiParse(trimmed);

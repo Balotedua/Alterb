@@ -41,7 +41,7 @@ export interface Star {
 }
 
 // ─── Widget ──────────────────────────────────────────────────
-export type RenderType = 'chart' | 'list' | 'diary' | 'stats' | 'mood' | 'timeline' | 'insight' | 'nexus';
+export type RenderType = 'chart' | 'list' | 'diary' | 'stats' | 'mood' | 'timeline' | 'insight' | 'nexus' | 'activity' | 'numeric' | 'pie';
 
 export interface NexusBeam {
   catA: string;

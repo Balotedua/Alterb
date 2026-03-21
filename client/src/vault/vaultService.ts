@@ -193,6 +193,48 @@ export async function getChatSessions(userId: string): Promise<VaultEntry[]> {
   return getByCategory(userId, 'chat', 50);
 }
 
+// ─── Documents: get by docType ───────────────────────────────
+export async function getDocumentsByType(userId: string, docType: string): Promise<VaultEntry[]> {
+  const { data, error } = await supabase
+    .from('vault')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('category', 'documents')
+    .eq('data->>docType', docType)
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (error) return [];
+  return (data ?? []) as VaultEntry[];
+}
+
+// ─── Documents: full-text search in extractedText ────────────
+// Uses the GIN tsvector index (documents_search_index.sql) for speed
+export async function searchDocuments(userId: string, keyword: string): Promise<VaultEntry[]> {
+  // Build a websearch-compatible tsquery from the keyword
+  const tsquery = keyword.trim().split(/\s+/).join(' & ');
+  const { data, error } = await supabase
+    .from('vault')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('category', 'documents')
+    .textSearch('data->>extractedText', tsquery, { config: 'italian' })
+    .order('created_at', { ascending: false })
+    .limit(10);
+  // Fallback to ilike if tsvector index not yet installed
+  if (error) {
+    const { data: d2 } = await supabase
+      .from('vault')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('category', 'documents')
+      .ilike('data->>extractedText', `%${keyword}%`)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    return (d2 ?? []) as VaultEntry[];
+  }
+  return (data ?? []) as VaultEntry[];
+}
+
 // ─── Delete: last entry of a category ────────────────────────
 export async function deleteLastInCategory(
   userId: string,

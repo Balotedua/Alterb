@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { nebulaCameraRef } from './nebulaCamera';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, ArrowUp, Menu } from 'lucide-react';
+import { Mic, MicOff, ArrowUp, Menu, Paperclip } from 'lucide-react';
 import { orchestrate } from '../../core/orchestrator';
+import { parseBankCsv, importBankCsv } from '../../import/bankCsvImport';
+import type { BankTransaction } from '../../import/bankCsvImport';
+import { extractDocument, isDocumentFile } from '../../import/documentOcr';
 import { quickConnect } from '../../core/insightEngine';
 import { saveEntry, getByCategory, queryCalendarByDate, getRecentAll, deleteCategory, saveChatSession, updateChatSession } from '../../vault/vaultService';
 import { aiQuery, analyzeGalaxy, aiChat } from '../../core/aiParser';
@@ -36,8 +39,13 @@ export default function NebulaCore() {
   const [isActive,         setIsActive]         = useState(false);
   const [ray,              setRay]              = useState<Ray | null>(null);
   const [evolveSuggestion, setEvolveSuggestion] = useState<string | null>(null);
+  const [pendingCsv,       setPendingCsv]       = useState<{ transactions: BankTransaction[]; text: string } | null>(null);
+  const [csvImporting,     setCsvImporting]     = useState(false);
+  const [pendingOcr,       setPendingOcr]       = useState<{ file: File; text: string; filename: string; pageCount?: number; confidence?: number } | null>(null);
+  const [ocrLoading,       setOcrLoading]       = useState(false);
   const evolveCmdRef   = useRef<string | null>(null);
   const inputRef       = useRef<HTMLInputElement>(null);
+  const fileRef        = useRef<HTMLInputElement>(null);
   const evolveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const anchorRef      = useRef<HTMLDivElement>(null);
   const nebulaWrapRef  = useRef<HTMLDivElement>(null);
@@ -50,7 +58,7 @@ export default function NebulaCore() {
   }, []);
 
   const {
-    user, isProcessing, setProcessing,
+    user, stars, isProcessing, setProcessing,
     upsertStar, removeStar, addKnownCategory, knownCategories,
     setFocusMode, focusMode, addMessage,
     setHighlightedStar, setActiveWidget, setNexusBeam,
@@ -98,6 +106,134 @@ export default function NebulaCore() {
     }, 10000);
     return () => { if (evolveTimerRef.current) clearTimeout(evolveTimerRef.current); };
   }, [isActive, isProcessing]);
+
+  // ── File upload: CSV or document (OCR) ───────────────────
+  const handleFileUpload = useCallback(async (file: File) => {
+    const name = file.name.toLowerCase();
+
+    // Document: PDF / image / text → OCR pipeline
+    if (isDocumentFile(file) && !name.endsWith('.csv')) {
+      setOcrLoading(true);
+      setLastReply('Lettura documento...');
+      try {
+        const result = await extractDocument(file);
+        if (!result.text) {
+          addMessage('nebula', 'Nessun testo estratto dal documento.');
+          return;
+        }
+        setPendingOcr({ file, text: result.text, filename: file.name, pageCount: result.pageCount, confidence: result.confidence });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Errore lettura documento.';
+        addMessage('nebula', msg);
+        setLastReply(msg);
+      } finally {
+        setOcrLoading(false);
+        setLastReply(null);
+      }
+      return;
+    }
+
+    // CSV → bank import pipeline
+    const text = await file.text();
+    const transactions = parseBankCsv(text);
+    if (transactions.length === 0) {
+      addMessage('nebula', 'Nessuna transazione trovata nel file CSV.');
+      return;
+    }
+    setPendingCsv({ transactions, text });
+  }, [addMessage, setLastReply]);
+
+  const confirmCsvImport = useCallback(async () => {
+    if (!pendingCsv || !user || csvImporting) return;
+    const { text, transactions } = pendingCsv;
+    setPendingCsv(null);
+    setCsvImporting(true);
+    addMessage('user', `Importa CSV · ${transactions.length} transazioni`);
+    setLastReply('Categorizzazione AI...');
+    setProcessing(true);
+    try {
+      let lastDone = 0;
+      const count = await importBankCsv(text, user.id, (done, total) => {
+        if (done - lastDone >= 5 || done === total) {
+          lastDone = done;
+          setLastReply(`Importazione ${done}/${total}...`);
+        }
+      });
+      const reply = `🏦 ${count} transazioni importate nel vault`;
+      setLastReply(reply);
+      addMessage('nebula', reply);
+      // update finance star
+      const { buildStar } = await import('../starfield/StarfieldView');
+      const star = buildStar('finance', 1, new Date().toISOString());
+      const existing = useAlterStore.getState().stars.find(s => s.id === 'finance');
+      upsertStar({ ...star, entryCount: (existing?.entryCount ?? 0) + count, intensity: Math.min(1, (existing?.intensity ?? 0.3) + 0.05 * count), isNew: !existing });
+      addKnownCategory('finance');
+    } catch {
+      const msg = 'Errore durante l\'import CSV.';
+      setLastReply(msg); addMessage('nebula', msg);
+    } finally {
+      setCsvImporting(false);
+      setProcessing(false);
+    }
+  }, [pendingCsv, user, csvImporting, addMessage, setProcessing, upsertStar, addKnownCategory]);
+
+  // ── OCR: upload to Storage + save vault reference ────────
+  const confirmOcrImport = useCallback(async () => {
+    if (!pendingOcr || !user || isProcessing) return;
+    const { file, text, filename } = pendingOcr;
+    setPendingOcr(null);
+    addMessage('user', `📄 ${filename}`);
+    setProcessing(true);
+    setLastReply('Caricamento...');
+
+    try {
+      // 1. Upload file to Supabase Storage
+      const { uploadDocument, detectDocType, extractAmount, extractIssuer } = await import('../../import/documentStorage');
+      const upload = await uploadDocument(user.id, file);
+
+      // 2. Enrich metadata from text
+      const { docType, docTypeLabel } = detectDocType(text, filename);
+      const amount  = extractAmount(text);
+      const issuer  = extractIssuer(text);
+
+      // 3. Save vault entry (reference + extracted text)
+      setLastReply('Analisi...');
+      const vaultData: Record<string, unknown> = {
+        storagePath:   upload.storagePath,
+        filename,
+        docType,
+        docTypeLabel,
+        extractedText: text.slice(0, 4000),
+        charCount:     text.length,
+        fileSize:      upload.fileSize,
+        compressedSize: upload.compressedSize,
+        mimeType:      file.type,
+        uploadedAt:    new Date().toISOString(),
+      };
+      if (amount)  vaultData.amount  = amount;
+      if (issuer)  vaultData.issuer  = issuer;
+      if (pendingOcr.pageCount) vaultData.pageCount = pendingOcr.pageCount;
+
+      const saved = await saveEntry(user.id, 'documents', vaultData);
+      if (!saved) throw new Error('Vault save failed');
+
+      addKnownCategory('documents');
+      const star     = buildStar('documents', 1, saved.created_at);
+      const existing = useAlterStore.getState().stars.find(s => s.id === 'documents');
+      upsertStar({ ...star, entryCount: (existing?.entryCount ?? 0) + 1, intensity: Math.min(1, (existing?.intensity ?? 0) + 0.1), isNew: !existing });
+
+      const sizeSaved = Math.round((1 - upload.compressedSize / upload.fileSize) * 100);
+      const sizeNote  = sizeSaved > 5 ? ` · −${sizeSaved}%` : '';
+      const reply = `📄 ${docTypeLabel}${issuer ? ' · ' + issuer : ''}${amount ? ' · €' + amount : ''}${sizeNote}`;
+      setLastReply(reply); addMessage('nebula', reply);
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Errore caricamento documento.';
+      setLastReply(msg); addMessage('nebula', msg);
+    } finally {
+      setProcessing(false);
+    }
+  }, [pendingOcr, user, isProcessing, addMessage, setProcessing, upsertStar, addKnownCategory]);
 
   // ── Process input ─────────────────────────────────────────
   const handleSubmit = useCallback(async (overrideText?: string) => {
@@ -330,6 +466,61 @@ export default function NebulaCore() {
             });
           }
         }
+      } else if (action.type === 'doc_list') {
+        const { getByCategory: getDocs } = await import('../../vault/vaultService');
+        const docs = await getDocs(user.id, 'documents', 30);
+        if (docs.length === 0) {
+          const msg = 'Nessun documento nel vault. Carica un PDF o un\'immagine con 📎.';
+          setLastReply(msg); addMessage('nebula', msg);
+        } else {
+          const { inferRenderType } = await import('../widget/PolymorphicWidget');
+          const meta = getCategoryMeta('documents');
+          setActiveWidget({ category: 'documents', label: 'Documenti', color: meta.color, entries: docs, renderType: inferRenderType(docs, 'documents') });
+          const reply = `📄 ${docs.length} documenti nel vault`;
+          setLastReply(reply); addMessage('nebula', reply);
+        }
+
+      } else if (action.type === 'doc_retrieve') {
+        const { getDocumentsByType } = await import('../../vault/vaultService');
+        const { getDocumentUrl } = await import('../../import/documentStorage');
+        const docs = action.docType
+          ? await getDocumentsByType(user.id, action.docType)
+          : await (await import('../../vault/vaultService')).getByCategory(user.id, 'documents', 10);
+        if (docs.length === 0) {
+          const msg = 'Documento non trovato nel vault.';
+          setLastReply(msg); addMessage('nebula', msg);
+        } else {
+          const latest = docs[0];
+          const d = latest.data as Record<string, unknown>;
+          const path = d.storagePath as string | undefined;
+          if (path) {
+            const url = await getDocumentUrl(path);
+            if (url) {
+              const label = (d.docTypeLabel as string) ?? 'Documento';
+              const reply = `📄 ${label} · link temporaneo generato`;
+              setLastReply(reply);
+              addMessage('nebula', `${reply}\n${url}`);
+              window.open(url, '_blank');
+            } else {
+              const msg = 'Errore generazione link. Riprova.';
+              setLastReply(msg); addMessage('nebula', msg);
+            }
+          } else {
+            const msg = 'Documento senza file allegato.';
+            setLastReply(msg); addMessage('nebula', msg);
+          }
+        }
+
+      } else if (action.type === 'doc_query') {
+        const { searchDocuments, getDocumentsByType } = await import('../../vault/vaultService');
+        const { aiDocumentQuery } = await import('../../core/aiParser');
+        const byType    = action.docType ? await getDocumentsByType(user.id, action.docType) : [];
+        const byKeyword = await searchDocuments(user.id, action.keyword.slice(0, 30));
+        const combined  = [...byType, ...byKeyword].filter((d, i, a) => a.findIndex(x => x.id === d.id) === i);
+        const reply = await aiDocumentQuery(text, combined);
+        setLastReply(reply.length > 80 ? reply.slice(0, 77) + '…' : reply);
+        addMessage('nebula', reply);
+
       } else {
         const msg = '"15 pizza"  ·  "peso 80kg"  ·  "dormito 7 ore"';
         setLastReply(msg); addMessage('nebula', msg);
@@ -401,28 +592,46 @@ export default function NebulaCore() {
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, pointerEvents: 'none' }}>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv,.txt,.md,.pdf,image/*"
+        style={{ display: 'none' }}
+        onChange={e => { if (e.target.files?.[0]) { handleFileUpload(e.target.files[0]); e.target.value = ''; } }}
+      />
 
-      {/* ── Hamburger: chat history ── */}
-      <button
-        onMouseDown={e => { e.preventDefault(); setShowChatSidebar(!showChatSidebar); }}
-        onTouchStart={e => { e.preventDefault(); setShowChatSidebar(!showChatSidebar); }}
-        style={{
-          position: 'fixed', top: 12, left: 16, zIndex: 202,
-          background: 'rgba(8,8,18,0.70)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: 10, padding: 9,
-          cursor: 'pointer',
-          color: showChatSidebar ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.40)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          transition: 'color 0.2s, background 0.2s',
-          pointerEvents: 'all',
-        }}
-        title="Cronologia chat"
-      >
-        <Menu size={15} />
-      </button>
+      {/* ── Top bar: nav + wordmark ── */}
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0,
+        display: 'flex', alignItems: 'center',
+        padding: '10px 14px',
+        zIndex: 202, pointerEvents: 'none',
+      }}>
+        <button
+          onMouseDown={e => { e.preventDefault(); setShowChatSidebar(!showChatSidebar); }}
+          onTouchStart={e => { e.preventDefault(); setShowChatSidebar(!showChatSidebar); }}
+          style={{
+            background: 'none', border: 'none',
+            borderRadius: 8, padding: '7px 8px',
+            cursor: 'pointer',
+            color: showChatSidebar ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.22)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'color 0.25s',
+            pointerEvents: 'all',
+          }}
+          title="Cronologia chat"
+        >
+          <Menu size={14} />
+        </button>
+        <span style={{
+          position: 'absolute', left: '50%', transform: 'translateX(-50%)',
+          fontSize: 9, letterSpacing: '0.52em', textTransform: 'uppercase',
+          color: 'rgba(80,95,125,0.38)', fontWeight: 300,
+          pointerEvents: 'none', userSelect: 'none',
+        }}>
+          Alter
+        </span>
+      </div>
 
       {/* ── Ray of light: center → star (white, monochrome) ── */}
       <AnimatePresence>
@@ -441,6 +650,45 @@ export default function NebulaCore() {
               pointerEvents: 'none',
             }}
           />
+        )}
+      </AnimatePresence>
+
+      {/* ── Welcome overlay: shown when no data yet ── */}
+      <AnimatePresence>
+        {stars.length === 0 && !isActive && !isProcessing && !lastReply && (
+          <motion.div
+            key="welcome"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.6 } }}
+            transition={{ duration: 1.2, delay: 0.5 }}
+            style={{
+              position: 'fixed',
+              top: '50%', left: '50%',
+              transform: 'translate(-50%, -58%)',
+              textAlign: 'center',
+              pointerEvents: 'none',
+              zIndex: 100,
+            }}
+          >
+            <div style={{
+              fontSize: 34, fontWeight: 100,
+              letterSpacing: '0.02em',
+              color: 'rgba(200,210,234,0.65)',
+              marginBottom: 14,
+              lineHeight: 1.2,
+              fontFamily: 'inherit',
+            }}>
+              Inizia il tuo<br/>universo.
+            </div>
+            <div style={{
+              fontSize: 9.5, letterSpacing: '0.2em',
+              color: 'rgba(58,63,82,0.65)',
+              textTransform: 'uppercase', fontWeight: 300,
+            }}>
+              Scrivi qualcosa · Usa la voce
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -467,15 +715,18 @@ export default function NebulaCore() {
           {lastReply && !isActive ? (
             <motion.div
               key={`reply-${lastReply}`}
-              initial={{ opacity: 0, y: 4 }}
+              initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -2 }}
-              transition={{ duration: 0.35 }}
+              exit={{ opacity: 0, y: -3 }}
+              transition={{ duration: 0.4 }}
               style={{
-                fontSize: 12, color: 'rgba(255,255,255,0.68)',
+                fontSize: 11.5, color: 'rgba(255,255,255,0.58)',
                 letterSpacing: '0.04em', fontWeight: 300,
                 textAlign: 'center', pointerEvents: 'none',
                 lineHeight: 1.5,
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: 20, padding: '5px 16px',
               }}
             >
               {lastReply}
@@ -507,38 +758,186 @@ export default function NebulaCore() {
           )}
         </AnimatePresence>
 
+        {/* CSV pending chip */}
+        <AnimatePresence>
+          {pendingCsv && !csvImporting && (
+            <motion.div
+              key="csv-pending"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              style={{
+                width: '100%',
+                background: 'rgba(10,10,18,0.92)',
+                border: '1px solid rgba(240,192,64,0.2)',
+                borderRadius: 12,
+                padding: '10px 12px',
+              }}
+            >
+              <div style={{ fontSize: 10.5, color: 'var(--text-dim)', letterSpacing: '0.1em', marginBottom: 8 }}>
+                CSV · {pendingCsv.transactions.length} TRANSAZIONI RILEVATE
+              </div>
+              <div style={{ maxHeight: 100, overflowY: 'auto', marginBottom: 8 }}>
+                {pendingCsv.transactions.slice(0, 5).map((tx, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, padding: '2px 0', color: 'rgba(255,255,255,0.6)' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '72%' }}>{tx.description}</span>
+                    <span style={{ color: tx.type === 'income' ? '#4ecb71' : '#f08080', flexShrink: 0 }}>
+                      {tx.type === 'income' ? '+' : '-'}{Math.abs(tx.amount).toFixed(2)}€
+                    </span>
+                  </div>
+                ))}
+                {pendingCsv.transactions.length > 5 && (
+                  <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>+{pendingCsv.transactions.length - 5} altre...</div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onMouseDown={e => { e.preventDefault(); confirmCsvImport(); }}
+                  style={{
+                    flex: 1, background: 'rgba(240,192,64,0.1)', border: '1px solid rgba(240,192,64,0.25)',
+                    borderRadius: 8, padding: '6px', fontSize: 11, fontWeight: 600,
+                    color: '#f0c040', cursor: 'pointer',
+                  }}
+                >
+                  Importa {pendingCsv.transactions.length} transazioni
+                </button>
+                <button
+                  onMouseDown={e => { e.preventDefault(); setPendingCsv(null); }}
+                  style={{
+                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: 8, padding: '6px 10px', fontSize: 11,
+                    color: 'var(--text-dim)', cursor: 'pointer',
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* OCR loading indicator */}
+        <AnimatePresence>
+          {ocrLoading && (
+            <motion.div
+              key="ocr-loading"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              style={{
+                fontSize: 10.5, color: 'rgba(64,224,208,0.7)',
+                letterSpacing: '0.08em',
+                padding: '5px 14px',
+                background: 'rgba(64,224,208,0.06)',
+                border: '1px solid rgba(64,224,208,0.15)',
+                borderRadius: 12,
+              }}
+            >
+              ◌ Lettura OCR in corso...
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* OCR pending chip */}
+        <AnimatePresence>
+          {pendingOcr && (
+            <motion.div
+              key="ocr-pending"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              style={{
+                width: '100%',
+                background: 'rgba(10,10,18,0.92)',
+                border: '1px solid rgba(64,224,208,0.2)',
+                borderRadius: 12,
+                padding: '10px 12px',
+              }}
+            >
+              <div style={{ fontSize: 10.5, color: 'rgba(64,224,208,0.7)', letterSpacing: '0.1em', marginBottom: 6 }}>
+                📄 {pendingOcr.filename.toUpperCase()}
+                {pendingOcr.pageCount ? ` · ${pendingOcr.pageCount} PAG` : ''}
+                {pendingOcr.confidence != null ? ` · OCR ${pendingOcr.confidence}%` : ''}
+              </div>
+              <div style={{
+                maxHeight: 80, overflowY: 'auto', marginBottom: 8,
+                fontSize: 10.5, color: 'rgba(255,255,255,0.45)',
+                lineHeight: 1.5,
+                fontStyle: 'italic',
+              }}>
+                {pendingOcr.text.slice(0, 300)}{pendingOcr.text.length > 300 ? '…' : ''}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onMouseDown={e => { e.preventDefault(); confirmOcrImport(); }}
+                  style={{
+                    flex: 1, background: 'rgba(64,224,208,0.08)', border: '1px solid rgba(64,224,208,0.22)',
+                    borderRadius: 8, padding: '6px', fontSize: 11, fontWeight: 600,
+                    color: '#40e0d0', cursor: 'pointer',
+                  }}
+                >
+                  Salva nel vault
+                </button>
+                <button
+                  onMouseDown={e => { e.preventDefault(); setPendingOcr(null); }}
+                  style={{
+                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: 8, padding: '6px 10px', fontSize: 11,
+                    color: 'rgba(255,255,255,0.3)', cursor: 'pointer',
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Input container — glass */}
         <motion.div
-          animate={{ opacity: isActive || input.length > 0 ? 1 : 0.70 }}
+          animate={{ opacity: isActive || input.length > 0 ? 1 : 0.88 }}
           transition={{ duration: 0.4 }}
           style={{
             width: '100%',
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            background: 'rgba(8,8,18,0.75)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
+            background: 'rgba(5,5,12,0.88)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
             border: isActive
-              ? '1px solid rgba(255,255,255,0.14)'
-              : '1px solid rgba(255,255,255,0.07)',
-            borderRadius: 14,
-            padding: '0 12px 0 16px',
-            transition: 'border-color 0.3s',
+              ? '1px solid rgba(240,192,64,0.18)'
+              : '1px solid rgba(255,255,255,0.065)',
+            borderRadius: 16,
+            padding: '0 10px 0 16px',
+            transition: 'border-color 0.35s',
+            boxShadow: isActive
+              ? '0 0 0 1px rgba(240,192,64,0.04), 0 8px 32px rgba(0,0,0,0.4)'
+              : '0 4px 24px rgba(0,0,0,0.3)',
           }}
           onClick={openInput}
         >
-          {/* Processing dot */}
+          {/* Processing ring */}
           <AnimatePresence>
             {isProcessing && (
               <motion.div
-                key="proc"
-                initial={{ opacity: 0, scale: 0 }}
-                animate={{ opacity: [1, 0.4, 1], scale: [1, 1.4, 1] }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.7, repeat: Infinity }}
-                style={{ width: 3, height: 3, borderRadius: '50%', background: '#ffffff', flexShrink: 0 }}
-              />
+                key="proc-wrap"
+                initial={{ opacity: 0, scale: 0.5 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.5 }}
+                transition={{ duration: 0.25 }}
+                style={{ width: 14, height: 14, flexShrink: 0 }}
+              >
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 0.9, repeat: Infinity, ease: 'linear' }}
+                  style={{
+                    width: '100%', height: '100%', borderRadius: '50%',
+                    border: '1.5px solid rgba(240,192,64,0.12)',
+                    borderTopColor: 'rgba(240,192,64,0.7)',
+                  }}
+                />
+              </motion.div>
             )}
           </AnimatePresence>
 
@@ -566,41 +965,58 @@ export default function NebulaCore() {
             }}
           />
 
-          {/* Send / Mic */}
+          {/* Send / Mic + Attach */}
           {input.length > 0 ? (
             <button
               onMouseDown={e => { e.preventDefault(); handleSubmit(); }}
               onTouchStart={e => { e.preventDefault(); handleSubmit(); }}
               style={{
-                background: 'rgba(255,255,255,0.10)',
-                border: 'none', cursor: 'pointer',
-                color: 'rgba(255,255,255,0.90)',
-                padding: '8px', flexShrink: 0,
+                background: 'rgba(240,192,64,0.1)',
+                border: '1px solid rgba(240,192,64,0.22)',
+                cursor: 'pointer',
+                color: 'rgba(240,192,64,0.9)',
+                padding: '7px', flexShrink: 0,
                 display: 'flex', alignItems: 'center',
-                borderRadius: 8,
+                borderRadius: 10,
                 transition: 'all 0.2s',
                 pointerEvents: 'all',
               }}
             >
-              <ArrowUp size={15} />
+              <ArrowUp size={14} />
             </button>
           ) : (
-            <button
-              onMouseDown={e => { e.preventDefault(); toggleVoice(); }}
-              onTouchStart={e => { e.preventDefault(); toggleVoice(); }}
-              style={{
-                background: listening ? 'rgba(240,100,100,0.15)' : 'none',
-                border: 'none', cursor: 'pointer',
-                color: listening ? 'rgba(255,100,100,0.90)' : 'rgba(255,255,255,0.35)',
-                padding: '8px', flexShrink: 0,
-                display: 'flex', alignItems: 'center',
-                borderRadius: 8,
-                transition: 'all 0.2s',
-                pointerEvents: 'all',
-              }}
-            >
-              {listening ? <MicOff size={15} /> : <Mic size={15} />}
-            </button>
+            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+              <button
+                onMouseDown={e => { e.preventDefault(); fileRef.current?.click(); }}
+                onTouchStart={e => { e.preventDefault(); fileRef.current?.click(); }}
+                style={{
+                  background: 'none', border: '1px solid transparent',
+                  cursor: 'pointer', color: 'rgba(255,255,255,0.18)',
+                  padding: '7px', display: 'flex', alignItems: 'center',
+                  borderRadius: 10, transition: 'all 0.2s', pointerEvents: 'all',
+                }}
+                title="Allega CSV"
+              >
+                <Paperclip size={13} />
+              </button>
+              <button
+                onMouseDown={e => { e.preventDefault(); toggleVoice(); }}
+                onTouchStart={e => { e.preventDefault(); toggleVoice(); }}
+                style={{
+                  background: listening ? 'rgba(240,100,100,0.1)' : 'none',
+                  border: listening ? '1px solid rgba(240,100,100,0.2)' : '1px solid transparent',
+                  cursor: 'pointer',
+                  color: listening ? 'rgba(255,100,100,0.85)' : 'rgba(255,255,255,0.2)',
+                  padding: '7px', flexShrink: 0,
+                  display: 'flex', alignItems: 'center',
+                  borderRadius: 10,
+                  transition: 'all 0.2s',
+                  pointerEvents: 'all',
+                }}
+              >
+                {listening ? <MicOff size={14} /> : <Mic size={14} />}
+              </button>
+            </div>
           )}
         </motion.div>
 
