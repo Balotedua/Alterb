@@ -1,20 +1,30 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { AnimatePresence } from 'framer-motion';
+import { useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from './config/supabase';
 import { getCategorySummaries, getUpcomingEvents } from './vault/vaultService';
 import { buildStar } from './components/starfield/StarfieldView';
 import { runInsightEngine } from './core/insightEngine';
 import { useAlterStore } from './store/alterStore';
-import LoginScreen    from './components/auth/LoginScreen';
-import StarfieldView  from './components/starfield/StarfieldView';
+import LoginScreen from './components/auth/LoginScreen';
+import StarfieldView from './components/starfield/StarfieldView';
 import NebulaChatInput from './components/nebula/NebulaChatInput';
 import PolymorphicWidget from './components/widget/PolymorphicWidget';
+import TabBar from './components/layout/TabBar';
+import ChatView from './components/chat/ChatView';
+import DashboardView from './components/dashboard/DashboardView';
+import SettingsPanel from './components/settings/SettingsPanel';
 
 export default function App() {
   const [authUser, setAuthUser] = useState<User | null | undefined>(undefined);
   const [authError, setAuthError] = useState<string | null>(null);
-  const { setUser, setStars, upsertStar, removeStar, addKnownCategory, setAlertEvent, activeWidget } = useAlterStore();
+  const { setUser, setStars, upsertStar, removeStar, addKnownCategory, setAlertEvent, activeWidget, viewMode, theme, showSettings, setShowSettings } = useAlterStore();
+
+  // Apply theme to document root
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
 
   // ── Auth listener ────────────────────────────────────────
   useEffect(() => {
@@ -126,7 +136,7 @@ export default function App() {
   if (authUser === undefined) {
     return (
       <div style={{ position: 'fixed', inset: 0, background: '#000000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#f0c040', boxShadow: '0 0 20px #f0c040, 0 0 50px #f0c04060' }} />
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#ffffff', opacity: 0.6 }} />
       </div>
     );
   }
@@ -135,11 +145,55 @@ export default function App() {
 
   return (
     <>
-      <StarfieldView />
+      {/* ── Settings gear button (top-left) ── */}
+      <button
+        onClick={() => setShowSettings(!showSettings)}
+        style={{
+          position: 'fixed',
+          top: 14,
+          left: 16,
+          zIndex: 500,
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          fontSize: 18,
+          lineHeight: 1,
+          padding: 4,
+          opacity: showSettings ? 1 : 0.4,
+          transition: 'opacity 0.2s',
+        }}
+        title="Impostazioni"
+      >
+        ⚙
+      </button>
+
+      {/* ── Chat view (default) ── */}
+      <AnimatePresence>
+        {viewMode === 'chat' && <ChatView />}
+      </AnimatePresence>
+
+      {/* ── Galaxy view ── */}
+      <AnimatePresence>
+        {viewMode === 'galaxy' && (
+          <motion.div key="galaxy" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }}>
+            <StarfieldView />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Dashboard view ── */}
+      <AnimatePresence>
+        {viewMode === 'dashboard' && <DashboardView />}
+      </AnimatePresence>
+
+      {/* ── Input (always visible except when widget open) ── */}
       <AnimatePresence>
         {!activeWidget && <NebulaChatInput key="nebula-core" />}
       </AnimatePresence>
+
       <PolymorphicWidget />
+      <SettingsPanel />
+      <TabBar />
     </>
   );
 }

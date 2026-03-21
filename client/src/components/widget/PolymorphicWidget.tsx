@@ -580,36 +580,31 @@ export default function PolymorphicWidget() {
             maxHeight: 'min(72vh, calc(100svh - 80px))',
             overflowY: 'auto',
             WebkitOverflowScrolling: 'touch' as never,
-            background: 'rgba(4,4,10,0.96)',
-            border: `0.5px solid rgba(192,192,200,0.45)`,
-            borderRadius: 22,
+            background: 'rgba(6,6,8,0.92)',
+            border: '1px solid rgba(255,255,255,0.07)',
+            borderRadius: 4,
             padding: '20px 20px 16px',
-            backdropFilter: 'blur(40px) saturate(180%)',
-            WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+            backdropFilter: 'blur(40px)',
+            WebkitBackdropFilter: 'blur(40px)',
             zIndex: 100,
-            boxShadow: [
-              `0 0 80px ${activeWidget.color}10`,
-              `0 28px 60px rgba(0,0,0,0.85)`,
-              `inset 0 1px 0 rgba(255,255,255,0.05)`,
-            ].join(', '),
+            boxShadow: '0 24px 60px rgba(0,0,0,0.9)',
           }}
         >
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 18, gap: 10 }}>
             {/* Color indicator */}
             <div style={{
-              width: 6, height: 6, borderRadius: '50%',
-              background: activeWidget.color,
-              boxShadow: `0 0 8px ${activeWidget.color}, 0 0 16px ${activeWidget.color}60`,
+              width: 4, height: 4, borderRadius: '50%',
+              background: 'rgba(255,255,255,0.5)',
               flexShrink: 0,
             }} />
             <span style={{
-              fontSize: 11, fontWeight: 500, color: '#9aa5c4',
-              letterSpacing: '0.1em', textTransform: 'uppercase',
+              fontSize: 10, fontWeight: 400, color: 'rgba(255,255,255,0.45)',
+              letterSpacing: '0.12em', textTransform: 'uppercase',
             }}>
               {activeWidget.label}
             </span>
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: '#2e3347', letterSpacing: '0.05em' }}>
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'rgba(255,255,255,0.15)', letterSpacing: '0.05em' }}>
               {activeWidget.entries.length}
             </span>
             <button

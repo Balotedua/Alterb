@@ -66,9 +66,19 @@ export interface ChatMessage {
   ts: number;
 }
 
+// ─── Semantic Clustering ─────────────────────────────────────
+export interface SemanticLink {
+  catA: string;
+  catB: string;
+  similarity: number; // 0..1 cosine similarity between category centroids
+}
+
 // ─── Auth ────────────────────────────────────────────────────
 export interface AlterUser {
   id: string;
   email: string;
   name?: string;
 }
+
+// ─── Theme ───────────────────────────────────────────────────
+export type Theme = 'dark' | 'matrix' | 'nebula' | 'light';

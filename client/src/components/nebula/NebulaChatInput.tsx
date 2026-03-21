@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { nebulaCameraRef } from './nebulaCamera';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff } from 'lucide-react';
+import { Mic, MicOff, ArrowUp } from 'lucide-react';
 import { orchestrate } from '../../core/orchestrator';
 import { quickConnect } from '../../core/insightEngine';
 import { saveEntry, getByCategory, queryCalendarByDate, getRecentAll, deleteCategory } from '../../vault/vaultService';
@@ -34,9 +34,9 @@ export default function NebulaCore() {
   const [listening,        setListening]        = useState(false);
   const [lastReply,        setLastReply]        = useState<string | null>(null);
   const [isActive,         setIsActive]         = useState(false);
-  const [showShockwave,    setShowShockwave]    = useState(false);
   const [ray,              setRay]              = useState<Ray | null>(null);
   const [evolveSuggestion, setEvolveSuggestion] = useState<string | null>(null);
+  const evolveCmdRef   = useRef<string | null>(null);
   const inputRef       = useRef<HTMLInputElement>(null);
   const evolveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const anchorRef      = useRef<HTMLDivElement>(null);
@@ -54,7 +54,17 @@ export default function NebulaCore() {
     upsertStar, removeStar, addKnownCategory, knownCategories,
     setFocusMode, focusMode, addMessage,
     setHighlightedStar, setActiveWidget, setNexusBeam,
+    ghostStarPrompt, setGhostStarPrompt,
   } = useAlterStore();
+
+  // ── Ghost star → pre-fill input ───────────────────────────
+  useEffect(() => {
+    if (!ghostStarPrompt) return;
+    setInput(ghostStarPrompt);
+    setIsActive(true);
+    setGhostStarPrompt(null);
+    setTimeout(() => inputRef.current?.focus(), 60);
+  }, [ghostStarPrompt, setGhostStarPrompt]);
 
   // ── Rotate hints ──────────────────────────────────────────
   useEffect(() => {
@@ -70,16 +80,26 @@ export default function NebulaCore() {
     evolveTimerRef.current = setTimeout(() => {
       const starsNow = useAlterStore.getState().stars;
       if (starsNow.length >= 2) {
-        const [a, b] = starsNow.slice(0, 2);
-        setEvolveSuggestion(`Ho notato una connessione tra ${a.icon} ${a.label} e ${b.icon} ${b.label}. Vuoi vedere?`);
+        for (let i = 0; i < starsNow.length; i++) {
+          const conn = quickConnect(starsNow[i].id, '', starsNow);
+          if (conn) {
+            const a = starsNow[i];
+            const b = starsNow.find(s => s.id === conn.catB);
+            if (b) {
+              evolveCmdRef.current = `correlazione ${a.id} ${b.id}`;
+              setEvolveSuggestion(`✦ Connessione rilevata: ${a.icon} ${a.label} ↔ ${b.icon} ${b.label}`);
+              break;
+            }
+          }
+        }
       }
     }, 10000);
     return () => { if (evolveTimerRef.current) clearTimeout(evolveTimerRef.current); };
   }, [isActive, isProcessing]);
 
   // ── Process input ─────────────────────────────────────────
-  const handleSubmit = useCallback(async () => {
-    const text = input.trim();
+  const handleSubmit = useCallback(async (overrideText?: string) => {
+    const text = (overrideText !== undefined ? overrideText : input).trim();
     if (!text || isProcessing || !user) return;
 
     setInput('');
@@ -88,8 +108,6 @@ export default function NebulaCore() {
     addMessage('user', text);
     setProcessing(true);
     setLastReply(null);
-    setShowShockwave(true);
-    setTimeout(() => setShowShockwave(false), 1200);
 
     try {
       const action = await orchestrate(text, knownCategories);
@@ -120,6 +138,33 @@ export default function NebulaCore() {
           const src   = intent.source === 'local' ? '' : ' · AI';
           const reply = `${meta.icon}  ${meta.label}${src}`;
           setLastReply(reply); addMessage('nebula', reply);
+
+          // ── Big Bang: proactive follow-up on first entry ──
+          if (!existing) {
+            const BIG_BANG: Record<string, string> = {
+              finance:    'Prima spesa. Vuoi impostare un budget o tracciare un\'abitudine?',
+              health:     'Prima nota salute. Aggiungi peso o ore di sonno?',
+              psychology: 'Prima nota psiche. Vuoi un check-in umore quotidiano?',
+              calendar:   'Primo evento. Vuoi impostare promemoria?',
+            };
+            const bbMsg = BIG_BANG[intent.category] ?? 'Categoria creata. Cosa vuoi aggiungere?';
+            setTimeout(() => { setLastReply(bbMsg); addMessage('nebula', bbMsg); }, 2400);
+
+            // ── Void filling: suggest next missing pillar ──
+            const VOID_TARGETS: Record<string, string> = {
+              finance: 'health', health: 'psychology', psychology: 'finance', calendar: 'health',
+            };
+            const voidTarget = VOID_TARGETS[intent.category];
+            if (voidTarget) {
+              setTimeout(() => {
+                const starsNow2 = useAlterStore.getState().stars;
+                if (!starsNow2.some(s => s.id === voidTarget)) {
+                  const vMeta = getCategoryMeta(voidTarget);
+                  setEvolveSuggestion(`${vMeta.icon} Vuoi iniziare a tracciare ${vMeta.label.toLowerCase()}?`);
+                }
+              }, 5500);
+            }
+          }
 
           // ── Auto-connect: find related star 2s after save ──
           setTimeout(() => {
@@ -314,12 +359,17 @@ export default function NebulaCore() {
     const rec = new SR();
     rec.lang = 'it-IT'; rec.continuous = false;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rec.onresult = (e: any) => { setInput(e.results[0][0].transcript); setListening(false); };
+    rec.onresult = (e: any) => {
+      const t = e.results[0][0].transcript;
+      setInput(t);
+      setListening(false);
+      setTimeout(() => handleSubmit(t), 80);
+    };
     rec.onerror  = () => setListening(false);
     rec.onend    = () => setListening(false);
     rec.start();
     setListening(true);
-  }, [listening]);
+  }, [listening, handleSubmit]);
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
@@ -334,58 +384,18 @@ export default function NebulaCore() {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, pointerEvents: 'none' }}>
 
-      {/* ── Vignette when active ── */}
-      <AnimatePresence>
-        {isActive && (
-          <motion.div
-            key="vignette"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.5 }}
-            style={{
-              position: 'absolute', inset: 0,
-              background: 'radial-gradient(ellipse 70% 70% at 50% 50%, transparent 30%, rgba(5,5,8,0.55) 100%)',
-              pointerEvents: 'none',
-            }}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* ── Shockwave rings ── */}
-      <AnimatePresence>
-        {showShockwave && ([
-          { scale: 10, op: 0.45, dur: 1.0, delay: 0 },
-          { scale: 18, op: 0.2,  dur: 1.6, delay: 0.1 },
-        ] as const).map((sw, i) => (
-          <motion.div
-            key={`sw${i}`}
-            initial={{ scale: 0.5, opacity: sw.op }}
-            animate={{ scale: sw.scale, opacity: 0 }} exit={{}}
-            transition={{ duration: sw.dur, ease: [0.22, 1, 0.36, 1], delay: sw.delay }}
-            style={{
-              position: 'absolute', top: '50%', left: '50%',
-              marginTop: -24, marginLeft: -24,
-              width: 48, height: 48, borderRadius: '50%',
-              border: '1px solid rgba(240,249,255,0.3)',
-              pointerEvents: 'none',
-            }}
-          />
-        ))}
-      </AnimatePresence>
-
-      {/* ── Ray of light: center → star ── */}
+      {/* ── Ray of light: center → star (white, monochrome) ── */}
       <AnimatePresence>
         {ray && (
           <motion.div
             key="ray"
-            initial={{ opacity: 0.65, scaleX: 0 }}
+            initial={{ opacity: 0.5, scaleX: 0 }}
             animate={{ opacity: 0, scaleX: 1 }}
-            transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
             style={{
               position: 'absolute', top: '50%', left: '50%',
               width: ray.length, height: 1,
-              background: `linear-gradient(to right, ${ray.color}aa, transparent)`,
+              background: 'linear-gradient(to right, rgba(255,255,255,0.4), transparent)',
               transformOrigin: 'left center',
               transform: `rotate(${ray.angle}deg)`,
               pointerEvents: 'none',
@@ -397,226 +407,162 @@ export default function NebulaCore() {
       {/* ── World-space anchor (camera sync — invisible) ── */}
       <div ref={anchorRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', willChange: 'transform' }} />
 
-      {/* ── Central nebula + expandable input ── */}
+      {/* ── Bottom minimal input ── */}
       <div ref={nebulaWrapRef} style={{
         position: 'fixed',
-        top: '50%', left: '50%',
-        transform: 'translate(-50%, -50%)',
+        bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
+        left: '50%',
+        transform: 'translateX(-50%)',
         zIndex: 202,
+        width: 'min(440px, calc(100vw - 48px))',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: 14,
-        pointerEvents: 'none',
+        gap: 10,
+        pointerEvents: 'all',
       }}>
 
-        {/* Status / hint text above the nebula */}
+        {/* Status / reply above input */}
         <AnimatePresence mode="wait">
           {lastReply && !isActive ? (
             <motion.div
               key={`reply-${lastReply}`}
-              initial={{ opacity: 0, y: 3 }}
+              initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 3 }}
-              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              exit={{ opacity: 0, y: -2 }}
+              transition={{ duration: 0.35 }}
               style={{
-                fontSize: 10,
-                color: 'rgba(200,215,255,0.35)',
-                letterSpacing: '0.08em',
-                fontWeight: 300,
-                textAlign: 'center',
-                pointerEvents: 'none',
-                whiteSpace: 'nowrap',
+                fontSize: 12, color: 'rgba(255,255,255,0.68)',
+                letterSpacing: '0.04em', fontWeight: 300,
+                textAlign: 'center', pointerEvents: 'none',
+                lineHeight: 1.5,
               }}
             >
               {lastReply}
             </motion.div>
-          ) : !isActive ? (
-            <motion.div
-              key={`hint-${hintIdx}`}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.6 }}
-              style={{
-                fontSize: 9,
-                color: 'rgba(200,220,255,0.06)',
-                letterSpacing: '0.06em',
-                fontWeight: 300,
-                pointerEvents: 'none',
-                textAlign: 'center',
-              }}
-            >
-              {HINTS[hintIdx]}
-            </motion.div>
           ) : null}
         </AnimatePresence>
 
-        {/* ── Entity: minimal star ── */}
-        <motion.div
-          onClick={isActive ? undefined : openInput}
-          animate={{ y: isActive ? 0 : [0, -5, 0], opacity: isActive ? 0 : 1 }}
-          transition={isActive ? { duration: 0.2 } : { y: { duration: 4.2, repeat: Infinity, ease: 'easeInOut' }, opacity: { duration: 0.25 } }}
-          style={{
-            position: 'relative',
-            width: 64, height: 64,
-            flexShrink: 0,
-            cursor: isActive ? 'default' : 'pointer',
-            pointerEvents: isActive ? 'none' : 'all',
-          }}
-        >
-          {/* Ambient glow */}
-          <motion.div
-            animate={{
-              opacity: [0.12, 0.22, 0.12],
-              scale: [1, 1.12, 1],
-            }}
-            transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut' }}
-            style={{
-              position: 'absolute',
-              inset: -20,
-              borderRadius: '50%',
-              background: isProcessing
-                ? 'radial-gradient(circle, rgba(240,192,64,0.22) 0%, transparent 70%)'
-                : 'radial-gradient(circle, rgba(167,139,250,0.16) 0%, transparent 70%)',
-              pointerEvents: 'none',
-            }}
-          />
-          {/* Outer ring */}
-          <motion.div
-            animate={{
-              rotate: isProcessing ? 360 : 0,
-              opacity: isProcessing ? 0.7 : 0.15,
-            }}
-            transition={isProcessing
-              ? { rotate: { duration: 3, repeat: Infinity, ease: 'linear' }, opacity: { duration: 0.4 } }
-              : { duration: 0.6 }
-            }
-            style={{
-              position: 'absolute', inset: -10,
-              borderRadius: '50%',
-              border: `1px solid ${isProcessing ? 'rgba(240,192,64,0.6)' : 'rgba(167,139,250,0.4)'}`,
-              borderTopColor: 'transparent',
-            }}
-          />
-          {/* Core dot */}
-          <motion.div
-            animate={{ scale: isProcessing ? [1, 1.1, 1] : 1 }}
-            transition={isProcessing ? { duration: 1.2, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }}
-            style={{
-              position: 'absolute', inset: 0,
-              borderRadius: '50%',
-              background: isProcessing
-                ? 'radial-gradient(circle at 50% 50%, rgba(255,245,200,0.95) 0%, rgba(240,192,64,0.5) 50%, transparent 100%)'
-                : 'radial-gradient(circle at 50% 50%, rgba(255,255,255,0.9) 0%, rgba(167,139,250,0.35) 55%, transparent 100%)',
-              boxShadow: isProcessing
-                ? '0 0 16px rgba(240,192,64,0.5), 0 0 40px rgba(240,192,64,0.12)'
-                : '0 0 12px rgba(200,190,255,0.3), 0 0 32px rgba(167,139,250,0.08)',
-            }}
-          />
-        </motion.div>
-
-        {/* ── Expandable input ── */}
+        {/* Evolve suggestion — clickable chip */}
         <AnimatePresence>
-          {isActive && (
+          {evolveSuggestion && !isActive && (
             <motion.div
-              key="input-bar"
-              initial={{ opacity: 0, scaleY: 0.85, y: -6 }}
-              animate={{ opacity: 1, scaleY: 1, y: 0 }}
-              exit={{ opacity: 0, scaleY: 0.85, y: -6 }}
-              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              key="evolve"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              onClick={() => { setInput(evolveCmdRef.current ?? ''); evolveCmdRef.current = null; setEvolveSuggestion(null); setTimeout(() => inputRef.current?.focus(), 60); }}
               style={{
-                width: 'min(440px, calc(100vw - 48px))',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                background: 'rgba(5,5,10,0.96)',
-                border: '1px solid rgba(255,255,255,0.05)',
-                borderRadius: 8,
-                padding: '10px 14px',
-                backdropFilter: 'blur(60px)',
-                WebkitBackdropFilter: 'blur(60px)',
-                pointerEvents: 'all',
-                boxShadow: '0 4px 32px rgba(0,0,0,0.8)',
-                transformOrigin: 'top center',
+                fontSize: 10, color: 'rgba(167,139,250,0.75)',
+                letterSpacing: '0.05em', cursor: 'pointer',
+                textAlign: 'center',
+                padding: '5px 12px',
+                background: 'rgba(167,139,250,0.08)',
+                border: '1px solid rgba(167,139,250,0.18)',
+                borderRadius: 12,
               }}
             >
-              {/* Status dot */}
-              <motion.div
-                animate={{
-                  background: isProcessing ? '#f0c040' : 'rgba(240,249,255,0.55)',
-                  boxShadow: isProcessing ? '0 0 8px #f0c040' : '0 0 5px rgba(240,249,255,0.25)',
-                  scale: isProcessing ? [1, 1.6, 1] : 1,
-                }}
-                transition={isProcessing ? { scale: { duration: 0.55, repeat: Infinity } } : { duration: 0.3 }}
-                style={{ width: 4, height: 4, borderRadius: '50%', flexShrink: 0 }}
-              />
-
-              {/* Input field */}
-              <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
-                <input
-                  ref={inputRef}
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={handleKey}
-                  onFocus={() => setIsActive(true)}
-                  onBlur={() => { if (!isProcessing) setIsActive(false); }}
-                  disabled={isProcessing}
-                  style={{
-                    width: '100%',
-                    background: 'transparent',
-                    border: 'none', outline: 'none',
-                    color: 'rgba(255,255,255,0.9)',
-                    fontFamily: '"JetBrains Mono", "Fira Code", ui-monospace, monospace',
-                    fontSize: 12, fontWeight: 300,
-                    letterSpacing: '0.04em',
-                    caretColor: 'rgba(200,220,255,0.6)',
-                  }}
-                />
-                {!input && (
-                  <AnimatePresence mode="wait">
-                    <motion.span
-                      key={`ph-${hintIdx}`}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.4 }}
-                      style={{
-                        position: 'absolute', left: 0, top: 0,
-                        fontFamily: '"JetBrains Mono", "Fira Code", ui-monospace, monospace',
-                        fontSize: 12, fontWeight: 300,
-                        letterSpacing: '0.04em',
-                        color: 'rgba(200,220,255,0.14)',
-                        pointerEvents: 'none',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        width: '100%',
-                      }}
-                    >
-                      {HINTS[hintIdx]}
-                    </motion.span>
-                  </AnimatePresence>
-                )}
-              </div>
-
-              {/* Mic */}
-              <button
-                onMouseDown={e => { e.preventDefault(); toggleVoice(); }}
-                onTouchStart={e => { e.preventDefault(); toggleVoice(); }}
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  color: listening ? '#f87171' : 'rgba(240,249,255,0.18)',
-                  padding: '2px 0', flexShrink: 0,
-                  display: 'flex', alignItems: 'center',
-                  transition: 'color 0.2s',
-                }}
-              >
-                {listening ? <MicOff size={12} /> : <Mic size={12} />}
-              </button>
+              {evolveSuggestion}
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Input container — glass */}
+        <motion.div
+          animate={{ opacity: isActive || input.length > 0 ? 1 : 0.70 }}
+          transition={{ duration: 0.4 }}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: 'rgba(8,8,18,0.75)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: isActive
+              ? '1px solid rgba(255,255,255,0.14)'
+              : '1px solid rgba(255,255,255,0.07)',
+            borderRadius: 14,
+            padding: '0 12px 0 16px',
+            transition: 'border-color 0.3s',
+          }}
+          onClick={openInput}
+        >
+          {/* Processing dot */}
+          <AnimatePresence>
+            {isProcessing && (
+              <motion.div
+                key="proc"
+                initial={{ opacity: 0, scale: 0 }}
+                animate={{ opacity: [1, 0.4, 1], scale: [1, 1.4, 1] }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.7, repeat: Infinity }}
+                style={{ width: 3, height: 3, borderRadius: '50%', background: '#ffffff', flexShrink: 0 }}
+              />
+            )}
+          </AnimatePresence>
+
+          {/* Input */}
+          <input
+            ref={inputRef}
+            value={input}
+            onChange={e => { setInput(e.target.value); setIsActive(true); }}
+            onKeyDown={handleKey}
+            onFocus={() => setIsActive(true)}
+            onBlur={() => { if (!isProcessing) setIsActive(false); }}
+            disabled={isProcessing}
+            placeholder={HINTS[hintIdx]}
+            style={{
+              flex: 1,
+              background: 'transparent',
+              border: 'none', outline: 'none',
+              color: 'rgba(255,255,255,0.90)',
+              fontFamily: 'inherit',
+              fontSize: 16, fontWeight: 300,
+              letterSpacing: '0.02em',
+              caretColor: 'rgba(255,255,255,0.7)',
+              minHeight: 46,
+              WebkitAppearance: 'none',
+            }}
+          />
+
+          {/* Send / Mic */}
+          {input.length > 0 ? (
+            <button
+              onMouseDown={e => { e.preventDefault(); handleSubmit(); }}
+              onTouchStart={e => { e.preventDefault(); handleSubmit(); }}
+              style={{
+                background: 'rgba(255,255,255,0.10)',
+                border: 'none', cursor: 'pointer',
+                color: 'rgba(255,255,255,0.90)',
+                padding: '8px', flexShrink: 0,
+                display: 'flex', alignItems: 'center',
+                borderRadius: 8,
+                transition: 'all 0.2s',
+                pointerEvents: 'all',
+              }}
+            >
+              <ArrowUp size={15} />
+            </button>
+          ) : (
+            <button
+              onMouseDown={e => { e.preventDefault(); toggleVoice(); }}
+              onTouchStart={e => { e.preventDefault(); toggleVoice(); }}
+              style={{
+                background: listening ? 'rgba(240,100,100,0.15)' : 'none',
+                border: 'none', cursor: 'pointer',
+                color: listening ? 'rgba(255,100,100,0.90)' : 'rgba(255,255,255,0.35)',
+                padding: '8px', flexShrink: 0,
+                display: 'flex', alignItems: 'center',
+                borderRadius: 8,
+                transition: 'all 0.2s',
+                pointerEvents: 'all',
+              }}
+            >
+              {listening ? <MicOff size={15} /> : <Mic size={15} />}
+            </button>
+          )}
+        </motion.div>
 
       </div>
     </div>

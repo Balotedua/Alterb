@@ -8,7 +8,7 @@ html, body, #root {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #000000;
+  background: var(--bg, #03030a);
 }
 
 body {
@@ -16,7 +16,7 @@ body {
   font-weight: 300;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  color: #ccd6f6;
+  color: var(--text, #ffffff);
   user-select: none;
 }
 
@@ -29,4 +29,110 @@ input, button, textarea {
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
-::selection { background: rgba(167,139,250,0.3); }
+::selection { background: rgba(255,255,255,0.15); }
+
+/* ── Themes ───────────────────────────────────────────────── */
+:root, [data-theme="dark"] {
+  --bg: #03030a;
+  --bg2: #0a0a18;
+  --text: #ffffff;
+  --text-dim: rgba(255,255,255,0.4);
+  --accent: #f0c040;
+  --accent2: #40e0d0;
+  --border: rgba(255,255,255,0.07);
+  --glass: rgba(10,10,18,0.92);
+  --tab-bg: rgba(5,5,8,0.96);
+  --star-glow: 1;
+}
+
+[data-theme="matrix"] {
+  --bg: #000800;
+  --bg2: #001200;
+  --text: #00ff41;
+  --text-dim: rgba(0,255,65,0.45);
+  --accent: #00ff41;
+  --accent2: #00cc33;
+  --border: rgba(0,255,65,0.15);
+  --glass: rgba(0,10,0,0.92);
+  --tab-bg: rgba(0,6,0,0.97);
+  --star-glow: 1.4;
+}
+
+[data-theme="nebula"] {
+  --bg: #06000f;
+  --bg2: #0d0020;
+  --text: #e8d8ff;
+  --text-dim: rgba(200,170,255,0.45);
+  --accent: #a78bfa;
+  --accent2: #c084fc;
+  --border: rgba(167,139,250,0.15);
+  --glass: rgba(8,0,20,0.92);
+  --tab-bg: rgba(4,0,12,0.97);
+  --star-glow: 1.2;
+}
+
+[data-theme="light"] {
+  --bg: #f0f2ff;
+  --bg2: #e0e4ff;
+  --text: #1a1a3e;
+  --text-dim: rgba(26,26,62,0.5);
+  --accent: #5b21b6;
+  --accent2: #0ea5e9;
+  --border: rgba(26,26,62,0.1);
+  --glass: rgba(235,238,255,0.94);
+  --tab-bg: rgba(240,242,255,0.97);
+  --star-glow: 0.8;
+}
+
+/* ── Matrix glitch overlay ─────────────────────────────────── */
+[data-theme="matrix"] #root::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,255,65,0.015) 2px,
+    rgba(0,255,65,0.015) 4px
+  );
+  animation: matrix-scanlines 8s linear infinite;
+}
+
+[data-theme="matrix"] #root::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9998;
+  animation: matrix-glitch 6s steps(1) infinite;
+  opacity: 0;
+}
+
+@keyframes matrix-scanlines {
+  0%   { background-position: 0 0; }
+  100% { background-position: 0 100px; }
+}
+
+@keyframes matrix-glitch {
+  0%, 90%, 100% { opacity: 0; transform: none; }
+  91% { opacity: 1; transform: translate(-2px, 0) skewX(-0.5deg); background: rgba(0,255,65,0.03); }
+  93% { opacity: 0; transform: none; }
+  95% { opacity: 1; transform: translate(2px, 1px) skewX(0.3deg); background: rgba(0,200,40,0.02); }
+  97% { opacity: 0; }
+}
+
+/* ── Matrix text flicker ─────────────────────────────────── */
+[data-theme="matrix"] .alter-label {
+  animation: text-flicker 4s steps(1) infinite;
+}
+
+@keyframes text-flicker {
+  0%, 95%, 100% { opacity: 1; }
+  96% { opacity: 0.7; }
+  97% { opacity: 1; }
+  98% { opacity: 0.4; }
+  99% { opacity: 1; }
+}

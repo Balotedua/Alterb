@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase';
-import type { VaultEntry } from '../types';
+import type { VaultEntry, SemanticLink } from '../types';
+import { generateVec, cosineSim } from '../core/semanticVec';
 
 // ─── Write ───────────────────────────────────────────────────
 export async function saveEntry(
@@ -7,9 +8,12 @@ export async function saveEntry(
   category: string,
   data: Record<string, unknown>
 ): Promise<VaultEntry | null> {
+  const vec = generateVec(category, data);
+  const dataWithVec = { ...data, _embedding: vec };
+  const embedding = `[${vec.join(',')}]`;
   const { data: row, error } = await supabase
     .from('vault')
-    .insert({ user_id: userId, category, data })
+    .insert({ user_id: userId, category, data: dataWithVec, embedding })
     .select()
     .single();
   if (error) { console.error('[vault save]', error); return null; }
@@ -105,6 +109,45 @@ export async function getUpcomingEvents(userId: string): Promise<VaultEntry[]> {
     .order('data->>scheduled_at', { ascending: true });
   if (error) { console.error('[vault getUpcomingEvents]', error); return []; }
   return (data ?? []) as VaultEntry[];
+}
+
+// ─── Semantic clustering ──────────────────────────────────────
+// Averages embeddings per category → cosine similarity between centroids
+export async function getSemanticLinks(userId: string): Promise<SemanticLink[]> {
+  const { data, error } = await supabase
+    .from('vault')
+    .select('category, data')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error || !data) return [];
+
+  const centroids = new Map<string, { sum: number[]; count: number }>();
+  for (const row of data) {
+    const emb = (row.data as Record<string, unknown>)._embedding as number[] | undefined;
+    if (!emb || emb.length === 0) continue;
+    const existing = centroids.get(row.category);
+    if (!existing) {
+      centroids.set(row.category, { sum: [...emb], count: 1 });
+    } else {
+      for (let i = 0; i < emb.length; i++) existing.sum[i] += emb[i];
+      existing.count++;
+    }
+  }
+
+  const cats = Array.from(centroids.entries()).map(([cat, { sum, count }]) => ({
+    cat,
+    vec: sum.map(v => v / count),
+  }));
+
+  const links: SemanticLink[] = [];
+  for (let i = 0; i < cats.length; i++) {
+    for (let j = i + 1; j < cats.length; j++) {
+      const sim = cosineSim(cats[i].vec, cats[j].vec);
+      if (sim > 0.55) links.push({ catA: cats[i].cat, catB: cats[j].cat, similarity: sim });
+    }
+  }
+  return links.sort((a, b) => b.similarity - a.similarity);
 }
 
 // ─── Delete ──────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Star, WidgetData, ChatMessage, AlterUser, NexusBeam } from '../types';
+import type { Star, WidgetData, ChatMessage, AlterUser, NexusBeam, SemanticLink, Theme } from '../types';
 
 interface AlterStore {
   // ── Auth ────────────────────────────────────────────────
@@ -42,6 +42,26 @@ interface AlterStore {
   // ── Nexus beam ───────────────────────────────────────────────
   nexusBeam: NexusBeam | null;
   setNexusBeam: (beam: NexusBeam | null) => void;
+
+  // ── Semantic clustering ───────────────────────────────────────
+  semanticLinks: SemanticLink[];
+  setSemanticLinks: (links: SemanticLink[]) => void;
+
+  // ── Ghost star prompt (click on missing pillar → pre-fill input) ─
+  ghostStarPrompt: string | null;
+  setGhostStarPrompt: (prompt: string | null) => void;
+
+  // ── View mode ─────────────────────────────────────────────────
+  viewMode: 'chat' | 'galaxy' | 'dashboard';
+  setViewMode: (mode: 'chat' | 'galaxy' | 'dashboard') => void;
+
+  // ── Settings ──────────────────────────────────────────────────
+  theme: Theme;
+  setTheme: (t: Theme) => void;
+  username: string;
+  setUsername: (n: string) => void;
+  showSettings: boolean;
+  setShowSettings: (v: boolean) => void;
 }
 
 export const useAlterStore = create<AlterStore>((set) => ({
@@ -94,4 +114,20 @@ export const useAlterStore = create<AlterStore>((set) => ({
 
   nexusBeam: null,
   setNexusBeam: (nexusBeam) => set({ nexusBeam }),
+
+  semanticLinks: [],
+  setSemanticLinks: (semanticLinks) => set({ semanticLinks }),
+
+  ghostStarPrompt: null,
+  setGhostStarPrompt: (ghostStarPrompt) => set({ ghostStarPrompt }),
+
+  viewMode: 'chat',
+  setViewMode: (viewMode) => set({ viewMode }),
+
+  theme: (localStorage.getItem('alter-theme') as Theme) ?? 'dark',
+  setTheme: (theme) => { localStorage.setItem('alter-theme', theme); set({ theme }); },
+  username: localStorage.getItem('alter-username') ?? '',
+  setUsername: (username) => { localStorage.setItem('alter-username', username); set({ username }); },
+  showSettings: false,
+  setShowSettings: (showSettings) => set({ showSettings }),
 }));

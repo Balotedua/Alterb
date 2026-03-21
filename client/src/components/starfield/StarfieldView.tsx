@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAlterStore } from '../../store/alterStore';
-import { getByCategory } from '../../vault/vaultService';
+import { getByCategory, getSemanticLinks } from '../../vault/vaultService';
 import { inferRenderType } from '../widget/PolymorphicWidget';
 import type { Star } from '../../types';
 import { nebulaCameraRef } from '../nebula/nebulaCamera';
@@ -87,6 +87,8 @@ interface CanvasState {
   pinchMidX: number;
   pinchMidY: number;
   constellationAlpha: number; // 0..0.12, fades in when idle
+  touchStartX: number;
+  touchStartY: number;
 }
 
 // ─── StarfieldView ────────────────────────────────────────────
@@ -95,15 +97,16 @@ export default function StarfieldView() {
   const isMobile  = window.innerWidth < 768;
 
   const stateRef = useRef<CanvasState>({
-    particles: initParticles(isMobile ? 90 : 180),
+    particles: initParticles(isMobile ? 35 : 60),
     raf: 0, hovered: null, t: 0,
     panX: 0, panY: 0, velX: 0, velY: 0, scale: 1, targetScale: 1,
     dragging: false, dragX: 0, dragY: 0, didDrag: false,
     pinchDist: -1, pinchMidX: 0, pinchMidY: 0,
+    touchStartX: 0, touchStartY: 0,
     constellationAlpha: 0,
   });
 
-  const { stars, focusMode, setActiveWidget, user, markStarSeen, highlightedStarId, alertEvent } = useAlterStore();
+  const { stars, focusMode, setActiveWidget, user, markStarSeen, highlightedStarId, alertEvent, setSemanticLinks, setGhostStarPrompt } = useAlterStore();
 
   // Star suction animation before widget opens
   const [suckStar, setSuckStar] = useState<{ id: string; color: string; dx: number; dy: number } | null>(null);
@@ -111,6 +114,12 @@ export default function StarfieldView() {
   // Full-screen supernova flash
   const [flashActive, setFlashActive] = useState(false);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load semantic links whenever the star count changes
+  useEffect(() => {
+    if (!user) return;
+    getSemanticLinks(user.id).then(links => setSemanticLinks(links));
+  }, [user, stars.length, setSemanticLinks]);
 
   useEffect(() => {
     if (stars.some(s => s.isNew)) {
@@ -152,22 +161,36 @@ export default function StarfieldView() {
       state.velX *= 0.88;
       state.velY *= 0.88;
       if (nebulaCameraRef.el) nebulaCameraRef.el.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
-      if (nebulaCameraRef.nebula) nebulaCameraRef.nebula.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
     }
     const { scale } = state;
 
-    // Deep space background
-    ctx.fillStyle = '#050508';
+    // Deep space background — theme-aware radial vignette
+    const currentTheme = useAlterStore.getState().theme ?? 'dark';
+    const BG_COLORS: Record<string, [string, string, string]> = {
+      dark:   ['#04040e', '#020208', '#000000'],
+      matrix: ['#001200', '#000800', '#000300'],
+      nebula: ['#0d0020', '#06000f', '#020008'],
+      light:  ['#dde2ff', '#eaeeff', '#f4f6ff'],
+    };
+    const [bgC0, bgC1, bgC2] = BG_COLORS[currentTheme] ?? BG_COLORS.dark;
+    const bg = ctx.createRadialGradient(W * 0.5, H * 0.42, 0, W * 0.5, H * 0.5, Math.max(W, H) * 0.72);
+    bg.addColorStop(0,   bgC0);
+    bg.addColorStop(0.5, bgC1);
+    bg.addColorStop(1,   bgC2);
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
 
     // ── Constellation alpha: fade in when idle, out when dragging ──
     if (state.dragging) {
       state.constellationAlpha = Math.max(0, state.constellationAlpha - 0.025);
     } else {
-      state.constellationAlpha = Math.min(0.12, state.constellationAlpha + 0.004);
+      state.constellationAlpha = Math.min(0.08, state.constellationAlpha + 0.004);
     }
 
     // ── Parallax particles — 3 depth layers ──
+    const isLightTheme = currentTheme === 'light';
+    const isMatrixTheme = currentTheme === 'matrix';
+    const isNebulaTheme = currentTheme === 'nebula';
     state.particles.forEach((p) => {
       p.a += p.da;
       if (p.a <= 0.02) { p.a = 0.02; p.da = Math.abs(p.da); }
@@ -175,10 +198,17 @@ export default function StarfieldView() {
       const factor = LAYER_PARALLAX[p.layer];
       const px = p.x * W + state.panX * factor;
       const py = p.y * H + state.panY * factor;
-      const brightness = 90 + p.layer * 18;
       ctx.beginPath();
       ctx.arc(px, py, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(${brightness},${brightness + 20},${brightness + 50},${p.a * (0.18 + p.layer * 0.08)})`;
+      const particleAlpha = p.a * (0.10 + p.layer * 0.06);
+      const pColor = isLightTheme
+        ? `rgba(80,80,160,${particleAlpha * 0.6})`
+        : isMatrixTheme
+        ? `rgba(0,255,65,${particleAlpha * 0.7})`
+        : isNebulaTheme
+        ? `rgba(180,140,255,${particleAlpha * 0.65})`
+        : `rgba(255,255,255,${particleAlpha})`;
+      ctx.fillStyle = pColor;
       ctx.fill();
     });
 
@@ -187,6 +217,38 @@ export default function StarfieldView() {
     const alertEvt        = useAlterStore.getState().alertEvent;
     const hov = state.hovered;
     const s   = Math.sqrt(Math.max(scale, 0.3)); // visual scale factor
+
+    // ── Semantic cluster beams (drawn behind stars) ──
+    const semLinks = useAlterStore.getState().semanticLinks;
+    if (semLinks.length > 0) {
+      ctx.save();
+      for (const link of semLinks) {
+        const sA = starsNow.find(st => st.id === link.catA);
+        const sB = starsNow.find(st => st.id === link.catB);
+        if (!sA || !sB) continue;
+        const pa = toScreen(sA.x, sA.y, W, H);
+        const pb = toScreen(sB.x, sB.y, W, H);
+        const [rA, gA, bA] = hexToRgb(sA.color);
+        const [rB, gB, bB] = hexToRgb(sB.color);
+        const strength = (link.similarity - 0.55) / 0.45; // 0..1
+        const breathe  = 0.82 + Math.sin(state.t * 0.65 + link.catA.charCodeAt(0) * 0.13) * 0.18;
+        const alpha    = strength * 0.30 * breathe;
+        const grad = ctx.createLinearGradient(pa.sx, pa.sy, pb.sx, pb.sy);
+        grad.addColorStop(0,   `rgba(${rA},${gA},${bA},${alpha})`);
+        grad.addColorStop(0.5, `rgba(255,255,255,${alpha * 0.7})`);
+        grad.addColorStop(1,   `rgba(${rB},${gB},${bB},${alpha})`);
+        ctx.beginPath();
+        ctx.moveTo(pa.sx, pa.sy);
+        ctx.lineTo(pb.sx, pb.sy);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth   = 1.5 + strength * 2.0;
+        ctx.shadowBlur  = 8 * strength;
+        ctx.shadowColor = `rgba(${rA},${gA},${bA},0.5)`;
+        ctx.stroke();
+        ctx.shadowBlur  = 0;
+      }
+      ctx.restore();
+    }
 
     // ── Category stars — minimal luminous dots ──
     starsNow.forEach((star) => {
@@ -211,54 +273,69 @@ export default function StarfieldView() {
       const alpha   = (isEphemeral ? 0.35 : 0.45) + (intensity * (isEphemeral ? 0.35 : 0.55));
       const a       = alpha * pulse;
 
-      // Insight: golden pulsing rings
-      if (isInsight) {
-        const ringR1 = (28 + Math.sin(state.t * 1.8) * 8) * s;
-        const ringR2 = (44 + Math.sin(state.t * 1.8 + 1.5) * 10) * s;
-        for (const ringR of [ringR1, ringR2]) {
-          const ringAlpha = 0.09 + Math.sin(state.t * 1.8) * 0.03;
-          const ring = ctx.createRadialGradient(px, py, ringR * 0.6, px, py, ringR);
-          ring.addColorStop(0, `rgba(240,192,64,${ringAlpha})`);
-          ring.addColorStop(1, 'rgba(240,192,64,0)');
-          ctx.beginPath(); ctx.arc(px, py, ringR, 0, Math.PI * 2);
-          ctx.fillStyle = ring; ctx.fill();
-        }
-      }
-
-      // Outer soft glow
-      const glowMult = isHighlit ? 1.9 : isAlert ? 2.1 : isInsight ? 2.4 : 1;
-      const glowR    = (isHov ? 34 : 14 + intensity * 10) * s * glowMult;
-      const glow     = ctx.createRadialGradient(px, py, 0, px, py, glowR);
-      glow.addColorStop(0,   `rgba(${r},${g},${b},${0.18 * a})`);
-      glow.addColorStop(0.45,`rgba(${r},${g},${b},${0.05 * a})`);
-      glow.addColorStop(1,   'rgba(0,0,0,0)');
+      // Outer glow halo
+      const glowR = (isHov ? 28 : 14 + intensity * 18) * s;
+      const glowGrd = ctx.createRadialGradient(px, py, 0, px, py, glowR);
+      glowGrd.addColorStop(0,    `rgba(${r},${g},${b},${a * 0.45})`);
+      glowGrd.addColorStop(0.3,  `rgba(${r},${g},${b},${a * 0.18})`);
+      glowGrd.addColorStop(0.65, `rgba(${r},${g},${b},${a * 0.05})`);
+      glowGrd.addColorStop(1,    `rgba(${r},${g},${b},0)`);
       ctx.beginPath(); ctx.arc(px, py, glowR, 0, Math.PI * 2);
-      ctx.fillStyle = glow; ctx.fill();
+      ctx.fillStyle = glowGrd; ctx.fill();
 
-      // Colored inner halo
-      const haloR = (isHov ? 4.5 : 1.8 + intensity * 1.4) * s * (isHighlit || isAlert ? 1.6 : 1);
-      const halo  = ctx.createRadialGradient(px, py, 0, px, py, haloR);
-      halo.addColorStop(0, `rgba(${r},${g},${b},${0.32 * a})`);
-      halo.addColorStop(1, `rgba(${r},${g},${b},0)`);
-      ctx.beginPath(); ctx.arc(px, py, haloR, 0, Math.PI * 2);
-      ctx.fillStyle = halo; ctx.fill();
-
-      // White core dot
-      const coreR = (isHov ? 2.8 : 1.1 + intensity * 0.9) * s * (isHighlit || isAlert ? 1.5 : 1);
+      // Colored core: white hot center → star color rim
+      const coreR = (isHov ? 7 : 2.8 + intensity * 4.5) * s * (isHighlit || isAlert ? 1.5 : 1);
+      const coreGrd = ctx.createRadialGradient(px, py, 0, px, py, coreR);
+      const efa = isEphemeral ? 0.55 : 1;
+      coreGrd.addColorStop(0,    `rgba(255,255,255,${a * efa})`);
+      coreGrd.addColorStop(0.45, `rgba(${r},${g},${b},${a * 0.95 * efa})`);
+      coreGrd.addColorStop(1,    `rgba(${r},${g},${b},${a * 0.5 * efa})`);
       ctx.beginPath(); ctx.arc(px, py, coreR, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(255,255,255,${a * (isEphemeral ? 0.7 : 1)})`;
+      ctx.fillStyle = coreGrd;
+      // Glow shadow on star
+      ctx.shadowBlur  = isHov ? 20 : (8 + intensity * 12) * s;
+      ctx.shadowColor = `rgba(${r},${g},${b},0.8)`;
       ctx.fill();
+      ctx.shadowBlur = 0;
 
-      // Label — hover only (unless focusMode)
-      const labelOp = isHov ? 0.65 : (focusMode ? 0.25 : 0);
-      if (labelOp > 0.01) {
-        ctx.save();
-        ctx.font = `300 8px -apple-system, "SF Pro Display", system-ui, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillStyle = `rgba(${r},${g},${b},${labelOp})`;
-        ctx.fillText(star.label.toUpperCase(), px, py + coreR + 11 * s);
-        ctx.restore();
-      }
+      // Label — larger, more visible
+      ctx.save();
+      ctx.font = `500 10px -apple-system, "SF Pro Display", system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = `rgba(${r},${g},${b},${isHov ? 0.95 : 0.55})`;
+      ctx.fillText(star.label.toUpperCase(), px, py + coreR + 15 * s);
+      ctx.restore();
+      void isInsight;
+    });
+
+    // ── Ghost Stars: missing pillar categories ──
+    const PILLARS = ['finance', 'health', 'psychology', 'calendar'] as const;
+    PILLARS.forEach((cat) => {
+      if (starsNow.some(st => st.id === cat)) return;
+      const pos = starPosition(cat);
+      const { sx: px, sy: py } = toScreen(pos.x, pos.y, W, H);
+      const meta = getCategoryMeta(cat);
+      const [gr, gg, gb] = hexToRgb(meta.color);
+      const isGhostHov = hov === `ghost:${cat}`;
+      const breathe = isGhostHov ? 0.75 : (0.25 + Math.sin(state.t * 0.7 + cat.charCodeAt(0) * 0.33) * 0.08);
+      const radius  = (isGhostHov ? 9 : 5) * s;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(px, py, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${gr},${gg},${gb},${breathe})`;
+      ctx.lineWidth = 0.5;
+      ctx.setLineDash([2, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // faint "+" inside
+      ctx.fillStyle = `rgba(${gr},${gg},${gb},${breathe * 0.6})`;
+      ctx.font = `300 6px system-ui`;
+      ctx.textAlign = 'center';
+      ctx.fillText('+', px, py + 2.5);
+      ctx.font = `300 7px -apple-system, system-ui, sans-serif`;
+      ctx.fillStyle = `rgba(${gr},${gg},${gb},${isGhostHov ? 0.50 : 0.14})`;
+      ctx.fillText(meta.label.toUpperCase(), px, py + radius + 11);
+      ctx.restore();
     });
 
     // ── Constellation lines between nearby stars ──
@@ -271,8 +348,8 @@ export default function StarfieldView() {
           const pa = toScreen(a.x, a.y, W, H);
           const pb = toScreen(b.x, b.y, W, H);
           const dist = Math.hypot(pa.sx - pb.sx, pa.sy - pb.sy);
-          if (dist < 320) {
-            const fade = (1 - dist / 320) * state.constellationAlpha * 1.2;
+          if (dist < 220) {
+            const fade = (1 - dist / 220) * state.constellationAlpha * 1.2;
             const [rA, gA, bA] = hexToRgb(a.color);
             const [rB, gB, bB] = hexToRgb(b.color);
             const grad = ctx.createLinearGradient(pa.sx, pa.sy, pb.sx, pb.sy);
@@ -327,38 +404,6 @@ export default function StarfieldView() {
       }
     }
 
-    // ── Nebula Compass: indicator when central orb is off-screen ──
-    const nebulaScreenX = W / 2 + state.panX;
-    const nebulaScreenY = H / 2 + state.panY;
-    const pad = 44;
-    if (nebulaScreenX < pad || nebulaScreenX > W - pad || nebulaScreenY < pad || nebulaScreenY > H - pad) {
-      const angle = Math.atan2(nebulaScreenY - H / 2, nebulaScreenX - W / 2);
-      const tX = Math.abs((W / 2 - 32) / Math.cos(angle));
-      const tY = Math.abs((H / 2 - 32) / Math.sin(angle));
-      const t  = Math.min(tX, tY);
-      const ex = W / 2 + Math.cos(angle) * t;
-      const ey = H / 2 + Math.sin(angle) * t;
-      const cp = Math.sin(state.t * 2.4) * 0.28 + 0.72;
-      // glow halo
-      const cGrd = ctx.createRadialGradient(ex, ey, 0, ex, ey, 22);
-      cGrd.addColorStop(0, `rgba(167,139,250,${0.55 * cp})`);
-      cGrd.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.beginPath(); ctx.arc(ex, ey, 22, 0, Math.PI * 2);
-      ctx.fillStyle = cGrd; ctx.fill();
-      // core dot
-      ctx.beginPath(); ctx.arc(ex, ey, 3.5, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(220,205,255,${cp})`; ctx.fill();
-      // arrow chevron pointing toward nebula
-      const ax = ex + Math.cos(angle) * 12;
-      const ay = ey + Math.sin(angle) * 12;
-      ctx.beginPath();
-      ctx.moveTo(ax, ay);
-      ctx.lineTo(ax - Math.cos(angle - 0.55) * 7, ay - Math.sin(angle - 0.55) * 7);
-      ctx.lineTo(ax - Math.cos(angle + 0.55) * 7, ay - Math.sin(angle + 0.55) * 7);
-      ctx.closePath();
-      ctx.fillStyle = `rgba(200,180,255,${0.75 * cp})`;
-      ctx.fill();
-    }
 
     state.raf = requestAnimationFrame(draw);
   }, [toScreen]);
@@ -399,7 +444,6 @@ export default function StarfieldView() {
       state.didDrag = true;
       canvas.style.cursor = 'grabbing';
       if (nebulaCameraRef.el) nebulaCameraRef.el.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
-      if (nebulaCameraRef.nebula) nebulaCameraRef.nebula.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
       return;
     }
 
@@ -409,6 +453,15 @@ export default function StarfieldView() {
     for (const star of starsNow) {
       const { sx, sy } = toScreen(star.x, star.y, W, H);
       if (Math.hypot(sx - e.clientX, sy - e.clientY) < 22) { found = star.id; break; }
+    }
+    if (!found) {
+      const PILLARS = ['finance', 'health', 'psychology', 'calendar'];
+      for (const cat of PILLARS) {
+        if (starsNow.some(s => s.id === cat)) continue;
+        const pos = starPosition(cat);
+        const { sx, sy } = toScreen(pos.x, pos.y, W, H);
+        if (Math.hypot(sx - e.clientX, sy - e.clientY) < 20) { found = `ghost:${cat}`; break; }
+      }
     }
     state.hovered = found;
     canvas.style.cursor = found ? 'pointer' : 'grab';
@@ -469,21 +522,37 @@ export default function StarfieldView() {
       if (Math.hypot(sx - e.clientX, sy - e.clientY) < 22) {
         setSuckStar({ id: star.id, color: star.color, dx: sx - cx, dy: sy - cy });
         setTimeout(() => { setSuckStar(null); openWidget(star); }, 480);
+        return;
+      }
+    }
+    // Ghost star click → pre-fill input
+    const GHOST_PROMPTS: Record<string, string> = {
+      finance: 'Ho speso ', health: 'Peso ', psychology: 'Umore ', calendar: 'Domani ',
+    };
+    const PILLARS_CLICK = ['finance', 'health', 'psychology', 'calendar'];
+    for (const cat of PILLARS_CLICK) {
+      if (starsNow.some(s => s.id === cat)) continue;
+      const pos = starPosition(cat);
+      const { sx, sy } = toScreen(pos.x, pos.y, W, H);
+      if (Math.hypot(sx - e.clientX, sy - e.clientY) < 20) {
+        setGhostStarPrompt(GHOST_PROMPTS[cat] ?? `${cat} `);
         break;
       }
     }
-  }, [user, openWidget, toScreen]);
+  }, [user, openWidget, toScreen, setGhostStarPrompt]);
 
   // ── Touch: pan + pinch-zoom ────────────────────────────────
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     const state = stateRef.current;
     if (e.touches.length === 1) {
-      state.dragging  = true;
-      state.dragX     = e.touches[0].clientX;
-      state.dragY     = e.touches[0].clientY;
-      state.didDrag   = false;
-      state.pinchDist = -1;
+      state.dragging    = true;
+      state.dragX       = e.touches[0].clientX;
+      state.dragY       = e.touches[0].clientY;
+      state.touchStartX = e.touches[0].clientX;
+      state.touchStartY = e.touches[0].clientY;
+      state.didDrag     = false;
+      state.pinchDist   = -1;
     } else if (e.touches.length === 2) {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -508,11 +577,10 @@ export default function StarfieldView() {
       state.panY   += dy;
       state.velX    = dx;
       state.velY    = dy;
-      state.dragX   = tx;
-      state.dragY   = ty;
-      state.didDrag = true;
+      state.dragX = tx;
+      state.dragY = ty;
+      if (Math.hypot(tx - state.touchStartX, ty - state.touchStartY) > 8) state.didDrag = true;
       if (nebulaCameraRef.el) nebulaCameraRef.el.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
-      if (nebulaCameraRef.nebula) nebulaCameraRef.nebula.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
     } else if (e.touches.length === 2 && state.pinchDist > 0) {
       const dx      = e.touches[0].clientX - e.touches[1].clientX;
       const dy      = e.touches[0].clientY - e.touches[1].clientY;
@@ -531,7 +599,6 @@ export default function StarfieldView() {
       state.pinchMidX = midX;
       state.pinchMidY = midY;
       if (nebulaCameraRef.el) nebulaCameraRef.el.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
-      if (nebulaCameraRef.nebula) nebulaCameraRef.nebula.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
     }
   }, []);
 
@@ -545,12 +612,28 @@ export default function StarfieldView() {
         const W = canvas.width, H = canvas.height;
         const cx = W / 2, cy = H / 2;
         const starsNow = useAlterStore.getState().stars;
+        let touchHit = false;
         for (const star of starsNow) {
           const { sx, sy } = toScreen(star.x, star.y, W, H);
-          if (Math.hypot(sx - state.dragX, sy - state.dragY) < 32) {
+          if (Math.hypot(sx - state.touchStartX, sy - state.touchStartY) < 36) {
             setSuckStar({ id: star.id, color: star.color, dx: sx - cx, dy: sy - cy });
             setTimeout(() => { setSuckStar(null); openWidget(star); }, 480);
+            touchHit = true;
             break;
+          }
+        }
+        if (!touchHit) {
+          const GHOST_PROMPTS: Record<string, string> = {
+            finance: 'Ho speso ', health: 'Peso ', psychology: 'Umore ', calendar: 'Domani ',
+          };
+          for (const cat of ['finance', 'health', 'psychology', 'calendar']) {
+            if (starsNow.some(s => s.id === cat)) continue;
+            const pos = starPosition(cat);
+            const { sx, sy } = toScreen(pos.x, pos.y, W, H);
+            if (Math.hypot(sx - state.touchStartX, sy - state.touchStartY) < 32) {
+              setGhostStarPrompt(GHOST_PROMPTS[cat] ?? `${cat} `);
+              break;
+            }
           }
         }
       }
@@ -563,7 +646,7 @@ export default function StarfieldView() {
       state.dragX     = e.touches[0].clientX;
       state.dragY     = e.touches[0].clientY;
     }
-  }, [user, setActiveWidget, markStarSeen, toScreen]);
+  }, [user, setActiveWidget, markStarSeen, toScreen, setGhostStarPrompt]);
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#050508' }}>
