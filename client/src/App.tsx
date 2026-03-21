@@ -4,6 +4,7 @@ import { AnimatePresence } from 'framer-motion';
 import { supabase } from './config/supabase';
 import { getCategorySummaries, getUpcomingEvents } from './vault/vaultService';
 import { buildStar } from './components/starfield/StarfieldView';
+import { runInsightEngine } from './core/insightEngine';
 import { useAlterStore } from './store/alterStore';
 import LoginScreen    from './components/auth/LoginScreen';
 import StarfieldView  from './components/starfield/StarfieldView';
@@ -13,7 +14,7 @@ import PolymorphicWidget from './components/widget/PolymorphicWidget';
 export default function App() {
   const [authUser, setAuthUser] = useState<User | null | undefined>(undefined);
   const [authError, setAuthError] = useState<string | null>(null);
-  const { setUser, setStars, upsertStar, addKnownCategory, setAlertEvent, activeWidget } = useAlterStore();
+  const { setUser, setStars, upsertStar, removeStar, addKnownCategory, setAlertEvent, activeWidget } = useAlterStore();
 
   // ── Auth listener ────────────────────────────────────────
   useEffect(() => {
@@ -50,13 +51,31 @@ export default function App() {
 
     // Load existing category stars
     getCategorySummaries(authUser.id).then((summaries) => {
+      const now = Date.now();
+      const currentStars = useAlterStore.getState().stars;
+
+      // Cleanup: remove ephemeral stars not accessed in 15 days
+      currentStars.forEach((s) => {
+        if (s.ephemeral && s.lastAccessedAt) {
+          const age = (now - new Date(s.lastAccessedAt).getTime()) / 86400000;
+          if (age > 15) removeStar(s.id);
+        }
+      });
+
       summaries.forEach(({ category, count, lastEntry }) => {
         const star = buildStar(category, count, lastEntry);
-        upsertStar(star);
-        addKnownCategory(category);
+        upsertStar({ ...star, isInsight: category === 'insight' });
+        if (category !== 'insight') addKnownCategory(category);
+      });
+
+      // Run insight engine (max once/24h, silently in background)
+      runInsightEngine(authUser.id).then((entry) => {
+        if (!entry) return;
+        const insightStar = buildStar('insight', 1, entry.created_at);
+        upsertStar({ ...insightStar, isInsight: true });
       });
     });
-  }, [authUser, setUser, setStars, upsertStar, addKnownCategory]);
+  }, [authUser, setUser, setStars, upsertStar, removeStar, addKnownCategory]);
 
   // ── Sentinel: scan upcoming events every 60s ─────────────
   useEffect(() => {

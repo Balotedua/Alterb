@@ -3,6 +3,7 @@ import { nebulaCameraRef } from './nebulaCamera';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff } from 'lucide-react';
 import { orchestrate } from '../../core/orchestrator';
+import { quickConnect } from '../../core/insightEngine';
 import { saveEntry, getByCategory, queryCalendarByDate, getRecentAll, deleteCategory } from '../../vault/vaultService';
 import { aiQuery, analyzeGalaxy, aiChat } from '../../core/aiParser';
 import { buildStar, getCategoryMeta, starPosition } from '../starfield/StarfieldView';
@@ -119,6 +120,18 @@ export default function NebulaCore() {
           const src   = intent.source === 'local' ? '' : ' · AI';
           const reply = `${meta.icon}  ${meta.label}${src}`;
           setLastReply(reply); addMessage('nebula', reply);
+
+          // ── Auto-connect: find related star 2s after save ──
+          setTimeout(() => {
+            const starsNow = useAlterStore.getState().stars;
+            const conn = quickConnect(intent.category, intent.rawText, starsNow);
+            if (conn) {
+              const metaB = getCategoryMeta(conn.catB);
+              setNexusBeam({ catA: intent.category, catB: conn.catB, colorA: meta.color, colorB: conn.colorB, correlation: conn.correlation });
+              addMessage('nebula', `✦ Collegato: ${meta.icon} ${meta.label} ↔ ${metaB.icon} ${metaB.label}`);
+              setTimeout(() => setNexusBeam(null), 9000);
+            }
+          }, 2000);
         } else {
           const msg = 'Errore nel salvataggio. Riprova.';
           setLastReply(msg); addMessage('nebula', msg);
@@ -168,6 +181,32 @@ export default function NebulaCore() {
           const meta = getCategoryMeta(category);
           const { inferRenderType } = await import('../widget/PolymorphicWidget');
           setActiveWidget({ category, label: meta.label, color: meta.color, entries, renderType: inferRenderType(entries, category) });
+
+          // Create ephemeral view star for date-range queries
+          if (dateRange && category !== 'calendar') {
+            const days = Math.round((new Date(dateRange[1]).getTime() - new Date(dateRange[0]).getTime()) / 86400000);
+            const viewId = `${category}:${days}d`;
+            const now = new Date().toISOString();
+            const existing = useAlterStore.getState().stars.find(s => s.id === viewId);
+            if (!existing) {
+              upsertStar({
+                id: viewId,
+                label: `${meta.label} ${days}g`,
+                color: meta.color,
+                icon: meta.icon,
+                x: Math.min(0.88, Math.max(0.12, starPosition(category).x + 0.07)),
+                y: Math.min(0.80, Math.max(0.12, starPosition(category).y + 0.06)),
+                intensity: 0.35,
+                entryCount: entries.length,
+                lastEntry: now,
+                ephemeral: true,
+                lastAccessedAt: now,
+                isNew: false,
+              });
+            } else {
+              upsertStar({ ...existing, lastAccessedAt: now });
+            }
+          }
         }
 
       } else if (action.type === 'analyse') {
@@ -367,7 +406,7 @@ export default function NebulaCore() {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: 20,
+        gap: 14,
         pointerEvents: 'none',
       }}>
 
@@ -376,15 +415,14 @@ export default function NebulaCore() {
           {lastReply && !isActive ? (
             <motion.div
               key={`reply-${lastReply}`}
-              initial={{ opacity: 0, y: 4, filter: 'blur(4px)' }}
-              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, y: 4, filter: 'blur(4px)' }}
-              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+              initial={{ opacity: 0, y: 3 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 3 }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
               style={{
-                fontSize: 11,
-                color: 'rgba(170,185,225,0.6)',
-                letterSpacing: '0.07em',
-                fontFamily: '"JetBrains Mono", "Fira Code", ui-monospace, monospace',
+                fontSize: 10,
+                color: 'rgba(200,215,255,0.35)',
+                letterSpacing: '0.08em',
                 fontWeight: 300,
                 textAlign: 'center',
                 pointerEvents: 'none',
@@ -393,51 +431,17 @@ export default function NebulaCore() {
             >
               {lastReply}
             </motion.div>
-          ) : evolveSuggestion && !isActive ? (
-            <motion.div
-              key="evolve"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 4 }}
-              transition={{ duration: 0.35 }}
-              onClick={() => {
-                const stars = useAlterStore.getState().stars;
-                if (stars.length >= 2) {
-                  const [a, b] = stars.slice(0, 2);
-                  setInput(`correlazione ${a.id} ${b.id}`);
-                  setEvolveSuggestion(null);
-                  openInput();
-                }
-              }}
-              style={{
-                fontSize: 9,
-                color: 'rgba(167,139,250,0.55)',
-                letterSpacing: '0.07em',
-                fontFamily: '"JetBrains Mono", "Fira Code", ui-monospace, monospace',
-                fontWeight: 300,
-                cursor: 'pointer',
-                pointerEvents: 'all',
-                textAlign: 'center',
-                padding: '3px 12px',
-                borderRadius: 20,
-                border: '1px solid rgba(167,139,250,0.08)',
-                background: 'rgba(5,5,8,0.5)',
-              }}
-            >
-              ✦ {evolveSuggestion}
-            </motion.div>
           ) : !isActive ? (
             <motion.div
               key={`hint-${hintIdx}`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.5 }}
+              transition={{ duration: 0.6 }}
               style={{
-                fontSize: 10,
-                color: 'rgba(200,220,255,0.1)',
-                fontFamily: '"JetBrains Mono", "Fira Code", ui-monospace, monospace',
-                letterSpacing: '0.07em',
+                fontSize: 9,
+                color: 'rgba(200,220,255,0.06)',
+                letterSpacing: '0.06em',
                 fontWeight: 300,
                 pointerEvents: 'none',
                 textAlign: 'center',
@@ -448,37 +452,69 @@ export default function NebulaCore() {
           ) : null}
         </AnimatePresence>
 
-        {/* ── Nebula orb — large, clickable ── */}
+        {/* ── Entity: minimal star ── */}
         <motion.div
           onClick={isActive ? undefined : openInput}
-          animate={
-            isProcessing
-              ? { scale: [1, 1.25, 1], opacity: [0.95, 1, 0.95] }
-              : isActive
-                ? { scale: 1, opacity: 0.72 }
-                : { scale: [0.88, 1.10, 0.88], opacity: [0.45, 0.75, 0.45] }
-          }
-          transition={
-            isProcessing
-              ? { duration: 0.5, repeat: Infinity, ease: 'easeInOut' }
-              : isActive
-                ? { duration: 0.4, ease: [0.22, 1, 0.36, 1] }
-                : { duration: 6, repeat: Infinity, ease: 'easeInOut' }
-          }
+          animate={{ y: isActive ? 0 : [0, -5, 0], opacity: isActive ? 0 : 1 }}
+          transition={isActive ? { duration: 0.2 } : { y: { duration: 4.2, repeat: Infinity, ease: 'easeInOut' }, opacity: { duration: 0.25 } }}
           style={{
-            width: 58, height: 58,
-            borderRadius: '50%',
+            position: 'relative',
+            width: 64, height: 64,
             flexShrink: 0,
-            background: isProcessing
-              ? 'radial-gradient(circle at 38% 38%, #ffe08a 0%, #f0c040 40%, rgba(240,192,64,0.15) 75%, transparent 100%)'
-              : 'radial-gradient(circle at 38% 38%, rgba(255,255,255,0.98) 0%, rgba(210,230,255,0.7) 35%, rgba(170,200,255,0.18) 65%, transparent 100%)',
-            boxShadow: isProcessing
-              ? '0 0 28px rgba(240,192,64,0.55), 0 0 70px rgba(240,192,64,0.18), inset 0 0 12px rgba(255,255,255,0.3)'
-              : '0 0 22px rgba(200,220,255,0.28), 0 0 60px rgba(180,210,255,0.10), inset 0 0 10px rgba(255,255,255,0.25)',
-            pointerEvents: isActive ? 'none' : 'all',
             cursor: isActive ? 'default' : 'pointer',
+            pointerEvents: isActive ? 'none' : 'all',
           }}
-        />
+        >
+          {/* Ambient glow */}
+          <motion.div
+            animate={{
+              opacity: [0.12, 0.22, 0.12],
+              scale: [1, 1.12, 1],
+            }}
+            transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut' }}
+            style={{
+              position: 'absolute',
+              inset: -20,
+              borderRadius: '50%',
+              background: isProcessing
+                ? 'radial-gradient(circle, rgba(240,192,64,0.22) 0%, transparent 70%)'
+                : 'radial-gradient(circle, rgba(167,139,250,0.16) 0%, transparent 70%)',
+              pointerEvents: 'none',
+            }}
+          />
+          {/* Outer ring */}
+          <motion.div
+            animate={{
+              rotate: isProcessing ? 360 : 0,
+              opacity: isProcessing ? 0.7 : 0.15,
+            }}
+            transition={isProcessing
+              ? { rotate: { duration: 3, repeat: Infinity, ease: 'linear' }, opacity: { duration: 0.4 } }
+              : { duration: 0.6 }
+            }
+            style={{
+              position: 'absolute', inset: -10,
+              borderRadius: '50%',
+              border: `1px solid ${isProcessing ? 'rgba(240,192,64,0.6)' : 'rgba(167,139,250,0.4)'}`,
+              borderTopColor: 'transparent',
+            }}
+          />
+          {/* Core dot */}
+          <motion.div
+            animate={{ scale: isProcessing ? [1, 1.1, 1] : 1 }}
+            transition={isProcessing ? { duration: 1.2, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }}
+            style={{
+              position: 'absolute', inset: 0,
+              borderRadius: '50%',
+              background: isProcessing
+                ? 'radial-gradient(circle at 50% 50%, rgba(255,245,200,0.95) 0%, rgba(240,192,64,0.5) 50%, transparent 100%)'
+                : 'radial-gradient(circle at 50% 50%, rgba(255,255,255,0.9) 0%, rgba(167,139,250,0.35) 55%, transparent 100%)',
+              boxShadow: isProcessing
+                ? '0 0 16px rgba(240,192,64,0.5), 0 0 40px rgba(240,192,64,0.12)'
+                : '0 0 12px rgba(200,190,255,0.3), 0 0 32px rgba(167,139,250,0.08)',
+            }}
+          />
+        </motion.div>
 
         {/* ── Expandable input ── */}
         <AnimatePresence>
@@ -490,18 +526,18 @@ export default function NebulaCore() {
               exit={{ opacity: 0, scaleY: 0.85, y: -6 }}
               transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
               style={{
-                width: 'min(480px, calc(100vw - 40px))',
+                width: 'min(440px, calc(100vw - 48px))',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 12,
-                background: 'rgba(6,6,14,0.94)',
-                border: '1px solid rgba(255,255,255,0.07)',
-                borderRadius: 10,
-                padding: '11px 16px',
-                backdropFilter: 'blur(48px)',
-                WebkitBackdropFilter: 'blur(48px)',
+                gap: 10,
+                background: 'rgba(5,5,10,0.96)',
+                border: '1px solid rgba(255,255,255,0.05)',
+                borderRadius: 8,
+                padding: '10px 14px',
+                backdropFilter: 'blur(60px)',
+                WebkitBackdropFilter: 'blur(60px)',
                 pointerEvents: 'all',
-                boxShadow: '0 8px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04)',
+                boxShadow: '0 4px 32px rgba(0,0,0,0.8)',
                 transformOrigin: 'top center',
               }}
             >

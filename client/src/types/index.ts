@@ -35,6 +35,9 @@ export interface Star {
   entryCount: number;
   lastEntry: string | null;
   isNew?: boolean;       // triggers supernova animation
+  isInsight?: boolean;   // autonomous discovery — golden pulsing aura
+  ephemeral?: boolean;   // view stars — auto-deleted after 15 days
+  lastAccessedAt?: string; // ISO string, for ephemeral cleanup
 }
 
 // ─── Widget ──────────────────────────────────────────────────

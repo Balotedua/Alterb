@@ -12,6 +12,7 @@ export const CATEGORY_META: Record<string, { label: string; color: string; icon:
   health:     { label: 'Salute',      color: '#90d8d2', icon: '💪' },
   psychology: { label: 'Psiche',      color: '#c4b2f5', icon: '🧠' },
   calendar:   { label: 'Calendario',  color: '#92bef5', icon: '📅' },
+  insight:    { label: 'Insight',     color: '#f0c040', icon: '✨' },
 };
 
 export function getCategoryMeta(cat: string) {
@@ -24,14 +25,6 @@ export function getCategoryMeta(cat: string) {
   const icon    = ICONS[Math.abs(hash >> 4) % ICONS.length];
   return { label: cat.charAt(0).toUpperCase() + cat.slice(1), color, icon };
 }
-
-// ─── Ghost nodes ──────────────────────────────────────────────
-const GHOST_NODES = [
-  { id: 'arena',     x: 0.18, y: 0.28, whisper: 'Protocollo Arena — Sfida i tuoi pari' },
-  { id: 'memoria',   x: 0.80, y: 0.22, whisper: 'Memoria — Ricorda ciò che conta' },
-  { id: 'obiettivi', x: 0.64, y: 0.72, whisper: 'Obiettivi — Traccia il tuo cammino' },
-  { id: 'rituali',   x: 0.12, y: 0.60, whisper: 'Rituali — Costruisci le tue abitudini' },
-];
 
 // ─── Deterministic star position ─────────────────────────────
 export function starPosition(cat: string): { x: number; y: number } {
@@ -82,6 +75,8 @@ interface CanvasState {
   t: number;
   panX: number;
   panY: number;
+  velX: number; // pan inertia
+  velY: number;
   scale: number;
   targetScale: number; // smooth zoom target
   dragging: boolean;
@@ -102,17 +97,13 @@ export default function StarfieldView() {
   const stateRef = useRef<CanvasState>({
     particles: initParticles(isMobile ? 90 : 180),
     raf: 0, hovered: null, t: 0,
-    panX: 0, panY: 0, scale: 1, targetScale: 1,
+    panX: 0, panY: 0, velX: 0, velY: 0, scale: 1, targetScale: 1,
     dragging: false, dragX: 0, dragY: 0, didDrag: false,
     pinchDist: -1, pinchMidX: 0, pinchMidY: 0,
     constellationAlpha: 0,
   });
 
   const { stars, focusMode, setActiveWidget, user, markStarSeen, highlightedStarId, alertEvent } = useAlterStore();
-
-  // Ghost whisper at screen-space coords
-  const [ghostWhisper, setGhostWhisper] = useState<{ sx: number; sy: number; text: string } | null>(null);
-  const ghostIdRef = useRef<string | null>(null);
 
   // Star suction animation before widget opens
   const [suckStar, setSuckStar] = useState<{ id: string; color: string; dx: number; dy: number } | null>(null);
@@ -149,9 +140,19 @@ export default function StarfieldView() {
 
     // Smooth zoom: lerp toward targetScale
     if (Math.abs(state.scale - state.targetScale) > 0.0005) {
-      state.scale += (state.targetScale - state.scale) * 0.1;
+      state.scale += (state.targetScale - state.scale) * 0.06;
     } else {
       state.scale = state.targetScale;
+    }
+
+    // Pan inertia: apply velocity when not dragging
+    if (!state.dragging && (Math.abs(state.velX) > 0.05 || Math.abs(state.velY) > 0.05)) {
+      state.panX += state.velX;
+      state.panY += state.velY;
+      state.velX *= 0.88;
+      state.velY *= 0.88;
+      if (nebulaCameraRef.el) nebulaCameraRef.el.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
+      if (nebulaCameraRef.nebula) nebulaCameraRef.nebula.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
     }
     const { scale } = state;
 
@@ -187,142 +188,75 @@ export default function StarfieldView() {
     const hov = state.hovered;
     const s   = Math.sqrt(Math.max(scale, 0.3)); // visual scale factor
 
-    // ── Ghost nodes (camera-aware) ──
-    GHOST_NODES.forEach((ghost) => {
-      if (starsNow.find(st => st.id === ghost.id)) return;
-      const { sx: px, sy: py } = toScreen(ghost.x, ghost.y, W, H);
-      if (px < -120 || px > W + 120 || py < -120 || py > H + 120) return;
-      const isHov   = hov === `ghost:${ghost.id}`;
-      const flicker = Math.sin(state.t * 1.1 + ghost.x * 7) * 0.5 + 0.5;
-      const baseOp  = isHov ? 0.32 : 0.05 + flicker * 0.03;
-      const gr      = (isHov ? 30 : 16) * s;
-
-      const grd = ctx.createRadialGradient(px, py, 0, px, py, gr);
-      grd.addColorStop(0, `rgba(130,140,170,${baseOp * 0.7})`);
-      grd.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.beginPath(); ctx.arc(px, py, gr, 0, Math.PI * 2);
-      ctx.fillStyle = grd; ctx.fill();
-
-      ctx.beginPath(); ctx.arc(px, py, (isHov ? 3 : 1.8) * s, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(130,140,170,${baseOp + 0.08})`; ctx.fill();
-    });
-
-    // ── Category stars (camera-aware) ──
+    // ── Category stars — minimal luminous dots ──
     starsNow.forEach((star) => {
       const { sx: px, sy: py } = toScreen(star.x, star.y, W, H);
-      if (px < -160 || px > W + 160 || py < -160 || py > H + 160) return;
-      const isHov      = hov === star.id;
-      const isHighlit  = highlightedId === star.id;
-      const isAlert    = alertEvt != null && star.id === 'calendar';
-      const [r, g, b]  = isAlert ? [255, 80, 80] : hexToRgb(star.color);
+      if (px < -80 || px > W + 80 || py < -80 || py > H + 80) return;
+
+      const isHov     = hov === star.id;
+      const isHighlit = highlightedId === star.id;
+      const isAlert   = alertEvt != null && star.id === 'calendar';
+      const isInsight = star.isInsight ?? false;
+      const [r, g, b] = isAlert ? [255, 80, 80] : isInsight ? [240, 192, 64] : hexToRgb(star.color);
       const { intensity } = star;
-      // highlighted: fast bright pulse; alert: fast red pulse
-      const pulse = isHighlit
-        ? Math.sin(state.t * 6 + star.x * 18) * 0.18 + 0.92
-        : isAlert
-          ? Math.sin(state.t * 4) * 0.25 + 0.85
-          : Math.sin(state.t * 1.4 + star.x * 18) * 0.05 + 0.95;
-      // Atmospheric shimmer: independent slow oscillation on scale
-      const scaleTwinkle = (isHighlit || isAlert)
-        ? 1.0
-        : Math.sin(state.t * 0.75 + star.y * 14.7) * 0.035 + 1.0;
-      const glowBoost  = isHighlit ? 2.2 : isAlert ? 2.4 : 1;
+      const isEphemeral = star.ephemeral ?? false;
 
-      // Twinkle: smooth slow oscillation
-      const twinkle  = Math.sin(state.t * (1.1 + star.x * 3.7) + star.y * 8.3) * 0.5 + 0.5;
-      const alpha    = isHighlit || isAlert
-        ? pulse
-        : (0.55 + intensity * 0.45 + twinkle * 0.18) * pulse;
+      // Very slow, smooth twinkle — almost imperceptible
+      const twinkle = Math.sin(state.t * (0.55 + star.x * 1.4) + star.y * 3.8) * 0.05 + 0.95;
+      const pulse   = isHighlit
+        ? Math.sin(state.t * 4.5) * 0.15 + 0.9
+        : isAlert   ? Math.sin(state.t * 3)   * 0.18 + 0.88
+        : isInsight ? Math.sin(state.t * 1.8) * 0.20 + 0.92
+        : twinkle;
+      const alpha   = (isEphemeral ? 0.35 : 0.45) + (intensity * (isEphemeral ? 0.35 : 0.55));
+      const a       = alpha * pulse;
 
-      // ── Outer nebula glow ──────────────────────────────────
-      const glowR = (isHov ? 52 : isHighlit || isAlert ? 44 : 28 + intensity * 18) * s * glowBoost;
-      const glow  = ctx.createRadialGradient(px, py, 0, px, py, glowR);
-      glow.addColorStop(0,    `rgba(${r},${g},${b},${0.28 * alpha})`);
-      glow.addColorStop(0.35, `rgba(${r},${g},${b},${0.10 * alpha})`);
-      glow.addColorStop(1,    'rgba(0,0,0,0)');
-      ctx.beginPath(); ctx.arc(px, py, glowR, 0, Math.PI * 2);
-      ctx.fillStyle = glow; ctx.fill();
-
-      // ── Diffraction spikes (4-pointed star shape) ─────────
-      const spikeLen = (isHov ? 22 : 10 + intensity * 10) * s * glowBoost * (0.85 + twinkle * 0.3);
-      const spikeW   = spikeLen * 0.09;
-      const spikeA   = alpha * (0.6 + twinkle * 0.4);
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      [0, Math.PI / 2].forEach((angle) => {
-        ctx.save();
-        ctx.translate(px, py);
-        ctx.rotate(angle);
-        const sp = ctx.createLinearGradient(-spikeLen, 0, spikeLen, 0);
-        sp.addColorStop(0,    'rgba(0,0,0,0)');
-        sp.addColorStop(0.42, `rgba(${r},${g},${b},${spikeA * 0.5})`);
-        sp.addColorStop(0.5,  `rgba(${r},${g},${b},${spikeA})`);
-        sp.addColorStop(0.58, `rgba(${r},${g},${b},${spikeA * 0.5})`);
-        sp.addColorStop(1,    'rgba(0,0,0,0)');
-        ctx.beginPath();
-        ctx.moveTo(-spikeLen, 0);
-        ctx.bezierCurveTo(-spikeLen * 0.5, spikeW, spikeLen * 0.5, spikeW, spikeLen, 0);
-        ctx.bezierCurveTo(spikeLen * 0.5, -spikeW, -spikeLen * 0.5, -spikeW, -spikeLen, 0);
-        ctx.fillStyle = sp;
-        ctx.fill();
-        ctx.restore();
-      });
-      ctx.restore();
-
-      // ── Bright circular core ───────────────────────────────
-      const coreR = (isHov ? 5.5 : 2.5 + intensity * 2) * s * glowBoost * scaleTwinkle;
-      const core  = ctx.createRadialGradient(px, py, 0, px, py, coreR);
-      core.addColorStop(0,   `rgba(255,255,255,${alpha})`);
-      core.addColorStop(0.3, `rgba(${r},${g},${b},${alpha * 0.9})`);
-      core.addColorStop(1,   `rgba(${r},${g},${b},0)`);
-      ctx.beginPath(); ctx.arc(px, py, coreR, 0, Math.PI * 2);
-      ctx.fillStyle = core; ctx.fill();
-
-      // ── Orbiting child stars (one dot per entry, up to 12) ──
-      const childCount = Math.min(star.entryCount ?? 0, 12);
-      if (childCount > 0) {
-        // deterministic phase offset per category
-        let phaseHash = 0;
-        for (const c of star.id) phaseHash = ((phaseHash << 3) - phaseHash) + c.charCodeAt(0);
-        const phaseOffset = (Math.abs(phaseHash) % 628) / 100;
-        const orbitR  = (18 + intensity * 14) * s;
-        const childSz = Math.max(0.8, (1.1 + intensity * 0.4) * s);
-        for (let i = 0; i < childCount; i++) {
-          const angle  = state.t * 0.20 + (i / childCount) * Math.PI * 2 + phaseOffset;
-          const cpx    = px + Math.cos(angle) * orbitR;
-          const cpy    = py + Math.sin(angle) * orbitR;
-          const cpulse = Math.sin(state.t * 1.8 + i * 1.1) * 0.25 + 0.75;
-          // micro glow
-          const cGlow = ctx.createRadialGradient(cpx, cpy, 0, cpx, cpy, childSz * 3.5);
-          cGlow.addColorStop(0, `rgba(${r},${g},${b},${0.22 * cpulse})`);
-          cGlow.addColorStop(1, 'rgba(0,0,0,0)');
-          ctx.beginPath(); ctx.arc(cpx, cpy, childSz * 3.5, 0, Math.PI * 2);
-          ctx.fillStyle = cGlow; ctx.fill();
-          // dot core
-          ctx.beginPath(); ctx.arc(cpx, cpy, childSz, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(${r},${g},${b},${0.65 * cpulse})`; ctx.fill();
+      // Insight: golden pulsing rings
+      if (isInsight) {
+        const ringR1 = (28 + Math.sin(state.t * 1.8) * 8) * s;
+        const ringR2 = (44 + Math.sin(state.t * 1.8 + 1.5) * 10) * s;
+        for (const ringR of [ringR1, ringR2]) {
+          const ringAlpha = 0.09 + Math.sin(state.t * 1.8) * 0.03;
+          const ring = ctx.createRadialGradient(px, py, ringR * 0.6, px, py, ringR);
+          ring.addColorStop(0, `rgba(240,192,64,${ringAlpha})`);
+          ring.addColorStop(1, 'rgba(240,192,64,0)');
+          ctx.beginPath(); ctx.arc(px, py, ringR, 0, Math.PI * 2);
+          ctx.fillStyle = ring; ctx.fill();
         }
       }
 
-      // ── Subtle outer ring on mother stars (entryCount ≥ 3) ──
-      if ((star.entryCount ?? 0) >= 3) {
-        const ringR = (coreR + 6 + intensity * 4) * 1.0;
-        const ringPulse = Math.sin(state.t * 0.9 + star.x * 5) * 0.5 + 0.5;
-        ctx.beginPath(); ctx.arc(px, py, ringR, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(${r},${g},${b},${0.12 * ringPulse})`;
-        ctx.lineWidth = 0.6;
-        ctx.stroke();
-      }
+      // Outer soft glow
+      const glowMult = isHighlit ? 1.9 : isAlert ? 2.1 : isInsight ? 2.4 : 1;
+      const glowR    = (isHov ? 34 : 14 + intensity * 10) * s * glowMult;
+      const glow     = ctx.createRadialGradient(px, py, 0, px, py, glowR);
+      glow.addColorStop(0,   `rgba(${r},${g},${b},${0.18 * a})`);
+      glow.addColorStop(0.45,`rgba(${r},${g},${b},${0.05 * a})`);
+      glow.addColorStop(1,   'rgba(0,0,0,0)');
+      ctx.beginPath(); ctx.arc(px, py, glowR, 0, Math.PI * 2);
+      ctx.fillStyle = glow; ctx.fill();
 
-      // ── Category label below star ──────────────────────────
-      const labelOpacity = (isHov ? 0.85 : 0.38) * Math.min(1, alpha * 1.4);
-      if (labelOpacity > 0.04) {
-        const fontSize = Math.round(Math.max(8, 9 * s));
+      // Colored inner halo
+      const haloR = (isHov ? 4.5 : 1.8 + intensity * 1.4) * s * (isHighlit || isAlert ? 1.6 : 1);
+      const halo  = ctx.createRadialGradient(px, py, 0, px, py, haloR);
+      halo.addColorStop(0, `rgba(${r},${g},${b},${0.32 * a})`);
+      halo.addColorStop(1, `rgba(${r},${g},${b},0)`);
+      ctx.beginPath(); ctx.arc(px, py, haloR, 0, Math.PI * 2);
+      ctx.fillStyle = halo; ctx.fill();
+
+      // White core dot
+      const coreR = (isHov ? 2.8 : 1.1 + intensity * 0.9) * s * (isHighlit || isAlert ? 1.5 : 1);
+      ctx.beginPath(); ctx.arc(px, py, coreR, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${a * (isEphemeral ? 0.7 : 1)})`;
+      ctx.fill();
+
+      // Label — hover only (unless focusMode)
+      const labelOp = isHov ? 0.65 : (focusMode ? 0.25 : 0);
+      if (labelOp > 0.01) {
         ctx.save();
-        ctx.font = `300 ${fontSize}px -apple-system, "SF Pro Display", system-ui, sans-serif`;
+        ctx.font = `300 8px -apple-system, "SF Pro Display", system-ui, sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillStyle = `rgba(${r},${g},${b},${labelOpacity})`;
-        ctx.fillText(star.label.toUpperCase(), px, py + coreR + 14 * s);
+        ctx.fillStyle = `rgba(${r},${g},${b},${labelOp})`;
+        ctx.fillText(star.label.toUpperCase(), px, py + coreR + 11 * s);
         ctx.restore();
       }
     });
@@ -454,8 +388,12 @@ export default function StarfieldView() {
     const W = canvas.width, H = canvas.height;
 
     if (state.dragging) {
-      state.panX += e.clientX - state.dragX;
-      state.panY += e.clientY - state.dragY;
+      const dx = e.clientX - state.dragX;
+      const dy = e.clientY - state.dragY;
+      state.panX += dx;
+      state.panY += dy;
+      state.velX = dx;
+      state.velY = dy;
       state.dragX = e.clientX;
       state.dragY = e.clientY;
       state.didDrag = true;
@@ -472,32 +410,8 @@ export default function StarfieldView() {
       const { sx, sy } = toScreen(star.x, star.y, W, H);
       if (Math.hypot(sx - e.clientX, sy - e.clientY) < 22) { found = star.id; break; }
     }
-    if (!found) {
-      for (const ghost of GHOST_NODES) {
-        if (starsNow.find(s => s.id === ghost.id)) continue;
-        const { sx, sy } = toScreen(ghost.x, ghost.y, W, H);
-        if (Math.hypot(sx - e.clientX, sy - e.clientY) < 26) {
-          found = `ghost:${ghost.id}`; break;
-        }
-      }
-    }
-
     state.hovered = found;
     canvas.style.cursor = found ? 'pointer' : 'grab';
-
-    const newGhostId = found?.startsWith('ghost:') ? found.slice(6) : null;
-    if (newGhostId !== ghostIdRef.current) {
-      ghostIdRef.current = newGhostId;
-      if (newGhostId) {
-        const ghost = GHOST_NODES.find(g => g.id === newGhostId);
-        if (ghost) {
-          const { sx, sy } = toScreen(ghost.x, ghost.y, W, H);
-          setGhostWhisper({ sx, sy, text: ghost.whisper });
-        }
-      } else {
-        setGhostWhisper(null);
-      }
-    }
   }, [toScreen]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -520,7 +434,7 @@ export default function StarfieldView() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const W = canvas.width, H = canvas.height;
-    const factor     = e.deltaY > 0 ? 0.92 : 1.09;
+    const factor     = e.deltaY > 0 ? 0.96 : 1.04;
     const newTarget  = Math.max(0.35, Math.min(4, state.targetScale * factor));
     const cx = e.clientX - W / 2;
     const cy = e.clientY - H / 2;
@@ -535,7 +449,8 @@ export default function StarfieldView() {
   const openWidget = useCallback(async (star: { id: string; label: string; color: string }) => {
     if (!user) return;
     const entries = await getByCategory(user.id, star.id);
-    setActiveWidget({ category: star.id, label: star.label, color: star.color, entries, renderType: inferRenderType(entries) });
+    const renderType = star.id === 'insight' ? 'insight' : inferRenderType(entries, star.id);
+    setActiveWidget({ category: star.id, label: star.label, color: star.color, entries, renderType });
     markStarSeen(star.id);
   }, [user, setActiveWidget, markStarSeen]);
 
@@ -588,8 +503,11 @@ export default function StarfieldView() {
 
     if (e.touches.length === 1 && state.dragging) {
       const tx = e.touches[0].clientX, ty = e.touches[0].clientY;
-      state.panX   += tx - state.dragX;
-      state.panY   += ty - state.dragY;
+      const dx = tx - state.dragX, dy = ty - state.dragY;
+      state.panX   += dx;
+      state.panY   += dy;
+      state.velX    = dx;
+      state.velY    = dy;
       state.dragX   = tx;
       state.dragY   = ty;
       state.didDrag = true;
@@ -648,7 +566,7 @@ export default function StarfieldView() {
   }, [user, setActiveWidget, markStarSeen, toScreen]);
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000000' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#050508' }}>
       <canvas
         ref={canvasRef}
         style={{ display: 'block', width: '100%', height: '100%', cursor: 'grab', touchAction: 'none' }}
@@ -691,15 +609,15 @@ export default function StarfieldView() {
         ))}
       </AnimatePresence>
 
-      {/* Full-screen supernova flash */}
+      {/* Subtle flash on new star */}
       <AnimatePresence>
         {flashActive && (
           <motion.div
             key="nova-flash"
-            initial={{ opacity: 0.85 }}
+            initial={{ opacity: 0.12 }}
             animate={{ opacity: 0 }}
             exit={{}}
-            transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
             style={{
               position: 'absolute', inset: 0,
               background: 'white',
@@ -710,26 +628,26 @@ export default function StarfieldView() {
         )}
       </AnimatePresence>
 
-      {/* Supernova burst on new stars */}
+      {/* Minimal supernova pulse on new stars */}
       <AnimatePresence>
         {stars.filter(s => s.isNew).map((star) => (
           <motion.div
             key={`nova-${star.id}`}
-            initial={{ scale: 0.1, opacity: 1 }}
-            animate={{ scale: 32, opacity: 0 }}
-            exit={{ opacity: 0 }}
+            initial={{ scale: 0.2, opacity: 0.6 }}
+            animate={{ scale: 18, opacity: 0 }}
+            exit={{}}
             onAnimationComplete={() => markStarSeen(star.id)}
             style={{
               position: 'absolute',
               left:  `${star.x * 100}%`,
               top:   `${star.y * 100}%`,
               transform: 'translate(-50%, -50%)',
-              width: 60, height: 60, borderRadius: '50%',
-              background: `radial-gradient(circle, white 0%, ${star.color} 20%, ${star.color}60 50%, transparent 70%)`,
+              width: 16, height: 16, borderRadius: '50%',
+              background: `radial-gradient(circle, ${star.color}90 0%, transparent 70%)`,
               pointerEvents: 'none',
               zIndex: 80,
             }}
-            transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 1.4, ease: [0.22, 1, 0.36, 1] }}
           />
         ))}
       </AnimatePresence>
@@ -787,40 +705,6 @@ export default function StarfieldView() {
         )}
       </AnimatePresence>
 
-      {/* Ghost node whisper — at screen coords captured on hover */}
-      <AnimatePresence>
-        {ghostWhisper && (
-          <motion.div
-            key={ghostWhisper.text}
-            initial={{ opacity: 0, y: 5, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            style={{
-              position: 'absolute',
-              left: ghostWhisper.sx,
-              top:  ghostWhisper.sy - 38,
-              transform: 'translateX(-50%)',
-              pointerEvents: 'none',
-              background: 'rgba(3,3,7,0.92)',
-              border: '1px solid rgba(130,140,170,0.1)',
-              borderRadius: 10,
-              padding: '6px 12px',
-              backdropFilter: 'blur(20px)',
-              whiteSpace: 'nowrap',
-              zIndex: 10,
-              boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-            }}
-          >
-            <span style={{
-              fontSize: 10, color: 'rgba(140,152,185,0.6)',
-              letterSpacing: '0.07em', fontWeight: 300,
-            }}>
-              {ghostWhisper.text}
-            </span>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

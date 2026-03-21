@@ -409,21 +409,50 @@ function CalendarTimeline({ entries, color }: { entries: VaultEntry[]; color: st
 }
 
 // ─── Nebula Insight ───────────────────────────────────────────
-function NebulaInsight({ entries: _entries, color }: { entries: VaultEntry[]; color: string }) {
-  const text = (_entries[0]?.data.insight as string) ?? '';
-  const lines = text.split('\n').filter(Boolean);
+function NebulaInsight({ entries, color }: { entries: VaultEntry[]; color: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {lines.map((line, i) => (
-        <div key={i} style={{
-          fontSize: 12, color: '#b0bcd4', lineHeight: 1.65, fontWeight: 300,
-          padding: '8px 12px', borderRadius: 10,
-          background: 'rgba(255,255,255,0.022)',
-          borderLeft: `2px solid ${color}40`,
-        }}>
-          {line.replace(/^[-•*]\s*/, '')}
-        </div>
-      ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{
+        fontSize: 9, color: '#3a3f52', letterSpacing: '0.1em', textTransform: 'uppercase',
+        marginBottom: 2,
+      }}>
+        Scoperte autonome · mentre non eri qui
+      </div>
+      {entries.slice(0, 5).map((entry, i) => {
+        const title = (entry.data.title as string) ?? 'Insight';
+        const text  = (entry.data.insight as string) ?? '';
+        const cats  = (entry.data.categories as string[]) ?? [];
+        const date  = new Date(entry.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' });
+        return (
+          <div key={i} style={{
+            padding: '10px 14px', borderRadius: 10,
+            background: 'rgba(255,255,255,0.022)',
+            borderLeft: `2px solid ${color}40`,
+          }}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+              marginBottom: 6,
+            }}>
+              <span style={{ fontSize: 11, color, fontWeight: 500 }}>{title}</span>
+              <span style={{ fontSize: 9, color: '#3a3f52' }}>{date}</span>
+            </div>
+            <div style={{ fontSize: 12, color: '#b0bcd4', lineHeight: 1.65, fontWeight: 300 }}>
+              {text}
+            </div>
+            {cats.length > 0 && (
+              <div style={{ marginTop: 7, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {cats.map(c => (
+                  <span key={c} style={{
+                    fontSize: 9, color, opacity: 0.55, letterSpacing: '0.08em',
+                  }}>
+                    #{c}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
