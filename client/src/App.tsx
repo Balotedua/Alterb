@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
+import { AnimatePresence } from 'framer-motion';
 import { supabase } from './config/supabase';
 import { getCategorySummaries, getUpcomingEvents } from './vault/vaultService';
 import { buildStar } from './components/starfield/StarfieldView';
@@ -12,7 +13,7 @@ import PolymorphicWidget from './components/widget/PolymorphicWidget';
 export default function App() {
   const [authUser, setAuthUser] = useState<User | null | undefined>(undefined);
   const [authError, setAuthError] = useState<string | null>(null);
-  const { setUser, setStars, upsertStar, addKnownCategory, setAlertEvent } = useAlterStore();
+  const { setUser, setStars, upsertStar, addKnownCategory, setAlertEvent, activeWidget } = useAlterStore();
 
   // ── Auth listener ────────────────────────────────────────
   useEffect(() => {
@@ -106,7 +107,7 @@ export default function App() {
   if (authUser === undefined) {
     return (
       <div style={{ position: 'fixed', inset: 0, background: '#000000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#f0c040', boxShadow: '0 0 12px #f0c040' }} />
+        <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#f0c040', boxShadow: '0 0 20px #f0c040, 0 0 50px #f0c04060' }} />
       </div>
     );
   }
@@ -116,7 +117,9 @@ export default function App() {
   return (
     <>
       <StarfieldView />
-      <NebulaChatInput />
+      <AnimatePresence>
+        {!activeWidget && <NebulaChatInput key="nebula-core" />}
+      </AnimatePresence>
       <PolymorphicWidget />
     </>
   );

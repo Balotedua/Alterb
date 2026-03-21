@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar,
+  AreaChart, Area,
   XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { useAlterStore } from '../../store/alterStore';
@@ -20,6 +21,49 @@ export function inferRenderType(entries: VaultEntry[], category?: string): Rende
   if (typeof data.amount === 'number') return 'stats';
   if (typeof data.note === 'string' && !data.score) return 'diary';
   return 'list';
+}
+
+// ─── Surgical Insight ─────────────────────────────────────────
+function SurgicalInsight({ values, unit, category, color }: {
+  values: number[]; unit: string; category?: string; color: string;
+}) {
+  if (values.length < 3) return null;
+  const half     = Math.floor(values.length / 2);
+  const firstAvg = values.slice(0, half).reduce((a, b) => a + b, 0) / half;
+  const lastAvg  = values.slice(half).reduce((a, b) => a + b, 0) / (values.length - half);
+  const pct      = firstAvg === 0 ? 0 : ((lastAvg - firstAvg) / firstAvg) * 100;
+  const arrow    = pct > 2 ? '↑' : pct < -2 ? '↓' : '→';
+  const trendClr = pct > 2 ? '#f87171' : pct < -2 ? '#4ade80' : '#6b7280';
+
+  const recent   = values.slice(-3);
+  const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
+  const now      = new Date();
+  const daysLeft = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate();
+  const projection = recentAvg * daysLeft;
+
+  return (
+    <div style={{
+      marginTop: 10, padding: '7px 12px', borderRadius: 8,
+      background: 'rgba(255,255,255,0.016)',
+      borderLeft: `2px solid ${trendClr}35`,
+      display: 'flex', alignItems: 'center', gap: 10,
+      fontSize: 10, letterSpacing: '0.04em',
+    }}>
+      <span style={{ color: trendClr, fontWeight: 500 }}>
+        {arrow} {pct > 0 ? '+' : ''}{pct.toFixed(1)}% vs media precedente
+      </span>
+      {daysLeft > 0 && category === 'finance' && projection > 0 && (
+        <span style={{ color: '#3a3f52' }}>
+          · Proiezione fine mese: {unit}{projection.toFixed(0)}
+        </span>
+      )}
+      {daysLeft > 0 && category !== 'finance' && (
+        <span style={{ color: color, opacity: 0.4 }}>
+          · Media attuale: {unit}{recentAvg.toFixed(1)}
+        </span>
+      )}
+    </div>
+  );
 }
 
 // ─── Shared sub-components ────────────────────────────────────
@@ -112,14 +156,55 @@ function FinanceStats({ entries, color }: { entries: VaultEntry[]; color: string
   const totalOut = expenses.reduce((s, e) => s + ((e.data.amount as number) ?? 0), 0);
   const totalIn  = income.reduce((s, e)   => s + ((e.data.amount as number) ?? 0), 0);
 
+  // Group expenses by day for area chart
+  const dayMap = new Map<string, number>();
+  for (const e of [...expenses].reverse()) {
+    const day = new Date(e.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
+    dayMap.set(day, (dayMap.get(day) ?? 0) + ((e.data.amount as number) ?? 0));
+  }
+  const chartData = Array.from(dayMap.entries()).map(([date, v]) => ({ date, v })).slice(-20);
+  const values    = chartData.map(d => d.v);
+
   return (
     <div>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+      {chartData.length >= 2 && (
+        <div style={{ marginBottom: 14 }}>
+          <ResponsiveContainer width="100%" height={130}>
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="fingrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="#f87171" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="#f87171" stopOpacity={0}   />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="date" tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} width={32} />
+              <Tooltip
+                contentStyle={{
+                  background: 'rgba(3,3,7,0.97)', border: '1px solid rgba(248,113,113,0.25)',
+                  borderRadius: 10, backdropFilter: 'blur(20px)',
+                }}
+                labelStyle={{ color: '#6b7280', fontSize: 10 }}
+                itemStyle={{ color: '#f87171' }}
+                formatter={(v: number) => [`€${v.toFixed(2)}`, 'Spese']}
+              />
+              <Area
+                type="monotone" dataKey="v" stroke="#f87171" strokeWidth={1.5}
+                fill="url(#fingrad)"
+                dot={{ fill: '#f87171', r: 2.5, strokeWidth: 0 }}
+                activeDot={{ r: 4, fill: '#f87171', strokeWidth: 0 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+          <SurgicalInsight values={values} unit="€" category="finance" color="#f87171" />
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
         <Stat label="Uscite"  value={`-€${totalOut.toFixed(2)}`} color="#f87171" />
         <Stat label="Entrate" value={`+€${totalIn.toFixed(2)}`}  color="#4ade80" />
         <Stat label="Netto"   value={`€${(totalIn - totalOut).toFixed(2)}`} color={color} />
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 220, overflowY: 'auto' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 160, overflowY: 'auto' }}>
         {entries.slice(0, 30).map((e) => (
           <EntryRow key={e.id} entry={e} color={color}
             label={(e.data.label as string) ?? '—'}
@@ -135,36 +220,46 @@ function HealthChart({ entries, color }: { entries: VaultEntry[]; color: string 
   const type     = entries[0]?.data.type as string;
   const valueKey = type === 'sleep' ? 'hours' : type === 'water' ? 'liters' : 'value';
   const unit     = type === 'sleep' ? 'h' : type === 'water' ? 'L' : 'kg';
+  const gradId   = `hgrad-${type}`;
 
   const chartData = [...entries].reverse().slice(-20).map((e) => ({
     date: new Date(e.created_at).toLocaleDateString('it-IT', { month: '2-digit', day: '2-digit' }),
     v:    (e.data[valueKey] as number) ?? 0,
   }));
+  const values = chartData.map(d => d.v);
 
   return (
     <div>
-      <ResponsiveContainer width="100%" height={150}>
-        <LineChart data={chartData}>
+      <ResponsiveContainer width="100%" height={160}>
+        <AreaChart data={chartData}>
+          <defs>
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%"  stopColor={color} stopOpacity={0.35} />
+              <stop offset="95%" stopColor={color} stopOpacity={0}    />
+            </linearGradient>
+          </defs>
           <XAxis dataKey="date" tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} />
           <YAxis tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} width={28} />
           <Tooltip
             contentStyle={{
-              background: 'rgba(3,3,7,0.95)', border: `1px solid ${color}20`,
+              background: 'rgba(3,3,7,0.97)', border: `1px solid ${color}25`,
               borderRadius: 10, backdropFilter: 'blur(20px)',
             }}
             labelStyle={{ color: '#6b7280', fontSize: 10 }}
             itemStyle={{ color }}
             formatter={(v: number) => [`${v}${unit}`, '']}
           />
-          <Line
+          <Area
             type="monotone" dataKey="v" stroke={color} strokeWidth={1.5}
+            fill={`url(#${gradId})`}
             dot={{ fill: color, r: 2.5, strokeWidth: 0 }}
             activeDot={{ r: 4, fill: color, strokeWidth: 0 }}
-            style={{ filter: `drop-shadow(0 0 4px ${color}80)` }}
+            style={{ filter: `drop-shadow(0 0 5px ${color}90)` }}
           />
-        </LineChart>
+        </AreaChart>
       </ResponsiveContainer>
-      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 120, overflowY: 'auto' }}>
+      <SurgicalInsight values={values} unit={unit} category="health" color={color} />
+      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 100, overflowY: 'auto' }}>
         {entries.slice(0, 15).map((e) => (
           <EntryRow key={e.id} entry={e} color={color}
             label={type.charAt(0).toUpperCase() + type.slice(1)}
@@ -333,6 +428,92 @@ function NebulaInsight({ entries: _entries, color }: { entries: VaultEntry[]; co
   );
 }
 
+// ─── Nexus Correlation View ───────────────────────────────────
+function NexusView({ entries }: { entries: VaultEntry[] }) {
+  const d = entries[0]?.data ?? {};
+  const catALabel  = (d.catALabel  as string) ?? 'A';
+  const catBLabel  = (d.catBLabel  as string) ?? 'B';
+  const colorA     = (d.colorA     as string) ?? '#f0c040';
+  const colorB     = (d.colorB     as string) ?? '#a78bfa';
+  const correlation = (d.correlation as number) ?? 0;
+  const chartData  = (d.chartData  as Array<Record<string, unknown>>) ?? [];
+  const catA       = (d.catA as string) ?? 'a';
+  const catB       = (d.catB as string) ?? 'b';
+
+  const corrAbs  = Math.abs(correlation);
+  const corrPct  = (corrAbs * 100).toFixed(0);
+  const corrSign = correlation > 0.25 ? 'positiva' : correlation < -0.25 ? 'inversa' : 'debole';
+  const corrClr  = corrAbs > 0.5 ? '#a78bfa' : corrAbs > 0.25 ? '#f0c040' : '#4b5268';
+
+  return (
+    <div>
+      {/* Correlation badge */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14,
+        padding: '10px 14px', borderRadius: 10,
+        background: `linear-gradient(135deg, ${colorA}08, ${colorB}08)`,
+        border: `1px solid ${corrClr}20`,
+      }}>
+        <span style={{ fontSize: 11, color: colorA, fontWeight: 500 }}>{catALabel}</span>
+        <span style={{ fontSize: 10, color: '#3a3f52', flex: 1, textAlign: 'center' }}>↔</span>
+        <span style={{ fontSize: 11, color: colorB, fontWeight: 500 }}>{catBLabel}</span>
+        <div style={{
+          marginLeft: 'auto', padding: '3px 10px', borderRadius: 20,
+          background: `${corrClr}18`, border: `1px solid ${corrClr}30`,
+          fontSize: 10, color: corrClr, letterSpacing: '0.05em',
+        }}>
+          {corrSign} {corrPct}%
+        </div>
+      </div>
+
+      {/* Dual normalized chart */}
+      {chartData.length >= 2 && (
+        <ResponsiveContainer width="100%" height={150}>
+          <AreaChart data={chartData}>
+            <defs>
+              <linearGradient id="ngA" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%"  stopColor={colorA} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={colorA} stopOpacity={0}   />
+              </linearGradient>
+              <linearGradient id="ngB" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%"  stopColor={colorB} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={colorB} stopOpacity={0}   />
+              </linearGradient>
+            </defs>
+            <XAxis dataKey="date" tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} width={28} domain={[0, 100]} />
+            <Tooltip
+              contentStyle={{
+                background: 'rgba(3,3,7,0.97)', border: `1px solid rgba(255,255,255,0.07)`,
+                borderRadius: 10, backdropFilter: 'blur(20px)',
+              }}
+              labelStyle={{ color: '#6b7280', fontSize: 10 }}
+              formatter={(v: number, name: string) => [`${v.toFixed(0)}%`, name]}
+            />
+            <Area type="monotone" dataKey={catA} name={catALabel} stroke={colorA} strokeWidth={1.5} fill="url(#ngA)" dot={false} />
+            <Area type="monotone" dataKey={catB} name={catBLabel} stroke={colorB} strokeWidth={1.5} fill="url(#ngB)" dot={false} />
+          </AreaChart>
+        </ResponsiveContainer>
+      )}
+
+      {/* Insight text */}
+      <div style={{
+        marginTop: 12, padding: '8px 12px', borderRadius: 8,
+        background: 'rgba(255,255,255,0.018)',
+        borderLeft: `2px solid ${corrClr}40`,
+        fontSize: 10, color: '#6b7280', lineHeight: 1.6,
+      }}>
+        {corrAbs > 0.5
+          ? `Correlazione forte: quando ${catALabel} aumenta, ${catBLabel} tende ${correlation > 0 ? 'ad aumentare' : 'a diminuire'} nello stesso periodo.`
+          : corrAbs > 0.2
+            ? `Correlazione moderata rilevata. Monitora entrambe le variabili per confermare il pattern.`
+            : `Nessuna correlazione significativa trovata. Le due variabili sembrano indipendenti.`
+        }
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Widget ──────────────────────────────────────────────
 export default function PolymorphicWidget() {
   const { activeWidget, setActiveWidget } = useAlterStore();
@@ -358,10 +539,10 @@ export default function PolymorphicWidget() {
         {activeWidget && (
         <motion.div
           key="widget"
-          initial={{ opacity: 0, scale: 0.93, x: '-50%', y: '-50%' }}
-          animate={{ opacity: 1, scale: 1,    x: '-50%', y: '-50%' }}
-          exit={{ opacity: 0, scale: 0.93,    x: '-50%', y: '-50%' }}
-          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+          initial={{ clipPath: 'circle(0% at 50% 50%)', opacity: 0, x: '-50%', y: '-50%' }}
+          animate={{ clipPath: 'circle(75% at 50% 50%)', opacity: 1, x: '-50%', y: '-50%' }}
+          exit={{   clipPath: 'circle(0% at 50% 50%)', opacity: 0, x: '-50%', y: '-50%' }}
+          transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
           style={{
             position: 'fixed',
             top: '50%',
@@ -370,17 +551,17 @@ export default function PolymorphicWidget() {
             maxHeight: 'min(72vh, calc(100svh - 80px))',
             overflowY: 'auto',
             WebkitOverflowScrolling: 'touch' as never,
-            background: 'rgba(0,0,0,0.97)',
-            border: `1px solid ${activeWidget.color}20`,
+            background: 'rgba(4,4,10,0.96)',
+            border: `0.5px solid rgba(192,192,200,0.45)`,
             borderRadius: 22,
             padding: '20px 20px 16px',
-            backdropFilter: 'blur(36px)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
             zIndex: 100,
             boxShadow: [
-              `0 0 80px ${activeWidget.color}12`,
-              `0 0 160px ${activeWidget.color}07`,
-              `0 28px 56px rgba(0,0,0,0.8)`,
-              `inset 0 1px 0 rgba(255,255,255,0.035)`,
+              `0 0 80px ${activeWidget.color}10`,
+              `0 28px 60px rgba(0,0,0,0.85)`,
+              `inset 0 1px 0 rgba(255,255,255,0.05)`,
             ].join(', '),
           }}
         >
@@ -431,6 +612,7 @@ export default function PolymorphicWidget() {
           : activeWidget.renderType === 'diary'    ? <DiaryList         entries={activeWidget.entries} color={activeWidget.color} />
           : activeWidget.renderType === 'timeline' ? <CalendarTimeline  entries={activeWidget.entries} color={activeWidget.color} />
           : activeWidget.renderType === 'insight'  ? <NebulaInsight     entries={activeWidget.entries} color={activeWidget.color} />
+          : activeWidget.renderType === 'nexus'    ? <NexusView         entries={activeWidget.entries} />
           : <GenericList entries={activeWidget.entries} color={activeWidget.color} />}
         </motion.div>
         )}

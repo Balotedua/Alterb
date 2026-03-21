@@ -4,7 +4,27 @@ import type { ParsedIntent } from '../types';
 
 const HELP_TRIGGERS    = ['?', 'aiuto', 'help', 'cosa sai fare', 'cosa puoi fare'];
 const DELETE_PATTERN   = /^(cancella|elimina|rimuovi|delete)\s+/i;
-const ANALYSIS_PATTERN = /^(analizza|analisi|riassumi|riassunto|report|correlazioni?|insight|come sto nel complesso)/i;
+const ANALYSIS_PATTERN = /^(analizza|analisi|riassumi|riassunto|report|insight|come sto nel complesso)/i;
+const NEXUS_PATTERN    = /dipende\s+(da|dal|dalle?)|correlazione\s+(tra|umore|spes|peso|salute)|incrocio\s+tra|relazione\s+tra|nexus/i;
+
+function extractNexusCategories(text: string): [string | null, string | null] {
+  const lower = text.toLowerCase();
+  const cats: string[] = [];
+  if (/umore|mood|psiche|stress|felice|triste/.test(lower)) cats.push('psychology');
+  if (/spes[oa]|finanz|soldi|euro|€|budget/.test(lower))   cats.push('finance');
+  if (/peso|sonno|salute|sport|allenamento|acqua/.test(lower)) cats.push('health');
+  if (/impegn|calendario|appuntament/.test(lower))         cats.push('calendar');
+  return [cats[0] ?? null, cats[1] ?? null];
+}
+
+// Pure conversation — no data to save
+const CHAT_PATTERN = /^(ciao|salve|buongiorno|buonasera|buona\s*notte|hey|hello|hi|hola|come\s+stai|come\s+va|cosa\s+pensi|chi\s+sei|come\s+ti\s+chiami|grazie|prego|ok|okay|bene|perfetto|capito|va\s+bene|sì|si|no|ah|eh|oh|uh|hmm|mh|dai|esatto|giusto|certo|assolutamente|fantastico|ottimo|bravo|brava)[\s!.?]*$/i;
+
+function extractDeleteCategory(text: string): string | null {
+  const m = text.match(/^(?:cancella|elimina|rimuovi|delete)\s+(?:la\s+)?(?:stella|categoria|category)?\s*(.+)$/i);
+  if (!m) return null;
+  return m[1].trim().toLowerCase().replace(/\s+/g, '_');
+}
 
 // Questions that query existing data (not create new entries)
 const QUERY_PATTERN = /(\?$)|^(cosa devo|cosa c'è|cosa ho |quanto ho |quanti |quante |com'era|com era|mostrami|dimmi tutto|elenca|lista |ci sono (impegni|appuntamenti)|ho (impegni|appuntamenti)|impegni (di|per)|cosa (è previsto|succede|mi aspetta))/i;
@@ -75,9 +95,11 @@ export function inferQueryDateRange(text: string): [Date, Date] | null {
 export type OrchestratorAction =
   | { type: 'save';     intent: ParsedIntent }
   | { type: 'help' }
-  | { type: 'delete';   raw: string }
+  | { type: 'chat';     raw: string }
+  | { type: 'delete';   raw: string; category: string | null }
   | { type: 'query';    raw: string; category: string | null; dateRange: [Date, Date] | null }
   | { type: 'analyse';  raw: string }
+  | { type: 'nexus';    raw: string; catA: string | null; catB: string | null }
   | { type: 'unknown';  raw: string };
 
 export async function orchestrate(
@@ -94,10 +116,15 @@ export async function orchestrate(
     return { type: 'help' };
 
   if (DELETE_PATTERN.test(trimmed))
-    return { type: 'delete', raw: trimmed };
+    return { type: 'delete', raw: trimmed, category: extractDeleteCategory(trimmed) };
 
   if (ANALYSIS_PATTERN.test(lower))
     return { type: 'analyse', raw: trimmed };
+
+  if (NEXUS_PATTERN.test(lower)) {
+    const [catA, catB] = extractNexusCategories(trimmed);
+    return { type: 'nexus', raw: trimmed, catA, catB };
+  }
 
   if (QUERY_PATTERN.test(trimmed))
     return {
@@ -106,6 +133,10 @@ export async function orchestrate(
       category:  inferQueryCategory(trimmed),
       dateRange: inferQueryDateRange(trimmed),
     };
+
+  // ── Chat: greetings / chit-chat — no data to save ────────
+  if (CHAT_PATTERN.test(trimmed))
+    return { type: 'chat', raw: trimmed };
 
   // ── L1: Local parser (zero API cost) ─────────────────────
   const local = localParse(trimmed, knownCategories);

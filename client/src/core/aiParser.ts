@@ -51,6 +51,15 @@ async function deepseekChat(messages: { role: string; content: string }[], maxTo
   }
 }
 
+// ─── Chat: conversational reply (no data saved) ───────────────
+export async function aiChat(text: string): Promise<string> {
+  const reply = await deepseekChat([
+    { role: 'system', content: `Sei Nebula, l'assistente di Alter OS — un sistema personale liquido che registra la vita dell'utente come stelle in una galassia. Rispondi in modo conciso e caldo (max 1-2 frasi). Non salvare nulla, non analizzare dati. È solo conversazione.` },
+    { role: 'user', content: text },
+  ], 120);
+  return reply ?? 'Ciao! Dimmi qualcosa da registrare nella tua galassia.';
+}
+
 // ─── Query: answer a question using vault entries as context ──
 export async function aiQuery(question: string, entries: import('../types').VaultEntry[]): Promise<string> {
   const context = entries.slice(0, 20).map(e =>

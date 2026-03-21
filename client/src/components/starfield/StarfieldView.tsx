@@ -47,15 +47,26 @@ export function starPosition(cat: string): { x: number; y: number } {
 }
 
 // ─── Particles ────────────────────────────────────────────────
-interface Particle { x: number; y: number; r: number; a: number; da: number; }
+// layer 0 = distant/slow, layer 1 = mid, layer 2 = near/fast
+interface Particle { x: number; y: number; r: number; a: number; da: number; layer: 0 | 1 | 2; }
+
+// Parallax factors per layer (applied to panX/panY)
+const LAYER_PARALLAX = [0.12, 0.38, 0.78] as const;
+const LAYER_RADIUS   = [[0.2, 0.5], [0.4, 1.0], [0.7, 1.8]] as const;
+const LAYER_FLICKER  = [0.0008, 0.0018, 0.0035] as const;
 
 function initParticles(count: number): Particle[] {
-  return Array.from({ length: count }, () => ({
-    x: Math.random(), y: Math.random(),
-    r: Math.random() * 0.8 + 0.2,
-    a: Math.random(),
-    da: (Math.random() - 0.5) * 0.002,
-  }));
+  return Array.from({ length: count }, () => {
+    const layer = Math.floor(Math.random() * 3) as 0 | 1 | 2;
+    const [rMin, rMax] = LAYER_RADIUS[layer];
+    return {
+      x: Math.random(), y: Math.random(),
+      r: rMin + Math.random() * (rMax - rMin),
+      a: Math.random(),
+      da: (Math.random() - 0.5) * LAYER_FLICKER[layer] * 2 + LAYER_FLICKER[layer],
+      layer,
+    };
+  });
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -78,6 +89,7 @@ interface CanvasState {
   pinchDist: number;
   pinchMidX: number;
   pinchMidY: number;
+  constellationAlpha: number; // 0..0.12, fades in when idle
 }
 
 // ─── StarfieldView ────────────────────────────────────────────
@@ -86,11 +98,12 @@ export default function StarfieldView() {
   const isMobile  = window.innerWidth < 768;
 
   const stateRef = useRef<CanvasState>({
-    particles: initParticles(isMobile ? 70 : 150),
+    particles: initParticles(isMobile ? 90 : 180),
     raf: 0, hovered: null, t: 0,
     panX: 0, panY: 0, scale: 1,
     dragging: false, dragX: 0, dragY: 0, didDrag: false,
     pinchDist: -1, pinchMidX: 0, pinchMidY: 0,
+    constellationAlpha: 0,
   });
 
   const { stars, focusMode, setActiveWidget, user, markStarSeen, highlightedStarId, alertEvent } = useAlterStore();
@@ -98,6 +111,21 @@ export default function StarfieldView() {
   // Ghost whisper at screen-space coords
   const [ghostWhisper, setGhostWhisper] = useState<{ sx: number; sy: number; text: string } | null>(null);
   const ghostIdRef = useRef<string | null>(null);
+
+  // Star suction animation before widget opens
+  const [suckStar, setSuckStar] = useState<{ id: string; color: string; dx: number; dy: number } | null>(null);
+
+  // Full-screen supernova flash
+  const [flashActive, setFlashActive] = useState(false);
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (stars.some(s => s.isNew)) {
+      setFlashActive(true);
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+      flashTimerRef.current = setTimeout(() => setFlashActive(false), 900);
+    }
+  }, [stars]);
 
   // ── Camera: normalized → screen coords ────────────────────
   const toScreen = useCallback((nx: number, ny: number, W: number, H: number) => {
@@ -118,18 +146,29 @@ export default function StarfieldView() {
     const { scale } = state;
     state.t += 0.007;
 
-    // Deep space background
-    ctx.fillStyle = '#050508';
+    // Void absolute
+    ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, W, H);
 
-    // ── Ambient particles (screen-space, no camera) ──
+    // ── Constellation alpha: fade in when idle, out when dragging ──
+    if (state.dragging) {
+      state.constellationAlpha = Math.max(0, state.constellationAlpha - 0.025);
+    } else {
+      state.constellationAlpha = Math.min(0.12, state.constellationAlpha + 0.004);
+    }
+
+    // ── Parallax particles — 3 depth layers ──
     state.particles.forEach((p) => {
       p.a += p.da;
-      if (p.a <= 0) { p.a = 0; p.da = Math.abs(p.da); }
-      if (p.a >= 1) { p.a = 1; p.da = -Math.abs(p.da); }
+      if (p.a <= 0.02) { p.a = 0.02; p.da = Math.abs(p.da); }
+      if (p.a >= 1)    { p.a = 1;    p.da = -Math.abs(p.da); }
+      const factor = LAYER_PARALLAX[p.layer];
+      const px = p.x * W + state.panX * factor;
+      const py = p.y * H + state.panY * factor;
+      const brightness = 90 + p.layer * 18;
       ctx.beginPath();
-      ctx.arc(p.x * W, p.y * H, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(110,130,170,${p.a * 0.15})`;
+      ctx.arc(px, py, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${brightness},${brightness + 20},${brightness + 50},${p.a * (0.18 + p.layer * 0.08)})`;
       ctx.fill();
     });
 
@@ -177,19 +216,19 @@ export default function StarfieldView() {
       const glowBoost  = isHighlit ? 2.2 : isAlert ? 2.4 : 1;
 
       // Outer corona
-      const coronaR = (isHov ? 90 : 60) * (0.25 + intensity * 0.75) * pulse * s * glowBoost;
+      const coronaR = (isHov ? 160 : 110) * (0.25 + intensity * 0.75) * pulse * s * glowBoost;
       const corona  = ctx.createRadialGradient(px, py, 0, px, py, coronaR);
-      corona.addColorStop(0,   `rgba(${r},${g},${b},${0.07 * intensity})`);
-      corona.addColorStop(0.5, `rgba(${r},${g},${b},${0.025 * intensity})`);
+      corona.addColorStop(0,   `rgba(${r},${g},${b},${0.14 * intensity})`);
+      corona.addColorStop(0.5, `rgba(${r},${g},${b},${0.05 * intensity})`);
       corona.addColorStop(1,   'rgba(0,0,0,0)');
       ctx.beginPath(); ctx.arc(px, py, coronaR, 0, Math.PI * 2);
       ctx.fillStyle = corona; ctx.fill();
 
       // Main glow
-      const glowR = (isHov ? 46 : 26) * (0.45 + intensity * 0.55) * pulse * s * glowBoost;
+      const glowR = (isHov ? 90 : 55) * (0.45 + intensity * 0.55) * pulse * s * glowBoost;
       const grd   = ctx.createRadialGradient(px, py, 0, px, py, glowR);
-      grd.addColorStop(0,    `rgba(${r},${g},${b},${0.6 * intensity})`);
-      grd.addColorStop(0.35, `rgba(${r},${g},${b},${0.22 * intensity})`);
+      grd.addColorStop(0,    `rgba(${r},${g},${b},${0.85 * intensity})`);
+      grd.addColorStop(0.35, `rgba(${r},${g},${b},${0.35 * intensity})`);
       grd.addColorStop(1,    'rgba(0,0,0,0)');
       ctx.beginPath(); ctx.arc(px, py, glowR, 0, Math.PI * 2);
       ctx.fillStyle = grd; ctx.fill();
@@ -211,6 +250,67 @@ export default function StarfieldView() {
         ctx.stroke(); ctx.setLineDash([]);
       }
     });
+
+    // ── Constellation lines between nearby stars ──
+    if (state.constellationAlpha > 0.002 && starsNow.length > 1) {
+      ctx.save();
+      ctx.lineWidth = 0.3;
+      for (let i = 0; i < starsNow.length; i++) {
+        for (let j = i + 1; j < starsNow.length; j++) {
+          const a = starsNow[i], b = starsNow[j];
+          const pa = toScreen(a.x, a.y, W, H);
+          const pb = toScreen(b.x, b.y, W, H);
+          const dist = Math.hypot(pa.sx - pb.sx, pa.sy - pb.sy);
+          if (dist < 320) {
+            const fade = (1 - dist / 320) * state.constellationAlpha;
+            ctx.beginPath();
+            ctx.moveTo(pa.sx, pa.sy);
+            ctx.lineTo(pb.sx, pb.sy);
+            ctx.strokeStyle = `rgba(200,215,255,${fade})`;
+            ctx.stroke();
+          }
+        }
+      }
+      ctx.restore();
+    }
+
+    // ── Nexus beam between two correlated stars ──
+    const nexusBeam = useAlterStore.getState().nexusBeam;
+    if (nexusBeam) {
+      const sA = starsNow.find(st => st.id === nexusBeam.catA);
+      const sB = starsNow.find(st => st.id === nexusBeam.catB);
+      if (sA && sB) {
+        const pa = toScreen(sA.x, sA.y, W, H);
+        const pb = toScreen(sB.x, sB.y, W, H);
+        const [rA, gA, bA] = hexToRgb(nexusBeam.colorA);
+        const [rB, gB, bB] = hexToRgb(nexusBeam.colorB);
+        const pulse = Math.sin(state.t * 3) * 0.35 + 0.65;
+        // Beam gradient
+        const beamGrd = ctx.createLinearGradient(pa.sx, pa.sy, pb.sx, pb.sy);
+        beamGrd.addColorStop(0,   `rgba(${rA},${gA},${bA},${0.7 * pulse})`);
+        beamGrd.addColorStop(0.5, `rgba(255,255,255,${0.55 * pulse})`);
+        beamGrd.addColorStop(1,   `rgba(${rB},${gB},${bB},${0.7 * pulse})`);
+        ctx.save();
+        ctx.beginPath(); ctx.moveTo(pa.sx, pa.sy); ctx.lineTo(pb.sx, pb.sy);
+        ctx.strokeStyle = beamGrd; ctx.lineWidth = 1.5 * pulse;
+        ctx.shadowBlur = 12; ctx.shadowColor = `rgba(255,255,255,0.3)`;
+        ctx.stroke();
+        // Resonance rings
+        const ringR = 28 + Math.sin(state.t * 4) * 9;
+        [[pa, rA, gA, bA], [pb, rB, gB, bB]].forEach(([pos, r, g, b]) => {
+          const p = pos as { sx: number; sy: number };
+          ctx.beginPath(); ctx.arc(p.sx, p.sy, ringR, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(${r},${g},${b},${0.35 * pulse})`;
+          ctx.lineWidth = 0.8; ctx.shadowBlur = 0;
+          ctx.stroke();
+          ctx.beginPath(); ctx.arc(p.sx, p.sy, ringR * 1.6, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(${r},${g},${b},${0.12 * pulse})`;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        });
+        ctx.restore();
+      }
+    }
 
     state.raf = requestAnimationFrame(draw);
   }, [toScreen]);
@@ -313,6 +413,13 @@ export default function StarfieldView() {
     state.scale = newScale;
   }, []);
 
+  const openWidget = useCallback(async (star: { id: string; label: string; color: string }) => {
+    if (!user) return;
+    const entries = await getByCategory(user.id, star.id);
+    setActiveWidget({ category: star.id, label: star.label, color: star.color, entries, renderType: inferRenderType(entries) });
+    markStarSeen(star.id);
+  }, [user, setActiveWidget, markStarSeen]);
+
   const handleClick = useCallback(async (e: React.MouseEvent<HTMLCanvasElement>) => {
     const state = stateRef.current;
     if (state.didDrag) { state.didDrag = false; return; }
@@ -320,22 +427,18 @@ export default function StarfieldView() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const W = canvas.width, H = canvas.height;
+    const cx = W / 2, cy = H / 2;
     const starsNow = useAlterStore.getState().stars;
 
     for (const star of starsNow) {
       const { sx, sy } = toScreen(star.x, star.y, W, H);
       if (Math.hypot(sx - e.clientX, sy - e.clientY) < 22) {
-        const entries = await getByCategory(user.id, star.id);
-        setActiveWidget({
-          category: star.id, label: star.label,
-          color: star.color, entries,
-          renderType: inferRenderType(entries),
-        });
-        markStarSeen(star.id);
+        setSuckStar({ id: star.id, color: star.color, dx: sx - cx, dy: sy - cy });
+        setTimeout(() => { setSuckStar(null); openWidget(star); }, 480);
         break;
       }
     }
-  }, [user, setActiveWidget, markStarSeen, toScreen]);
+  }, [user, openWidget, toScreen]);
 
   // ── Touch: pan + pinch-zoom ────────────────────────────────
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
@@ -399,18 +502,13 @@ export default function StarfieldView() {
       // Tap (not drag) → star click
       if (!state.didDrag && user && canvas) {
         const W = canvas.width, H = canvas.height;
+        const cx = W / 2, cy = H / 2;
         const starsNow = useAlterStore.getState().stars;
         for (const star of starsNow) {
           const { sx, sy } = toScreen(star.x, star.y, W, H);
           if (Math.hypot(sx - state.dragX, sy - state.dragY) < 32) {
-            getByCategory(user.id, star.id).then((entries) => {
-              setActiveWidget({
-                category: star.id, label: star.label,
-                color: star.color, entries,
-                renderType: inferRenderType(entries),
-              });
-              markStarSeen(star.id);
-            });
+            setSuckStar({ id: star.id, color: star.color, dx: sx - cx, dy: sy - cy });
+            setTimeout(() => { setSuckStar(null); openWidget(star); }, 480);
             break;
           }
         }
@@ -427,7 +525,7 @@ export default function StarfieldView() {
   }, [user, setActiveWidget, markStarSeen, toScreen]);
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#050508' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#000000' }}>
       <canvas
         ref={canvasRef}
         style={{ display: 'block', width: '100%', height: '100%', cursor: 'grab', touchAction: 'none' }}
@@ -470,13 +568,32 @@ export default function StarfieldView() {
         ))}
       </AnimatePresence>
 
+      {/* Full-screen supernova flash */}
+      <AnimatePresence>
+        {flashActive && (
+          <motion.div
+            key="nova-flash"
+            initial={{ opacity: 0.85 }}
+            animate={{ opacity: 0 }}
+            exit={{}}
+            transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+            style={{
+              position: 'absolute', inset: 0,
+              background: 'white',
+              pointerEvents: 'none',
+              zIndex: 90,
+            }}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Supernova burst on new stars */}
       <AnimatePresence>
         {stars.filter(s => s.isNew).map((star) => (
           <motion.div
             key={`nova-${star.id}`}
             initial={{ scale: 0.1, opacity: 1 }}
-            animate={{ scale: 6, opacity: 0 }}
+            animate={{ scale: 32, opacity: 0 }}
             exit={{ opacity: 0 }}
             onAnimationComplete={() => markStarSeen(star.id)}
             style={{
@@ -484,11 +601,12 @@ export default function StarfieldView() {
               left:  `${star.x * 100}%`,
               top:   `${star.y * 100}%`,
               transform: 'translate(-50%, -50%)',
-              width: 32, height: 32, borderRadius: '50%',
-              background: `radial-gradient(circle, white 0%, ${star.color} 25%, transparent 70%)`,
+              width: 60, height: 60, borderRadius: '50%',
+              background: `radial-gradient(circle, white 0%, ${star.color} 20%, ${star.color}60 50%, transparent 70%)`,
               pointerEvents: 'none',
+              zIndex: 80,
             }}
-            transition={{ duration: 1.5, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
           />
         ))}
       </AnimatePresence>
@@ -520,6 +638,29 @@ export default function StarfieldView() {
               🔔 {alertEvent.title} — {new Date(alertEvent.scheduledAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
             </span>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Star suction: animates star particle toward center before widget opens */}
+      <AnimatePresence>
+        {suckStar && (
+          <motion.div
+            key={`suck-${suckStar.id}`}
+            initial={{ x: suckStar.dx, y: suckStar.dy, scale: 1.6, opacity: 1 }}
+            animate={{ x: 0, y: 0, scale: 0, opacity: 0 }}
+            exit={{}}
+            transition={{ duration: 0.45, ease: [0.55, 0, 1, 0.8] }}
+            style={{
+              position: 'absolute',
+              left: '50%', top: '50%',
+              marginLeft: -8, marginTop: -8,
+              width: 16, height: 16, borderRadius: '50%',
+              background: `radial-gradient(circle, white 0%, ${suckStar.color} 55%, transparent 100%)`,
+              boxShadow: `0 0 20px ${suckStar.color}, 0 0 40px ${suckStar.color}80`,
+              pointerEvents: 'none',
+              zIndex: 95,
+            }}
+          />
         )}
       </AnimatePresence>
 

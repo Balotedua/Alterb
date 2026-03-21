@@ -9,13 +9,16 @@
       <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-D1bc4Oh0.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/dist/assets/index-DbmjFQOT.js" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-PoVGF862.css" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/client/dist/index.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/App.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/nebula/NebulaChatInput.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/nebula/NebulaChatInput.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/starfield/StarfieldView.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/starfield/StarfieldView.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/widget/PolymorphicWidget.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/widget/PolymorphicWidget.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/core/aiParser.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/core/aiParser.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/core/localParser.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/core/localParser.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/core/orchestrator.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/core/orchestrator.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/index.css" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/index.css" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/store/alterStore.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/store/alterStore.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/types/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/types/index.ts" afterDir="false" />

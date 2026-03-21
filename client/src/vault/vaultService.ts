@@ -113,6 +113,16 @@ export async function deleteEntry(id: string): Promise<boolean> {
   return !error;
 }
 
+// ─── Delete: all entries of a category (removes the star) ────
+export async function deleteCategory(userId: string, category: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('vault')
+    .delete()
+    .eq('user_id', userId)
+    .eq('category', category);
+  return !error;
+}
+
 // ─── Delete: last entry of a category ────────────────────────
 export async function deleteLastInCategory(
   userId: string,

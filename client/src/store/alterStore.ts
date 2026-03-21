@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Star, WidgetData, ChatMessage, AlterUser } from '../types';
+import type { Star, WidgetData, ChatMessage, AlterUser, NexusBeam } from '../types';
 
 interface AlterStore {
   // ── Auth ────────────────────────────────────────────────
@@ -10,6 +10,7 @@ interface AlterStore {
   stars: Star[];
   setStars: (stars: Star[]) => void;
   upsertStar: (star: Star) => void;
+  removeStar: (id: string) => void;
   markStarSeen: (id: string) => void;
 
   // ── Active widget ────────────────────────────────────────
@@ -37,6 +38,10 @@ interface AlterStore {
   // ── Sentinel alert ───────────────────────────────────────────
   alertEvent: { title: string; scheduledAt: string } | null;
   setAlertEvent: (e: { title: string; scheduledAt: string } | null) => void;
+
+  // ── Nexus beam ───────────────────────────────────────────────
+  nexusBeam: NexusBeam | null;
+  setNexusBeam: (beam: NexusBeam | null) => void;
 }
 
 export const useAlterStore = create<AlterStore>((set) => ({
@@ -51,6 +56,8 @@ export const useAlterStore = create<AlterStore>((set) => ({
       if (!exists) return { stars: [...s.stars, star] };
       return { stars: s.stars.map((st) => (st.id === star.id ? { ...st, ...star } : st)) };
     }),
+  removeStar: (id) =>
+    set((s) => ({ stars: s.stars.filter((st) => st.id !== id) })),
   markStarSeen: (id) =>
     set((s) => ({
       stars: s.stars.map((st) => (st.id === id ? { ...st, isNew: false } : st)),
@@ -84,4 +91,7 @@ export const useAlterStore = create<AlterStore>((set) => ({
 
   alertEvent: null,
   setAlertEvent: (alertEvent) => set({ alertEvent }),
+
+  nexusBeam: null,
+  setNexusBeam: (nexusBeam) => set({ nexusBeam }),
 }));
