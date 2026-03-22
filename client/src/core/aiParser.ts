@@ -56,6 +56,90 @@ async function deepseekChat(messages: { role: string; content: string }[], maxTo
   }
 }
 
+// ─── Universal document classifier ───────────────────────────
+export interface DocumentClassification {
+  docType: string;        // payslip | utility_bill | invoice | bank_statement | medical_report | contract | receipt | identity | tax | fine | insurance | generic
+  docTypeLabel: string;   // human-readable Italian label
+  main_subject: string | null;   // issuer / company / hospital / etc.
+  doc_date: string | null;       // ISO YYYY-MM-DD
+  value: number | null;          // main monetary amount in €
+  summary: string;               // one-sentence Italian summary
+  tags: string[];                // 2–4 searchable keywords
+}
+
+export async function classifyDocument(text: string): Promise<DocumentClassification> {
+  const fallback = (): DocumentClassification => {
+    // Regex fallback when no API key — keeps upload working offline
+    const t = (text + ' ').toLowerCase();
+    let docType = 'generic', docTypeLabel = 'Documento';
+    if (/busta\s*paga|cedolino|retribuzione|paga\s*base|imponibile\s*prev/.test(t))
+      { docType = 'payslip';        docTypeLabel = 'Busta paga'; }
+    else if (/bolletta|enel|eni\b|snam|hera|edison|luce\b|gas\b|acqua\b|tari/.test(t))
+      { docType = 'utility_bill';   docTypeLabel = 'Bolletta'; }
+    else if (/estratto\s*conto|saldo\s*disponibile|moviment/.test(t))
+      { docType = 'bank_statement'; docTypeLabel = 'Estratto conto'; }
+    else if (/fattura\s*n[°.]?\s*\d|iva\s*\d{2}%/.test(t))
+      { docType = 'invoice';        docTypeLabel = 'Fattura'; }
+    else if (/ricevuta|scontrino/.test(t))
+      { docType = 'receipt';        docTypeLabel = 'Ricevuta'; }
+    else if (/referto|diagnosi|prescrizione|medico|ospedale/.test(t))
+      { docType = 'medical_report'; docTypeLabel = 'Referto medico'; }
+    else if (/contratto|locazione|affitto\b/.test(t))
+      { docType = 'contract';       docTypeLabel = 'Contratto'; }
+    else if (/carta\s*d[i']?\s*identit|passaporto|patente|codice\s*fiscale/.test(t))
+      { docType = 'identity';       docTypeLabel = 'Documento identità'; }
+    else if (/multa|verbale\s*di\s*contestazione|sanzione/.test(t))
+      { docType = 'fine';           docTypeLabel = 'Multa'; }
+    else if (/dichiarazione\s*(dei\s*redditi|730|unico)|irpef|f24/.test(t))
+      { docType = 'tax';            docTypeLabel = 'Documento fiscale'; }
+    else if (/polizza|assicurazion/.test(t))
+      { docType = 'insurance';      docTypeLabel = 'Polizza assicurativa'; }
+
+    const amountMatch = text.match(/(?:totale|importo|netto|da\s+pagare|saldo)[^\d]*(\d+[,.]?\d*)\s*[€e]|(\d+[,.]?\d*)\s*€/i);
+    const value = amountMatch ? parseFloat((amountMatch[1] ?? amountMatch[2]).replace(',', '.')) : null;
+    const issuerMatch = text.match(/\b(Enel|Eni|Snam|Hera|Edison|A2A|Iren|Tim|Vodafone|Fastweb|Wind|Tre|Poste|UniCredit|Intesa|BNL|Fineco|INPS|Agenzia\s*Entrate)\b/i);
+    return { docType, docTypeLabel, main_subject: issuerMatch?.[1] ?? null, doc_date: null, value, summary: docTypeLabel, tags: [docType] };
+  };
+
+  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
+  if (!apiKey) return fallback();
+
+  const raw = await deepseekChat([
+    {
+      role: 'system',
+      content: `Sei un classificatore di documenti. Analizza il testo e restituisci SOLO un JSON valido (niente altro) con questi campi:
+{
+  "docType": uno tra "payslip"|"utility_bill"|"invoice"|"bank_statement"|"medical_report"|"contract"|"receipt"|"identity"|"tax"|"fine"|"insurance"|"generic",
+  "docTypeLabel": nome in italiano (es. "Busta paga"),
+  "main_subject": ente o azienda emittente (stringa o null),
+  "doc_date": data documento ISO YYYY-MM-DD (o null),
+  "value": importo numerico principale in euro (o null),
+  "summary": riassunto in 1 frase in italiano,
+  "tags": array di 2-4 parole chiave utili per ricerche future
+}`,
+    },
+    { role: 'user', content: `Testo documento:\n${text.slice(0, 3000)}` },
+  ], 350);
+
+  if (!raw) return fallback();
+  try {
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return fallback();
+    const parsed = JSON.parse(jsonMatch[0]) as Partial<DocumentClassification>;
+    return {
+      docType:      parsed.docType      ?? 'generic',
+      docTypeLabel: parsed.docTypeLabel ?? 'Documento',
+      main_subject: parsed.main_subject ?? null,
+      doc_date:     parsed.doc_date     ?? null,
+      value:        typeof parsed.value === 'number' ? parsed.value : null,
+      summary:      parsed.summary      ?? '',
+      tags:         Array.isArray(parsed.tags) ? parsed.tags : [],
+    };
+  } catch {
+    return fallback();
+  }
+}
+
 // ─── Chat: conversational reply (no data saved) ───────────────
 export async function aiChat(text: string): Promise<string> {
   const reply = await deepseekChat([
@@ -99,11 +183,18 @@ export async function aiDocumentQuery(question: string, docs: import('../types')
 
   const context = docs.map(e => {
     const d = e.data as Record<string, unknown>;
-    const date = new Date(e.created_at).toLocaleDateString('it-IT');
-    const label = (d.docTypeLabel as string) ?? (d.docType as string) ?? 'documento';
-    const name  = (d.filename as string) ?? '';
-    const text  = ((d.extractedText as string) ?? '').slice(0, 800);
-    return `[${date} · ${label}${name ? ' · ' + name : ''}]\n${text}`;
+    const date     = new Date(e.created_at).toLocaleDateString('it-IT');
+    const label    = (d.docTypeLabel as string) ?? (d.docType as string) ?? 'documento';
+    const name     = (d.filename as string) ?? '';
+    const subject  = (d.main_subject as string) ?? '';
+    const docDate  = (d.doc_date as string) ?? '';
+    const value    = typeof d.value === 'number' ? `€${d.value}` : '';
+    const summary  = (d.summary as string) ?? '';
+    const tags     = Array.isArray(d.tags) ? (d.tags as string[]).join(', ') : '';
+    // Use AI-generated summary when available, otherwise fall back to raw text
+    const snippet  = summary || ((d.extractedText as string) ?? '').slice(0, 600);
+    const meta = [subject, docDate, value, tags].filter(Boolean).join(' · ');
+    return `[${date} · ${label}${name ? ' · ' + name : ''}${meta ? ' | ' + meta : ''}]\n${snippet}`;
   }).join('\n\n---\n\n');
 
   const reply = await deepseekChat([

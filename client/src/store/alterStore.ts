@@ -73,6 +73,9 @@ interface AlterStore {
   setUsername: (n: string) => void;
   showSettings: boolean;
   setShowSettings: (v: boolean) => void;
+
+  showBugReport: boolean;
+  setShowBugReport: (v: boolean) => void;
 }
 
 export const useAlterStore = create<AlterStore>((set) => ({
@@ -150,4 +153,7 @@ export const useAlterStore = create<AlterStore>((set) => ({
   setUsername: (username) => { localStorage.setItem('alter-username', username); set({ username }); },
   showSettings: false,
   setShowSettings: (showSettings) => set({ showSettings }),
+
+  showBugReport: false,
+  setShowBugReport: (showBugReport) => set({ showBugReport }),
 }));

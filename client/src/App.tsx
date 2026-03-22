@@ -17,11 +17,12 @@ import ChatHistorySidebar from './components/chat/ChatHistorySidebar';
 import DashboardView from './components/dashboard/DashboardView';
 import DataAnalyticsView from './components/dashboard/DataAnalyticsView';
 import SettingsPanel from './components/settings/SettingsPanel';
+import BugReportPanel from './components/panels/BugReportPanel';
 
 export default function App() {
   const [authUser, setAuthUser] = useState<User | null | undefined>(undefined);
   const [authError, setAuthError] = useState<string | null>(null);
-  const { setUser, setStars, upsertStar, removeStar, addKnownCategory, setAlertEvent, activeWidget, viewMode, theme, activeDataCategory } = useAlterStore();
+  const { setUser, setStars, upsertStar, removeStar, addKnownCategory, setAlertEvent, activeWidget, viewMode, theme, activeDataCategory, setShowBugReport, setShowChatSidebar } = useAlterStore();
 
   // Apply theme to document root
   useEffect(() => {
@@ -181,6 +182,71 @@ export default function App() {
       <SettingsPanel />
       <ChatHistorySidebar />
       <TabBar />
+      <BugReportPanel />
+
+      {/* Hamburger button — top-left */}
+      <button
+        onClick={() => setShowChatSidebar(true)}
+        title="Chat e impostazioni"
+        style={{
+          position: 'fixed', top: 14, left: 14,
+          zIndex: 500,
+          background: 'rgba(10,10,18,0.75)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 10,
+          width: 32, height: 32,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', color: 'rgba(255,255,255,0.3)',
+          backdropFilter: 'blur(8px)',
+          transition: 'color 0.2s, border-color 0.2s',
+        }}
+        onMouseEnter={e => {
+          (e.currentTarget as HTMLButtonElement).style.color = '#ffffff';
+          (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.2)';
+        }}
+        onMouseLeave={e => {
+          (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.3)';
+          (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.08)';
+        }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+
+      {/* Bug report button — top-right */}
+      <button
+        onClick={() => setShowBugReport(true)}
+        title="Segnala bug o miglioria"
+        style={{
+          position: 'fixed', top: 14, right: 14,
+          zIndex: 500,
+          background: 'rgba(10,10,18,0.75)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 10,
+          width: 32, height: 32,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', color: 'rgba(255,255,255,0.3)',
+          backdropFilter: 'blur(8px)',
+          transition: 'color 0.2s, border-color 0.2s',
+        }}
+        onMouseEnter={e => {
+          (e.currentTarget as HTMLButtonElement).style.color = '#f0c040';
+          (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(240,192,64,0.3)';
+        }}
+        onMouseLeave={e => {
+          (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.3)';
+          (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.08)';
+        }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </button>
     </>
   );
 }

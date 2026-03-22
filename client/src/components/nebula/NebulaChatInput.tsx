@@ -188,30 +188,32 @@ export default function NebulaCore() {
 
     try {
       // 1. Upload file to Supabase Storage
-      const { uploadDocument, detectDocType, extractAmount, extractIssuer } = await import('../../import/documentStorage');
+      const { uploadDocument } = await import('../../import/documentStorage');
       const upload = await uploadDocument(user.id, file);
 
-      // 2. Enrich metadata from text
-      const { docType, docTypeLabel } = detectDocType(text, filename);
-      const amount  = extractAmount(text);
-      const issuer  = extractIssuer(text);
+      // 2. AI classifier — understands any document type without hardcoded rules
+      setLastReply('Analisi AI...');
+      const { classifyDocument } = await import('../../core/aiParser');
+      const classification = await classifyDocument(text);
 
-      // 3. Save vault entry (reference + extracted text)
-      setLastReply('Analisi...');
+      // 3. Save vault entry (reference + extracted text + AI metadata)
       const vaultData: Record<string, unknown> = {
-        storagePath:   upload.storagePath,
+        storagePath:    upload.storagePath,
         filename,
-        docType,
-        docTypeLabel,
-        extractedText: text.slice(0, 4000),
-        charCount:     text.length,
-        fileSize:      upload.fileSize,
+        docType:        classification.docType,
+        docTypeLabel:   classification.docTypeLabel,
+        main_subject:   classification.main_subject,
+        doc_date:       classification.doc_date,
+        value:          classification.value,
+        summary:        classification.summary,
+        tags:           classification.tags,
+        extractedText:  text.slice(0, 4000),
+        charCount:      text.length,
+        fileSize:       upload.fileSize,
         compressedSize: upload.compressedSize,
-        mimeType:      file.type,
-        uploadedAt:    new Date().toISOString(),
+        mimeType:       file.type,
+        uploadedAt:     new Date().toISOString(),
       };
-      if (amount)  vaultData.amount  = amount;
-      if (issuer)  vaultData.issuer  = issuer;
       if (pendingOcr.pageCount) vaultData.pageCount = pendingOcr.pageCount;
 
       const saved = await saveEntry(user.id, 'documents', vaultData);
@@ -224,7 +226,9 @@ export default function NebulaCore() {
 
       const sizeSaved = Math.round((1 - upload.compressedSize / upload.fileSize) * 100);
       const sizeNote  = sizeSaved > 5 ? ` · −${sizeSaved}%` : '';
-      const reply = `📄 ${docTypeLabel}${issuer ? ' · ' + issuer : ''}${amount ? ' · €' + amount : ''}${sizeNote}`;
+      const subjectNote = classification.main_subject ? ` · ${classification.main_subject}` : '';
+      const valueNote   = classification.value ? ` · €${classification.value}` : '';
+      const reply = `📄 ${classification.docTypeLabel}${subjectNote}${valueNote}${sizeNote}`;
       setLastReply(reply); addMessage('nebula', reply);
 
     } catch (err) {
@@ -360,7 +364,7 @@ export default function NebulaCore() {
         const reply = await aiQuery(text, entries);
         setLastReply(reply.length > 80 ? reply.slice(0, 77) + '…' : reply);
         addMessage('nebula', reply);
-        if (category && entries.length > 0) {
+        if (category) {
           const meta = getCategoryMeta(category);
           const { inferRenderType } = await import('../widget/PolymorphicWidget');
           setActiveWidget({ category, label: meta.label, color: meta.color, entries, renderType: inferRenderType(entries, category) });
@@ -481,43 +485,39 @@ export default function NebulaCore() {
         }
 
       } else if (action.type === 'doc_retrieve') {
-        const { getDocumentsByType } = await import('../../vault/vaultService');
-        const { getDocumentUrl } = await import('../../import/documentStorage');
-        const docs = action.docType
+        const { getDocumentsByType, getByCategory: getAllDocs } = await import('../../vault/vaultService');
+        let docs = action.docType
           ? await getDocumentsByType(user.id, action.docType)
-          : await (await import('../../vault/vaultService')).getByCategory(user.id, 'documents', 10);
+          : await getAllDocs(user.id, 'documents', 50);
+        // Filter by year if specified
+        if (action.year) {
+          docs = docs.filter(d => new Date(d.created_at).getFullYear() === action.year);
+        }
         if (docs.length === 0) {
-          const msg = 'Documento non trovato nel vault.';
+          const yearHint = action.year ? ` del ${action.year}` : '';
+          const msg = `Nessun documento trovato${yearHint}. Carica un PDF con 📎.`;
           setLastReply(msg); addMessage('nebula', msg);
         } else {
-          const latest = docs[0];
-          const d = latest.data as Record<string, unknown>;
-          const path = d.storagePath as string | undefined;
-          if (path) {
-            const url = await getDocumentUrl(path);
-            if (url) {
-              const label = (d.docTypeLabel as string) ?? 'Documento';
-              const reply = `📄 ${label} · link temporaneo generato`;
-              setLastReply(reply);
-              addMessage('nebula', `${reply}\n${url}`);
-              window.open(url, '_blank');
-            } else {
-              const msg = 'Errore generazione link. Riprova.';
-              setLastReply(msg); addMessage('nebula', msg);
-            }
-          } else {
-            const msg = 'Documento senza file allegato.';
-            setLastReply(msg); addMessage('nebula', msg);
-          }
+          const meta = getCategoryMeta('documents');
+          const yearHint = action.year ? ` ${action.year}` : '';
+          const typeLabel = docs[0] ? ((docs[0].data as Record<string,unknown>).docTypeLabel as string) ?? 'Documenti' : 'Documenti';
+          setActiveWidget({
+            category: 'documents',
+            label: `${typeLabel}${yearHint} · ${docs.length}`,
+            color: meta.color,
+            entries: docs,
+            renderType: 'doc_download',
+          });
+          const reply = `📄 ${docs.length} document${docs.length === 1 ? 'o' : 'i'} trovat${docs.length === 1 ? 'o' : 'i'}`;
+          setLastReply(reply); addMessage('nebula', reply);
         }
 
       } else if (action.type === 'doc_query') {
-        const { searchDocuments, getDocumentsByType } = await import('../../vault/vaultService');
+        const { getByCategory: getAllDocs } = await import('../../vault/vaultService');
         const { aiDocumentQuery } = await import('../../core/aiParser');
-        const byType    = action.docType ? await getDocumentsByType(user.id, action.docType) : [];
-        const byKeyword = await searchDocuments(user.id, action.keyword.slice(0, 30));
-        const combined  = [...byType, ...byKeyword].filter((d, i, a) => a.findIndex(x => x.id === d.id) === i);
-        const reply = await aiDocumentQuery(text, combined);
+        // Semantic query: pass ALL documents and let the AI decide what's relevant
+        const allDocs = await getAllDocs(user.id, 'documents', 25);
+        const reply = await aiDocumentQuery(text, allDocs);
         setLastReply(reply.length > 80 ? reply.slice(0, 77) + '…' : reply);
         addMessage('nebula', reply);
 

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import {
@@ -9,23 +9,26 @@ import {
 } from 'recharts';
 import { useAlterStore } from '../../store/alterStore';
 import { deleteEntry } from '../../vault/vaultService';
+import { getDocumentDownloadUrl } from '../../import/documentStorage';
 import type { VaultEntry, WidgetData, RenderType } from '../../types';
 
 // ─── Render type inference ────────────────────────────────────
 export function inferRenderType(entries: VaultEntry[], category?: string): RenderType {
   if (category === 'calendar' || (!entries.length && category === 'calendar')) return 'timeline';
-  if (!entries.length) return 'list';
+  if (!entries.length) {
+    if (category === 'finance') return 'finance';
+    if (category === 'health') return 'chart';
+    if (category === 'psychology') return 'mood';
+    return 'list';
+  }
   const data = entries[0].data;
   if (data.is_event || (entries[0] as VaultEntry & { category?: string }).category === 'calendar') return 'timeline';
   if (data.type === 'mood') return 'mood';
   if (data.type === 'weight' || data.type === 'sleep' || data.type === 'water') return 'chart';
-  // Sport/activity data → bar chart
-  if (data.type === 'activity') return 'activity';
-  // Finance → pie if many distinct labels, otherwise stats
-  if (typeof data.amount === 'number') {
-    const labels = new Set(entries.map(e => e.data.label as string).filter(Boolean));
-    return labels.size >= 4 ? 'pie' : 'stats';
-  }
+  // Sport/activity data → workout dashboard
+  if (data.type === 'activity') return 'workout';
+  // Finance → finance dashboard
+  if (typeof data.amount === 'number') return 'finance';
   // Custom categories with numeric value → trend chart
   if (typeof data.value === 'number') return 'numeric';
   if (typeof data.note === 'string' && !data.score) return 'diary';
@@ -161,106 +164,185 @@ function EntryRow({ entry, color, label, value }: {
 // ─── Sub-renderers ────────────────────────────────────────────
 const PIE_PALETTE = ['#f87171','#fb923c','#fbbf24','#a78bfa','#60a5fa','#34d399','#f472b6','#a3e635'];
 
-function FinanceStats({ entries, color }: { entries: VaultEntry[]; color: string }) {
+// ─── Tab Bar ──────────────────────────────────────────────────
+function TabBar({ tabs, active, color, onChange }: {
+  tabs: string[]; active: string; color: string; onChange: (t: string) => void;
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.04)', paddingBottom: 10 }}>
+      {tabs.map(t => (
+        <button key={t} onClick={() => onChange(t)} style={{
+          padding: '4px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
+          fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 400,
+          background: active === t ? `${color}18` : 'transparent',
+          color: active === t ? color : '#3a3f52',
+          transition: 'all 0.2s',
+        }}>{t}</button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Finance Dashboard ────────────────────────────────────────
+function FinanceDashboard({ entries, color }: { entries: VaultEntry[]; color: string }) {
+  const [tab, setTab] = useState<'cashflow' | 'analisi'>('cashflow');
+
   const expenses = entries.filter(e => e.data.type === 'expense');
   const income   = entries.filter(e => e.data.type === 'income');
   const totalOut = expenses.reduce((s, e) => s + ((e.data.amount as number) ?? 0), 0);
-  const totalIn  = income.reduce((s, e)   => s + ((e.data.amount as number) ?? 0), 0);
+  const totalIn  = income.reduce((s, e)  => s + ((e.data.amount as number) ?? 0), 0);
+  const balance  = totalIn - totalOut;
+  const savings  = totalIn > 0 ? Math.round((balance / totalIn) * 100) : null;
 
-  // Group expenses by day for area chart
-  const dayMap = new Map<string, number>();
-  for (const e of [...expenses].reverse()) {
+  // Burn rate: avg spesa giornaliera × 30
+  const dayOfMonth = new Date().getDate();
+  const burnRate   = dayOfMonth > 0 ? (totalOut / dayOfMonth) * 30 : 0;
+
+  // Dual-line chart data
+  const incByDay: Map<string, number> = new Map();
+  const outByDay: Map<string, number> = new Map();
+  for (const e of [...entries].reverse()) {
     const day = new Date(e.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
-    dayMap.set(day, (dayMap.get(day) ?? 0) + ((e.data.amount as number) ?? 0));
+    if (e.data.type === 'income')  incByDay.set(day,  (incByDay.get(day)  ?? 0) + ((e.data.amount as number) ?? 0));
+    if (e.data.type === 'expense') outByDay.set(day, (outByDay.get(day) ?? 0) + ((e.data.amount as number) ?? 0));
   }
-  const chartData = Array.from(dayMap.entries()).map(([date, v]) => ({ date, v })).slice(-20);
-  const values    = chartData.map(d => d.v);
+  const allDays   = [...new Set([...incByDay.keys(), ...outByDay.keys()])].slice(-20);
+  const chartData = allDays.map(date => ({ date, entrate: incByDay.get(date) ?? 0, uscite: outByDay.get(date) ?? 0 }));
 
-  // Pie: expense breakdown by label
+  // Pie data
   const labelMap = new Map<string, number>();
   for (const e of expenses) {
     const lbl = (e.data.label as string) || 'altro';
     labelMap.set(lbl, (labelMap.get(lbl) ?? 0) + ((e.data.amount as number) ?? 0));
   }
-  const pieData = [...labelMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 7)
-    .map(([name, value]) => ({ name, value }));
+  const pieData = [...labelMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 7).map(([name, value]) => ({ name, value }));
+
+  const kpis = [
+    { label: 'Entrate',   value: `+€${totalIn.toFixed(0)}`,  clr: '#4ade80' },
+    { label: 'Uscite',    value: `-€${totalOut.toFixed(0)}`, clr: '#f87171' },
+    { label: 'Saldo',     value: `€${balance.toFixed(0)}`,   clr: balance >= 0 ? '#4ade80' : '#f87171' },
+    { label: 'Risparmio', value: savings != null ? `${savings}%` : '—', clr: '#f0c040' },
+  ];
 
   return (
     <div>
-      {/* Area chart over time */}
-      {chartData.length >= 2 && (
-        <div style={{ marginBottom: 14 }}>
-          <ResponsiveContainer width="100%" height={120}>
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="fingrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#f87171" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#f87171" stopOpacity={0}   />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="date" tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} width={32} />
-              <Tooltip
-                contentStyle={{ background: 'rgba(3,3,7,0.97)', border: '1px solid rgba(248,113,113,0.25)', borderRadius: 10, backdropFilter: 'blur(20px)' }}
-                labelStyle={{ color: '#6b7280', fontSize: 10 }}
-                itemStyle={{ color: '#f87171' }}
-                formatter={(v: number) => [`€${v.toFixed(2)}`, 'Spese']}
-              />
-              <Area type="monotone" dataKey="v" stroke="#f87171" strokeWidth={1.5} fill="url(#fingrad)"
-                dot={{ fill: '#f87171', r: 2, strokeWidth: 0 }} activeDot={{ r: 4, fill: '#f87171', strokeWidth: 0 }} />
-            </AreaChart>
-          </ResponsiveContainer>
-          <SurgicalInsight values={values} unit="€" category="finance" color="#f87171" />
-        </div>
-      )}
+      <TabBar tabs={['Cashflow', 'Analisi']} active={tab === 'cashflow' ? 'Cashflow' : 'Analisi'}
+        color={color} onChange={t => setTab(t === 'Cashflow' ? 'cashflow' : 'analisi')} />
 
-      {/* Stats row */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
-        <Stat label="Uscite"  value={`-€${totalOut.toFixed(2)}`} color="#f87171" />
-        <Stat label="Entrate" value={`+€${totalIn.toFixed(2)}`}  color="#4ade80" />
-        <Stat label="Netto"   value={`€${(totalIn - totalOut).toFixed(2)}`} color={color} />
-      </div>
-
-      {/* Pie breakdown (only when enough labels) */}
-      {pieData.length >= 3 && (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 9, color: '#3a3f52', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
-            Distribuzione spese
+      {tab === 'cashflow' && (
+        <div>
+          {/* KPI chips */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            {kpis.map(k => (
+              <div key={k.label} style={{
+                flex: 1, padding: '9px 10px', borderRadius: 10,
+                background: `${k.clr}08`, border: `1px solid ${k.clr}15`,
+              }}>
+                <div style={{ fontSize: 8, color: '#4b5268', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5 }}>{k.label}</div>
+                <div style={{ fontSize: 15, fontWeight: 100, color: k.clr }}>{k.value}</div>
+              </div>
+            ))}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <ResponsiveContainer width={110} height={110}>
-              <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={28} outerRadius={50} dataKey="value" strokeWidth={0}>
-                  {pieData.map((_, i) => <Cell key={i} fill={PIE_PALETTE[i % PIE_PALETTE.length]} fillOpacity={0.85} />)}
-                </Pie>
-                <Tooltip
-                  contentStyle={{ background: 'rgba(3,3,7,0.97)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, fontSize: 10 }}
-                  formatter={(v: number, _: string, entry: { name?: string }) => [`€${v.toFixed(2)}`, entry.name ?? '']}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {pieData.map((d, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: PIE_PALETTE[i % PIE_PALETTE.length], flexShrink: 0 }} />
-                  <span style={{ color: '#6b7280', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
-                  <span style={{ color: PIE_PALETTE[i % PIE_PALETTE.length], fontWeight: 500 }}>€{d.value.toFixed(0)}</span>
-                </div>
-              ))}
+
+          {/* Burn rate */}
+          {burnRate > 0 && (
+            <div style={{
+              marginBottom: 12, padding: '7px 12px', borderRadius: 8,
+              background: 'rgba(255,255,255,0.016)', borderLeft: '2px solid rgba(248,113,113,0.2)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              fontSize: 10, color: '#4b5268',
+            }}>
+              <span>Burn rate mensile proiettato</span>
+              <span style={{ color: '#f87171', fontWeight: 500 }}>€{burnRate.toFixed(0)}</span>
             </div>
+          )}
+
+          {/* Dual-line chart */}
+          {chartData.length >= 2 && (
+            <div style={{ marginBottom: 14 }}>
+              <ResponsiveContainer width="100%" height={130}>
+                <LineChart data={chartData}>
+                  <XAxis dataKey="date" tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} width={32} />
+                  <Tooltip
+                    contentStyle={{ background: 'rgba(3,3,7,0.97)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10 }}
+                    labelStyle={{ color: '#6b7280', fontSize: 10 }}
+                    formatter={(v: number, name: string) => [`€${v.toFixed(2)}`, name]}
+                  />
+                  <Line type="monotone" dataKey="entrate" name="Entrate" stroke="#4ade80" strokeWidth={1.5} dot={false} activeDot={{ r: 4, fill: '#4ade80', strokeWidth: 0 }} />
+                  <Line type="monotone" dataKey="uscite"  name="Uscite"  stroke="#f87171" strokeWidth={1.5} dot={false} activeDot={{ r: 4, fill: '#f87171', strokeWidth: 0 }} />
+                </LineChart>
+              </ResponsiveContainer>
+              <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
+                {[['#4ade80', 'Entrate'], ['#f87171', 'Uscite']].map(([c, l]) => (
+                  <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 9, color: '#4b5268' }}>
+                    <div style={{ width: 18, height: 1.5, background: c, borderRadius: 1 }} />{l}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Recent transactions */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 130, overflowY: 'auto' }}>
+            {entries.slice(0, 20).map(e => (
+              <EntryRow key={e.id} entry={e} color={color}
+                label={(e.data.label as string) ?? '—'}
+                value={`${e.data.type === 'income' ? '+' : '-'}€${(e.data.amount as number)?.toFixed(2) ?? '?'}`}
+              />
+            ))}
           </div>
         </div>
       )}
 
-      {/* Entry list */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 140, overflowY: 'auto' }}>
-        {entries.slice(0, 30).map((e) => (
-          <EntryRow key={e.id} entry={e} color={color}
-            label={(e.data.label as string) ?? '—'}
-            value={`${e.data.type === 'income' ? '+' : '-'}€${(e.data.amount as number)?.toFixed(2) ?? '?'}`}
-          />
-        ))}
-      </div>
+      {tab === 'analisi' && (
+        <div>
+          {/* Donut + legend */}
+          {pieData.length >= 2 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+              <ResponsiveContainer width={110} height={110}>
+                <PieChart>
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={28} outerRadius={50} dataKey="value" strokeWidth={0}>
+                    {pieData.map((_, i) => <Cell key={i} fill={PIE_PALETTE[i % PIE_PALETTE.length]} fillOpacity={0.88} />)}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{ background: 'rgba(3,3,7,0.97)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, fontSize: 10 }}
+                    formatter={(v: number, _: string, entry: { name?: string }) => [`€${v.toFixed(2)}`, entry.name ?? '']}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div style={{ flex: 1 }}>
+                {pieData.map((d, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, marginBottom: 4 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: PIE_PALETTE[i % PIE_PALETTE.length], flexShrink: 0 }} />
+                    <span style={{ color: '#6b7280', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                    <span style={{ color: PIE_PALETTE[i % PIE_PALETTE.length], fontWeight: 500 }}>€{d.value.toFixed(0)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Category bars */}
+          {pieData.length > 0 && totalOut > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {pieData.map((d, i) => {
+                const pct = (d.value / totalOut) * 100;
+                const c   = PIE_PALETTE[i % PIE_PALETTE.length];
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 9, color: '#4b5268', minWidth: 64, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                    <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,0.04)', borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: c, borderRadius: 2, boxShadow: `0 0 6px ${c}50` }} />
+                    </div>
+                    <span style={{ fontSize: 9, color: c, minWidth: 28, textAlign: 'right' }}>{pct.toFixed(0)}%</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -320,95 +402,266 @@ function HealthChart({ entries, color }: { entries: VaultEntry[]; color: string 
   );
 }
 
-// ─── Activity / Sport Chart ───────────────────────────────────
-function ActivityChart({ entries, color }: { entries: VaultEntry[]; color: string }) {
-  // Count by activity label
-  const typeMap = new Map<string, { count: number; total: number }>();
-  for (const e of entries) {
-    const lbl = (e.data.label as string)?.replace(/\d+([.,]\d+)?\s*(km|m|min|h)?\s*/gi, '').trim() || 'attività';
-    const key = lbl.slice(0, 20);
-    const prev = typeMap.get(key) ?? { count: 0, total: 0 };
-    typeMap.set(key, { count: prev.count + 1, total: prev.total + ((e.data.value as number) ?? 0) });
+// ─── Workout Dashboard ────────────────────────────────────────
+type MuscleId = 'chest' | 'shoulders' | 'biceps' | 'triceps' | 'core' | 'quads_glutes' | 'back';
+
+const MUSCLE_LABELS_WK: Record<MuscleId, string> = {
+  chest: 'Petto', shoulders: 'Spalle', biceps: 'Bicipiti',
+  triceps: 'Tricipiti', core: 'Core', quads_glutes: 'Gambe', back: 'Schiena',
+};
+
+const EXERCISE_TO_MUSCLE: Record<string, MuscleId> = {
+  'Panca piana': 'chest', 'Dips': 'chest', 'Push-up': 'chest', 'Cavi alti': 'chest',
+  'Shoulder press': 'shoulders', 'Military Press': 'shoulders', 'Alzate Laterali': 'shoulders',
+  'Bicipiti curl': 'biceps', 'Hammer curl': 'biceps', 'Flessioni': 'biceps',
+  'Tricipiti': 'triceps', 'Pushdown': 'triceps', 'French Press': 'triceps',
+  'Plank': 'core', 'Crunches': 'core', 'Russian Twist': 'core', 'Leg Raise': 'core',
+  'Squat': 'quads_glutes', 'Leg Press': 'quads_glutes', 'Hip Thrust': 'quads_glutes',
+  'Affondi': 'quads_glutes', 'Leg Extension': 'quads_glutes',
+  'Stacco': 'back', 'Trazione': 'back', 'Lat Machine': 'back', 'Rematore': 'back',
+};
+
+const WK_MUSCLES: MuscleId[] = ['chest', 'shoulders', 'biceps', 'triceps', 'core', 'quads_glutes', 'back'];
+
+function wkDaysDiff(iso: string) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((today.getTime() - new Date(iso).getTime()) / 86_400_000);
+}
+function wkFill(d: number)   { return d === 0 ? 'rgba(255,34,68,0.28)' : d === 1 ? 'rgba(255,136,0,0.20)' : d === 2 ? 'rgba(255,221,0,0.13)' : 'rgba(255,255,255,0.03)'; }
+function wkStroke(d: number) { return d === 0 ? 'rgba(255,34,68,0.90)' : d === 1 ? 'rgba(255,136,0,0.70)' : d === 2 ? 'rgba(255,221,0,0.55)' : 'rgba(255,255,255,0.10)'; }
+function wkGlow(d: number)   { return d === 0 ? 'drop-shadow(0 0 8px rgba(255,34,68,0.75))' : d === 1 ? 'drop-shadow(0 0 6px rgba(255,136,0,0.55))' : d === 2 ? 'drop-shadow(0 0 4px rgba(255,221,0,0.4))' : 'none'; }
+
+function BodySilhouette({ fills, strokes, glows, showBack }: {
+  fills: Record<MuscleId, string>; strokes: Record<MuscleId, string>;
+  glows: Record<MuscleId, string>; showBack: boolean;
+}) {
+  const sw = 0.7;
+  const tr = 'fill 0.9s ease-in-out, stroke 0.9s ease-in-out';
+  return (
+    <svg viewBox="0 0 120 300" style={{ width: '100%', height: 'auto' }} xmlns="http://www.w3.org/2000/svg">
+      {/* Head */}
+      <path d="M 43,20 C 43,4 77,4 77,20 C 77,36 72,44 60,44 C 48,44 43,36 43,20 Z" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.10)" strokeWidth={sw} />
+      <path d="M 55,44 L 65,44 L 64,54 L 56,54 Z" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.04)" strokeWidth="0.3" />
+      {/* Shoulders */}
+      <g style={{ filter: glows.shoulders }}>
+        <path d="M 44,57 C 38,52 22,59 18,72 C 15,81 21,89 30,88 C 38,87 44,81 44,73 Z" fill={fills.shoulders} stroke={strokes.shoulders} strokeWidth={sw} style={{ transition: tr }} />
+        <path d="M 76,57 C 82,52 98,59 102,72 C 105,81 99,89 90,88 C 82,87 76,81 76,73 Z" fill={fills.shoulders} stroke={strokes.shoulders} strokeWidth={sw} style={{ transition: tr }} />
+      </g>
+      {/* Chest / Back */}
+      {!showBack ? (
+        <g style={{ filter: glows.chest }}>
+          <path d="M 44,57 C 44,75 43,108 46,120 L 60,118 L 60,57 Z" fill={fills.chest} stroke={strokes.chest} strokeWidth={sw} strokeLinejoin="round" style={{ transition: tr }} />
+          <path d="M 76,57 C 76,75 77,108 74,120 L 60,118 L 60,57 Z" fill={fills.chest} stroke={strokes.chest} strokeWidth={sw} strokeLinejoin="round" style={{ transition: tr }} />
+          <line x1="60" y1="59" x2="60" y2="118" stroke="rgba(255,255,255,0.06)" strokeWidth="0.4" />
+        </g>
+      ) : (
+        <g style={{ filter: glows.back }}>
+          <path d="M 44,57 C 40,65 38,100 42,122 L 60,120 L 60,57 Z" fill={fills.back} stroke={strokes.back} strokeWidth={sw} strokeLinejoin="round" style={{ transition: tr }} />
+          <path d="M 76,57 C 80,65 82,100 78,122 L 60,120 L 60,57 Z" fill={fills.back} stroke={strokes.back} strokeWidth={sw} strokeLinejoin="round" style={{ transition: tr }} />
+          <line x1="60" y1="57" x2="60" y2="120" stroke="rgba(255,255,255,0.06)" strokeWidth="0.4" strokeDasharray="2,1.5" />
+        </g>
+      )}
+      {/* Biceps */}
+      <g style={{ filter: glows.biceps }}>
+        <path d="M 21,71 C 16,75 14,95 17,105 C 19,111 29,111 35,105 C 38,95 37,75 32,71 Z" fill={fills.biceps} stroke={strokes.biceps} strokeWidth={sw} style={{ transition: tr }} />
+        <path d="M 99,71 C 104,75 106,95 103,105 C 101,111 91,111 85,105 C 82,95 83,75 88,71 Z" fill={fills.biceps} stroke={strokes.biceps} strokeWidth={sw} style={{ transition: tr }} />
+      </g>
+      {/* Triceps */}
+      <g style={{ filter: glows.triceps }}>
+        <path d="M 17,95 C 14,101 14,119 17,126 C 20,130 29,130 33,126 C 36,119 36,101 35,95 Z" fill={fills.triceps} stroke={strokes.triceps} strokeWidth={sw} style={{ transition: tr }} />
+        <path d="M 103,95 C 106,101 106,119 103,126 C 100,130 91,130 87,126 C 84,119 84,101 85,95 Z" fill={fills.triceps} stroke={strokes.triceps} strokeWidth={sw} style={{ transition: tr }} />
+      </g>
+      {/* Core */}
+      <g style={{ filter: glows.core }}>
+        <path d="M 46,120 L 74,120 L 74,158 C 74,164 68,168 60,168 C 52,168 46,164 46,158 Z" fill={fills.core} stroke={strokes.core} strokeWidth={sw} style={{ transition: tr }} />
+        {[128, 138, 148].map(y => <line key={y} x1="51" y1={y} x2="69" y2={y} stroke="rgba(255,255,255,0.04)" strokeWidth="0.4" />)}
+        <line x1="60" y1="120" x2="60" y2="158" stroke="rgba(255,255,255,0.04)" strokeWidth="0.4" />
+      </g>
+      {/* Quads / Glutes */}
+      <g style={{ filter: glows.quads_glutes }}>
+        <path d="M 46,158 C 44,168 42,200 43,228 C 44,240 52,244 58,244 C 62,244 64,240 64,232 L 60,168 Z" fill={fills.quads_glutes} stroke={strokes.quads_glutes} strokeWidth={sw} style={{ transition: tr }} />
+        <path d="M 74,158 C 76,168 78,200 77,228 C 76,240 68,244 62,244 C 58,244 56,240 56,232 L 60,168 Z" fill={fills.quads_glutes} stroke={strokes.quads_glutes} strokeWidth={sw} style={{ transition: tr }} />
+      </g>
+      {/* Calves (decorative) */}
+      <g fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.07)" strokeWidth={sw}>
+        <path d="M 43,228 C 41,240 40,265 42,278 C 44,286 52,288 56,284 C 58,272 58,248 58,240 Z" />
+        <path d="M 77,228 C 79,240 80,265 78,278 C 76,286 68,288 64,284 C 62,272 62,248 62,240 Z" />
+      </g>
+    </svg>
+  );
+}
+
+function TrainingCalendar({ entries, color }: { entries: VaultEntry[]; color: string }) {
+  const trainedDays = new Set(entries.map(e => new Date(e.created_at).toISOString().slice(0, 10)));
+  const today = new Date();
+  const days = Array.from({ length: 35 }, (_, i) => {
+    const d = new Date(today); d.setDate(d.getDate() - (34 - i));
+    const iso = d.toISOString().slice(0, 10);
+    return { iso, trained: trainedDays.has(iso), label: d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) };
+  });
+  const thisWeek  = days.slice(-7).filter(d => d.trained).length;
+  const thisMonth = days.filter(d => d.trained).length;
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+        <Stat label="Questa settimana" value={`${thisWeek}x`} color={color} />
+        <Stat label="Ultimi 35 giorni" value={`${thisMonth}x`} color={color} />
+      </div>
+      <div style={{ fontSize: 8, color: '#3a3f52', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>Calendario</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
+        {days.map((d, i) => (
+          <div key={i} title={d.label} style={{
+            aspectRatio: '1', borderRadius: 3,
+            background: d.trained ? color : 'rgba(255,255,255,0.03)',
+            boxShadow: d.trained ? `0 0 5px ${color}50` : 'none',
+          }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PRSection({ entries, color }: { entries: VaultEntry[]; color: string }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  interface PREntry { value: number; unit: string; history: { date: string; value: number }[] }
+  const prMap = new Map<string, PREntry>();
+  for (const e of [...entries].sort((a, b) => a.created_at.localeCompare(b.created_at))) {
+    const label = (e.data.label as string) ?? '';
+    const value = (e.data.value as number) ?? 0;
+    if (!label || !value) continue;
+    const unit = (e.data.unit as string) ?? 'kg';
+    const pt   = { date: new Date(e.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }), value };
+    const ex   = prMap.get(label);
+    if (!ex) { prMap.set(label, { value, unit, history: [pt] }); }
+    else { ex.history.push(pt); if (value > ex.value) ex.value = value; }
   }
-  const typeData = [...typeMap.entries()]
-    .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, 8)
-    .map(([name, { count }]) => ({ name, count }));
 
-  // Timeline if has numeric values (km, min, etc.)
-  const hasNumeric = entries.some(e => typeof e.data.value === 'number' && (e.data.value as number) > 0);
-  const timelineData = hasNumeric
-    ? [...entries].reverse().slice(-20).map(e => ({
-        date: new Date(e.created_at).toLocaleDateString('it-IT', { month: '2-digit', day: '2-digit' }),
-        v: (e.data.value as number) ?? 1,
-      }))
-    : [];
+  const byMuscle = new Map<MuscleId, Array<{ exercise: string } & PREntry>>();
+  for (const [exercise, pr] of prMap.entries()) {
+    const muscle = EXERCISE_TO_MUSCLE[exercise];
+    if (!muscle) continue;
+    if (!byMuscle.has(muscle)) byMuscle.set(muscle, []);
+    byMuscle.get(muscle)!.push({ exercise, ...pr });
+  }
 
-  const unit = (entries[0]?.data.label as string ?? '').match(/\d+(km|m|min|h)/i)?.[1] ?? '';
+  if (byMuscle.size === 0) {
+    return <p style={{ color: '#3a3f52', fontSize: 12, textAlign: 'center', padding: '20px 0' }}>Registra esercizi con un peso per i massimali</p>;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {Array.from(byMuscle.entries()).map(([muscle, exercises]) => (
+        <div key={muscle}>
+          <div style={{ fontSize: 8, color: '#3a3f52', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>
+            {MUSCLE_LABELS_WK[muscle]}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {exercises.map(ex => {
+              const isExp = expanded === ex.exercise;
+              const pts   = ex.history.slice(-8);
+              const W = 220, H = 50, P = 6;
+              const vals = pts.map(p => p.value);
+              const min  = Math.min(...vals), max = Math.max(...vals), range = max - min || 1;
+              const xs   = pts.map((_, i) => P + ((W - P * 2) * i) / Math.max(pts.length - 1, 1));
+              const ys   = pts.map(p => H - P - ((p.value - min) / range) * (H - P * 2));
+              const poly = xs.map((x, i) => `${x},${ys[i]}`).join(' ');
+              const gradId = `prg-${ex.exercise.replace(/\s+/g, '')}`;
+              return (
+                <div key={ex.exercise}>
+                  <div onClick={() => setExpanded(isExp ? null : ex.exercise)} style={{
+                    display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                    padding: '7px 10px', borderRadius: 8,
+                    background: isExp ? `${color}0d` : 'rgba(255,255,255,0.018)',
+                    borderLeft: `2px solid ${color}${isExp ? '60' : '25'}`,
+                    transition: 'all 0.15s',
+                  }}>
+                    <span style={{ flex: 1, fontSize: 11, color: '#b0bcd4', fontWeight: 300 }}>{ex.exercise}</span>
+                    <span style={{ fontSize: 13, color, fontWeight: 400 }}>{ex.value} {ex.unit}</span>
+                  </div>
+                  {isExp && pts.length >= 2 && (
+                    <div style={{ padding: '6px 10px 4px', background: `${color}05`, borderRadius: '0 0 8px 8px', marginTop: -2 }}>
+                      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 50 }} preserveAspectRatio="none">
+                        <defs>
+                          <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
+                            <stop offset="0%" stopColor={`${color}55`} />
+                            <stop offset="100%" stopColor={`${color}00`} />
+                          </linearGradient>
+                        </defs>
+                        <polygon points={`${xs[0]},${H} ${poly} ${xs[xs.length - 1]},${H}`} fill={`url(#${gradId})`} />
+                        <polyline points={poly} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        {xs.map((x, i) => <circle key={i} cx={x} cy={ys[i]} r="2.5" fill={color} />)}
+                      </svg>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WorkoutDashboard({ entries, color }: { entries: VaultEntry[]; color: string }) {
+  const [tab, setTab]           = useState<'corpo' | 'massimali'>('corpo');
+  const [showBack, setShowBack] = useState(false);
+
+  // Last trained per muscle group
+  const lastTrained = new Map<MuscleId, string>();
+  for (const e of entries) {
+    const label  = (e.data.label as string) ?? '';
+    const muscle = EXERCISE_TO_MUSCLE[label];
+    if (!muscle) continue;
+    const prev = lastTrained.get(muscle);
+    if (!prev || e.created_at > prev) lastTrained.set(muscle, e.created_at);
+  }
+
+  const fills   = Object.fromEntries(WK_MUSCLES.map(m => { const d = lastTrained.has(m) ? wkDaysDiff(lastTrained.get(m)!) : 999; return [m, wkFill(d)];   })) as Record<MuscleId, string>;
+  const strokes = Object.fromEntries(WK_MUSCLES.map(m => { const d = lastTrained.has(m) ? wkDaysDiff(lastTrained.get(m)!) : 999; return [m, wkStroke(d)]; })) as Record<MuscleId, string>;
+  const glows   = Object.fromEntries(WK_MUSCLES.map(m => { const d = lastTrained.has(m) ? wkDaysDiff(lastTrained.get(m)!) : 999; return [m, wkGlow(d)];   })) as Record<MuscleId, string>;
 
   return (
     <div>
-      {/* Trend over time (if numeric) */}
-      {timelineData.length >= 3 && (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 9, color: '#3a3f52', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
-            Progressione nel tempo
+      <TabBar tabs={['Corpo', 'Massimali']} active={tab === 'corpo' ? 'Corpo' : 'Massimali'}
+        color={color} onChange={t => setTab(t === 'Corpo' ? 'corpo' : 'massimali')} />
+
+      {tab === 'corpo' && (
+        <div>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', marginBottom: 16 }}>
+            {/* Silhouette */}
+            <div style={{ position: 'relative', flexShrink: 0, width: 100 }}>
+              <BodySilhouette fills={fills} strokes={strokes} glows={glows} showBack={showBack} />
+              <button onClick={() => setShowBack(b => !b)} style={{
+                position: 'absolute', bottom: -2, left: '50%', transform: 'translateX(-50%)',
+                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 12, padding: '3px 10px', cursor: 'pointer',
+                fontSize: 8, color: '#4b5268', letterSpacing: '0.08em',
+              }}>{showBack ? 'FRONT' : 'BACK'}</button>
+            </div>
+            {/* Legend + recenti */}
+            <div style={{ flex: 1, paddingTop: 4 }}>
+              <div style={{ fontSize: 8, color: '#3a3f52', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>Recency</div>
+              {([['rgba(255,34,68,0.7)', 'Oggi'], ['rgba(255,136,0,0.6)', 'Ieri'], ['rgba(255,221,0,0.5)', '2 giorni fa'], ['rgba(255,255,255,0.12)', 'Non allenato']] as [string, string][]).map(([c, l]) => (
+                <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5, fontSize: 10, color: '#4b5268' }}>
+                  <div style={{ width: 8, height: 8, borderRadius: 2, background: c }} />{l}
+                </div>
+              ))}
+              <div style={{ marginTop: 10, fontSize: 8, color: '#3a3f52', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>Ultimi esercizi</div>
+              {entries.slice(0, 5).map(e => (
+                <div key={e.id} style={{ fontSize: 10, color: '#4b5268', marginBottom: 3, display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{(e.data.label as string) ?? '—'}</span>
+                  {e.data.value ? <span style={{ color }}>{String(e.data.value)}{String(e.data.unit ?? 'kg')}</span> : null}
+                </div>
+              ))}
+            </div>
           </div>
-          <ResponsiveContainer width="100%" height={120}>
-            <AreaChart data={timelineData}>
-              <defs>
-                <linearGradient id="actgrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor={color} stopOpacity={0.35} />
-                  <stop offset="95%" stopColor={color} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="date" tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} width={28} />
-              <Tooltip
-                contentStyle={{ background: 'rgba(3,3,7,0.97)', border: `1px solid ${color}25`, borderRadius: 10 }}
-                labelStyle={{ color: '#6b7280', fontSize: 10 }}
-                itemStyle={{ color }}
-                formatter={(v: number) => [`${v}${unit}`, '']}
-              />
-              <Area type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} fill="url(#actgrad)"
-                dot={{ fill: color, r: 2, strokeWidth: 0 }} activeDot={{ r: 4, fill: color, strokeWidth: 0 }}
-                style={{ filter: `drop-shadow(0 0 4px ${color}80)` }} />
-            </AreaChart>
-          </ResponsiveContainer>
+          <TrainingCalendar entries={entries} color={color} />
         </div>
       )}
 
-      {/* Bar chart by activity type */}
-      {typeData.length >= 2 && (
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 9, color: '#3a3f52', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
-            Frequenza per attività
-          </div>
-          <ResponsiveContainer width="100%" height={100}>
-            <BarChart data={typeData} layout="vertical" barSize={8}>
-              <XAxis type="number" tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="name" tick={{ fill: '#6b7280', fontSize: 9 }} axisLine={false} tickLine={false} width={80} />
-              <Tooltip
-                contentStyle={{ background: 'rgba(3,3,7,0.97)', border: `1px solid ${color}25`, borderRadius: 8 }}
-                labelStyle={{ color: '#6b7280', fontSize: 10 }}
-                itemStyle={{ color }}
-                formatter={(v: number) => [`${v}x`, 'sessioni']}
-              />
-              <Bar dataKey="count" fill={color} radius={[0, 3, 3, 0]} fillOpacity={0.75}
-                style={{ filter: `drop-shadow(0 0 3px ${color}60)` }} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 110, overflowY: 'auto' }}>
-        {entries.slice(0, 15).map((e) => (
-          <EntryRow key={e.id} entry={e} color={color}
-            label={(e.data.label as string) || 'attività'}
-            value={e.data.value ? `${e.data.value}${unit}` : new Date(e.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
-          />
-        ))}
-      </div>
+      {tab === 'massimali' && <PRSection entries={entries} color={color} />}
     </div>
   );
 }
@@ -805,6 +1058,84 @@ function NexusView({ entries }: { entries: VaultEntry[] }) {
   );
 }
 
+// ─── Document Download List ────────────────────────────────────
+function DocDownloadList({ entries, color }: { entries: VaultEntry[]; color: string }) {
+  const [loading, setLoading] = useState<Record<string, boolean>>({});
+
+  const handleDownload = async (entry: VaultEntry) => {
+    const d = entry.data as Record<string, unknown>;
+    const path = d.storagePath as string | undefined;
+    const filename = d.filename as string | undefined;
+    if (!path) return;
+    setLoading(prev => ({ ...prev, [entry.id]: true }));
+    try {
+      const url = await getDocumentDownloadUrl(path, filename);
+      if (url) window.open(url, '_blank');
+    } finally {
+      setLoading(prev => ({ ...prev, [entry.id]: false }));
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {entries.map((entry, i) => {
+        const d = entry.data as Record<string, unknown>;
+        const label    = (d.docTypeLabel as string) ?? (d.docType as string) ?? 'Documento';
+        const filename = (d.filename as string) ?? '';
+        const date     = new Date(entry.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' });
+        const hasFile  = !!d.storagePath;
+        const isLoading = loading[entry.id];
+
+        return (
+          <div key={entry.id} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '9px 12px',
+            background: 'rgba(255,255,255,0.025)',
+            border: '1px solid rgba(255,255,255,0.055)',
+            borderRadius: 8,
+          }}>
+            <span style={{
+              fontSize: 9, color: 'rgba(255,255,255,0.18)',
+              fontVariantNumeric: 'tabular-nums', minWidth: 14,
+              letterSpacing: '0.04em',
+            }}>
+              {i + 1}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.72)', fontWeight: 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {filename || label}
+              </div>
+              <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.25)', marginTop: 2, letterSpacing: '0.04em' }}>
+                {label} · {date}
+              </div>
+            </div>
+            {hasFile && (
+              <button
+                onClick={() => handleDownload(entry)}
+                disabled={isLoading}
+                style={{
+                  background: isLoading ? 'rgba(255,255,255,0.04)' : `${color}18`,
+                  border: `1px solid ${color}30`,
+                  borderRadius: 6,
+                  padding: '4px 10px',
+                  fontSize: 10, fontWeight: 600,
+                  color: isLoading ? 'rgba(255,255,255,0.2)' : color,
+                  cursor: isLoading ? 'default' : 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.15s',
+                  letterSpacing: '0.06em',
+                }}
+              >
+                {isLoading ? '…' : '↓ Scarica'}
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Main Widget ──────────────────────────────────────────────
 export default function PolymorphicWidget() {
   const { activeWidget, setActiveWidget } = useAlterStore();
@@ -892,16 +1223,16 @@ export default function PolymorphicWidget() {
             }}>
               Nessun dato ancora.
             </p>
-          ) : activeWidget.renderType === 'stats'    ? <FinanceStats      entries={activeWidget.entries} color={activeWidget.color} />
-          : activeWidget.renderType === 'pie'      ? <PieRenderer       entries={activeWidget.entries} color={activeWidget.color} />
-          : activeWidget.renderType === 'chart'    ? <HealthChart       entries={activeWidget.entries} color={activeWidget.color} />
-          : activeWidget.renderType === 'activity' ? <ActivityChart     entries={activeWidget.entries} color={activeWidget.color} />
-          : activeWidget.renderType === 'numeric'  ? <NumericChart      entries={activeWidget.entries} color={activeWidget.color} label={activeWidget.label} />
-          : activeWidget.renderType === 'mood'     ? <MoodChart         entries={activeWidget.entries} color={activeWidget.color} />
-          : activeWidget.renderType === 'diary'    ? <DiaryList         entries={activeWidget.entries} color={activeWidget.color} />
-          : activeWidget.renderType === 'timeline' ? <CalendarTimeline  entries={activeWidget.entries} color={activeWidget.color} />
-          : activeWidget.renderType === 'insight'  ? <NebulaInsight     entries={activeWidget.entries} color={activeWidget.color} />
-          : activeWidget.renderType === 'nexus'    ? <NexusView         entries={activeWidget.entries} />
+          ) : activeWidget.renderType === 'finance'     ? <FinanceDashboard  entries={activeWidget.entries} color={activeWidget.color} />
+          : activeWidget.renderType === 'workout'     ? <WorkoutDashboard  entries={activeWidget.entries} color={activeWidget.color} />
+          : activeWidget.renderType === 'chart'       ? <HealthChart       entries={activeWidget.entries} color={activeWidget.color} />
+          : activeWidget.renderType === 'numeric'     ? <NumericChart      entries={activeWidget.entries} color={activeWidget.color} label={activeWidget.label} />
+          : activeWidget.renderType === 'mood'        ? <MoodChart         entries={activeWidget.entries} color={activeWidget.color} />
+          : activeWidget.renderType === 'diary'       ? <DiaryList         entries={activeWidget.entries} color={activeWidget.color} />
+          : activeWidget.renderType === 'timeline'    ? <CalendarTimeline  entries={activeWidget.entries} color={activeWidget.color} />
+          : activeWidget.renderType === 'insight'     ? <NebulaInsight     entries={activeWidget.entries} color={activeWidget.color} />
+          : activeWidget.renderType === 'nexus'       ? <NexusView         entries={activeWidget.entries} />
+          : activeWidget.renderType === 'doc_download'? <DocDownloadList   entries={activeWidget.entries} color={activeWidget.color} />
           : <GenericList entries={activeWidget.entries} color={activeWidget.color} />}
         </motion.div>
         )}

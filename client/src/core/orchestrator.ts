@@ -2,24 +2,35 @@ import { localParse } from './localParser';
 import { aiParse }   from './aiParser';
 import type { ParsedIntent } from '../types';
 
-// ── Document retrieval / query patterns ──────────────────────
-const DOC_RETRIEVE_PATTERN = /\b(carta\s*d[i']?\s*identit|codice\s*fiscale|passaporto|patente|ci\b|cf\b)/i;
-const DOC_LIST_PATTERN     = /^(mostrami|dammi|cerca|trova|recupera|restituiscimi|apri|elenca)\s+(i\s+miei\s+|tutti\s+i\s+)?documenti?/i;
-const DOC_QUERY_PATTERN    = /\b(bolletta|fattura|contratto|ricevuta|estratto\s*conto|documento\s+medico|referto)\b.*(di|del|della|per|a)\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre|\d{4})/i;
-const DOC_CONTENT_PATTERN  = /cosa\s+(diceva|c[''è]\s+scritto|c[''è])\s+(nel|nella|sul|sulla|il|la)\s+(contratto|bolletta|fattura|documento|referto)/i;
+// ── Document patterns ─────────────────────────────────────────
+// DOC_LIST: "mostrami tutti i miei documenti"
+const DOC_LIST_PATTERN = /^(mostrami|dammi|cerca|trova|recupera|restituiscimi|apri|elenca)\s+(i\s+miei\s+|tutti\s+i\s+)?documenti?/i;
 
+// DOC_FETCH: explicit download/retrieve intent for any document type
+const DOC_FETCH_PATTERN = /^(restituiscimi|girami|scarica|scaricami|dammi|mostrami|fammi\s+vedere|fammi\s+scaricare|voglio)\b.+\b(busta\s*paga|cedolino|bolletta|bollette|fattura|contratto|ricevuta|referto|carta\s*d[i']?\s*identit|documento|passaporto|patente|polizza|multa)/i;
+
+// DOC_QUESTION: any semantic question about document content — AI decides what's relevant
+const DOC_QUESTION_PATTERN = /\b(bolletta|fattura|contratto|ricevuta|busta\s*paga|cedolino|referto|analisi\s+del\s+sangue|multa|verbale|polizza|assicurazion|dichiarazione\s*redditi|730|f24|estratto\s*conto|carta\s*d[i']?\s*identit|passaporto|patente|stipendio|retribuzione|quanto\s+ho\s+(preso|pagato|guadagnato|percepito)|cosa\s+(dice|diceva|c[''è])\s+(il|la|nel|nella))\b/i;
+
+function extractYearFromQuery(text: string): number | null {
+  const m = text.match(/\b(20\d{2})\b/);
+  return m ? parseInt(m[1]) : null;
+}
+
+// Used only for DOC_FETCH download requests to pre-filter by stored docType
 function extractDocTypeFromQuery(text: string): string | null {
   const t = text.toLowerCase();
-  if (/carta\s*d[i']?\s*identit|ci\b/.test(t)) return 'identity';
-  if (/codice\s*fiscale|cf\b/.test(t))          return 'identity';
-  if (/passaporto/.test(t))                      return 'identity';
-  if (/patente/.test(t))                         return 'identity';
-  if (/bolletta/.test(t))                        return 'utility_bill';
-  if (/estratto\s*conto/.test(t))               return 'bank_statement';
-  if (/contratto/.test(t))                       return 'contract';
-  if (/fattura/.test(t))                         return 'invoice';
-  if (/ricevuta/.test(t))                        return 'receipt';
-  if (/referto|medico/.test(t))                  return 'medical';
+  if (/busta\s*paga|cedolino|stipendio|retribuzione/.test(t)) return 'payslip';
+  if (/bolletta/.test(t))          return 'utility_bill';
+  if (/estratto\s*conto/.test(t))  return 'bank_statement';
+  if (/contratto/.test(t))         return 'contract';
+  if (/fattura/.test(t))           return 'invoice';
+  if (/ricevuta/.test(t))          return 'receipt';
+  if (/referto|medico/.test(t))    return 'medical_report';
+  if (/multa|verbale/.test(t))     return 'fine';
+  if (/polizza|assicurazion/.test(t)) return 'insurance';
+  if (/730|f24|irpef|dichiarazione/.test(t)) return 'tax';
+  if (/carta\s*d[i']?\s*identit|passaporto|patente/.test(t)) return 'identity';
   return null;
 }
 
@@ -125,7 +136,7 @@ export type OrchestratorAction =
   | { type: 'analyse';      raw: string }
   | { type: 'nexus';        raw: string; catA: string | null; catB: string | null }
   | { type: 'doc_list';     raw: string }
-  | { type: 'doc_retrieve'; raw: string; docType: string | null }
+  | { type: 'doc_retrieve'; raw: string; docType: string | null; year: number | null; download: boolean }
   | { type: 'doc_query';    raw: string; docType: string | null; keyword: string }
   | { type: 'unknown';      raw: string };
 
@@ -142,14 +153,11 @@ export async function orchestrate(
   if (DOC_LIST_PATTERN.test(trimmed))
     return { type: 'doc_list', raw: trimmed };
 
-  if (DOC_RETRIEVE_PATTERN.test(trimmed))
-    return { type: 'doc_retrieve', raw: trimmed, docType: extractDocTypeFromQuery(trimmed) };
+  if (DOC_FETCH_PATTERN.test(trimmed))
+    return { type: 'doc_retrieve', raw: trimmed, docType: extractDocTypeFromQuery(trimmed), year: extractYearFromQuery(trimmed), download: true };
 
-  if (DOC_CONTENT_PATTERN.test(trimmed))
-    return { type: 'doc_query', raw: trimmed, docType: extractDocTypeFromQuery(trimmed), keyword: trimmed };
-
-  if (DOC_QUERY_PATTERN.test(trimmed))
-    return { type: 'doc_query', raw: trimmed, docType: extractDocTypeFromQuery(trimmed), keyword: trimmed };
+  if (DOC_QUESTION_PATTERN.test(trimmed))
+    return { type: 'doc_query', raw: trimmed, docType: null, keyword: trimmed };
 
   // ── Special commands ─────────────────────────────────────
   if (HELP_TRIGGERS.some(h => lower === h || lower.startsWith(h)))

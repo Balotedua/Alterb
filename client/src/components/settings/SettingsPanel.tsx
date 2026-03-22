@@ -7,6 +7,39 @@ import type { BankTransaction } from '../../import/bankCsvImport';
 import { importAppleHealthXml, importHealthConnectJson } from '../../import/healthImport';
 import { getAdminStats, getLastActiveUsers } from '../../vault/vaultService';
 import type { AdminStats, ActiveUser } from '../../vault/vaultService';
+import { supabase } from '../../config/supabase';
+
+interface BugTicket {
+  id: string;
+  created_at: string;
+  user_description: string;
+  type: 'bug' | 'improvement';
+  status: string;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  pending_review: 'In attesa',
+  open: 'Aperto',
+  in_progress: 'In corso',
+  resolved: 'Risolto',
+  wont_fix: 'Non fix',
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  pending_review: '#f0c040',
+  open: '#a78bfa',
+  in_progress: '#40e0d0',
+  resolved: '#4ade80',
+  wont_fix: '#f08080',
+};
+
+const STATUS_FLOW: Record<string, string> = {
+  pending_review: 'open',
+  open: 'in_progress',
+  in_progress: 'resolved',
+  resolved: 'wont_fix',
+  wont_fix: 'pending_review',
+};
 
 const THEMES: { id: Theme; label: string; desc: string; preview: string[] }[] = [
   {
@@ -503,17 +536,29 @@ function AdminSection() {
   const [pwError, setPwError] = useState(false);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<ActiveUser[]>([]);
+  const [bugs, setBugs] = useState<BugTicket[]>([]);
   const [loading, setLoading] = useState(false);
+  const [activeAdminTab, setActiveAdminTab] = useState<'consumi' | 'ticket'>('consumi');
 
   useEffect(() => {
     if (!unlocked) return;
     setLoading(true);
-    Promise.all([getAdminStats(), getLastActiveUsers()]).then(([s, u]) => {
+    Promise.all([
+      getAdminStats(),
+      getLastActiveUsers(),
+      supabase.from('bug_reports').select('id, created_at, user_description, type, status').order('created_at', { ascending: false }).limit(100),
+    ]).then(([s, u, { data: bugData }]) => {
       setStats(s);
       setUsers(u);
+      setBugs(bugData ?? []);
       setLoading(false);
     });
   }, [unlocked]);
+
+  async function updateTicketStatus(id: string, newStatus: string) {
+    await supabase.from('bug_reports').update({ status: newStatus }).eq('id', id);
+    setBugs(prev => prev.map(b => b.id === id ? { ...b, status: newStatus } : b));
+  }
 
   function tryUnlock() {
     if (pwInput === ADMIN_PASSWORD) {
@@ -618,6 +663,65 @@ function AdminSection() {
                 <div style={{ fontSize: 11, color: 'var(--text-dim)', padding: '8px 0' }}>Caricamento...</div>
               ) : (
                 <div>
+                  {/* Admin tabs */}
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+                    {(['consumi', 'ticket'] as const).map(tab => (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveAdminTab(tab)}
+                        style={{
+                          flex: 1, padding: '5px 0', fontSize: 10, fontWeight: 600,
+                          borderRadius: 7, border: '1px solid', cursor: 'pointer',
+                          background: activeAdminTab === tab ? 'rgba(167,139,250,0.1)' : 'transparent',
+                          borderColor: activeAdminTab === tab ? 'rgba(167,139,250,0.3)' : 'rgba(255,255,255,0.07)',
+                          color: activeAdminTab === tab ? '#a78bfa' : 'var(--text-dim)',
+                          letterSpacing: '0.1em', textTransform: 'uppercase',
+                        }}
+                      >
+                        {tab === 'consumi' ? '⬡ Consumi' : `⚡ Ticket (${bugs.length})`}
+                      </button>
+                    ))}
+                  </div>
+
+                  {activeAdminTab === 'ticket' ? (
+                    <div>
+                      {bugs.length === 0 ? (
+                        <div style={{ fontSize: 11, color: 'var(--text-dim)', padding: '8px 0' }}>Nessun ticket.</div>
+                      ) : bugs.map(bug => (
+                        <div key={bug.id} style={{
+                          background: 'rgba(255,255,255,0.02)',
+                          border: '1px solid rgba(255,255,255,0.06)',
+                          borderRadius: 10, padding: '10px 12px', marginBottom: 7,
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontSize: 10, color: bug.type === 'bug' ? '#f0c040' : '#40e0d0', fontWeight: 700 }}>
+                                {bug.type === 'bug' ? '⚠ BUG' : '✦ IDEA'}
+                              </span>
+                              <span style={{ fontSize: 9.5, color: 'var(--text-dim)' }}>
+                                {new Date(bug.created_at).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => updateTicketStatus(bug.id, STATUS_FLOW[bug.status] ?? 'open')}
+                              style={{
+                                fontSize: 9.5, fontWeight: 700, padding: '2px 8px', borderRadius: 5,
+                                border: 'none', cursor: 'pointer',
+                                background: `${STATUS_COLORS[bug.status] ?? '#a78bfa'}22`,
+                                color: STATUS_COLORS[bug.status] ?? '#a78bfa',
+                              }}
+                            >
+                              {STATUS_LABELS[bug.status] ?? bug.status}
+                            </button>
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text)', opacity: 0.8, lineHeight: 1.5 }}>
+                            {bug.user_description.slice(0, 160)}{bug.user_description.length > 160 ? '…' : ''}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                  <div>
                   {/* DB Stats */}
                   <div style={{ marginBottom: 14 }}>
                     <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.14em', color: 'rgba(167,139,250,0.6)', marginBottom: 8 }}>
@@ -687,6 +791,8 @@ function AdminSection() {
                       )}
                     </div>
                   </div>
+                  </div>
+                  )}
                 </div>
               )}
             </div>

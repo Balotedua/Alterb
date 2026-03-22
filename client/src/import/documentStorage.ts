@@ -46,6 +46,8 @@ export function detectDocType(text: string, filename: string): { docType: string
     return { docType: 'receipt', docTypeLabel: 'Ricevuta' };
   if (/referto|diagnosi|prescrizione|medico|ospedale/.test(t))
     return { docType: 'medical', docTypeLabel: 'Documento medico' };
+  if (/busta\s*paga|cedolino|retribuzione|competenz[ei]\s+del\s+mese|paga\s+base|imponibile\s+prev|LUL\b/.test(t))
+    return { docType: 'payslip', docTypeLabel: 'Busta paga' };
   return { docType: 'document', docTypeLabel: 'Documento' };
 }
 
@@ -91,6 +93,15 @@ export async function uploadDocument(userId: string, file: File): Promise<Upload
 // ── Get temporary signed URL (default 1h) ────────────────────
 export async function getDocumentUrl(storagePath: string, expiresIn = 3600): Promise<string | null> {
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, expiresIn);
+  if (error || !data) return null;
+  return data.signedUrl;
+}
+
+// ── Get signed URL with Content-Disposition: attachment ──────
+export async function getDocumentDownloadUrl(storagePath: string, filename?: string): Promise<string | null> {
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(storagePath, 3600, { download: filename ?? true });
   if (error || !data) return null;
   return data.signedUrl;
 }
