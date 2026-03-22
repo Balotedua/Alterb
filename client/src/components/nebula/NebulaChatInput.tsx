@@ -69,7 +69,7 @@ export default function NebulaCore() {
     ghostStarPrompt, setGhostStarPrompt,
     showChatSidebar, setShowChatSidebar,
     currentSessionId, setCurrentSessionId,
-    viewMode,
+    viewMode, addTimer,
   } = useAlterStore();
 
   // ── Ghost star → pre-fill input ───────────────────────────
@@ -288,14 +288,29 @@ export default function NebulaCore() {
           setRay({ angle: Math.atan2(dy, dx) * 180 / Math.PI, length: Math.sqrt(dx*dx+dy*dy), color: meta.color });
           setTimeout(() => setRay(null), 900);
           const confirmTag = `${meta.icon} ${meta.label}`;
-          // Show warm chat reply if available, then the save confirmation
+
+          // ── Dynamic Island timer: near-future calendar reminders ──
+          if (intent.category === 'calendar' && intent.data.scheduled_at) {
+            const endsAt = new Date(intent.data.scheduled_at as string).getTime();
+            const delta  = endsAt - Date.now();
+            // Start live countdown only for reminders within 24h
+            if (delta > 0 && delta <= 24 * 3600 * 1000) {
+              addTimer({
+                id: saved.id,
+                title: (intent.data.title as string) || (intent.data.raw as string) || 'Promemoria',
+                endsAt,
+              });
+            }
+          }
+
+          // Show warm chat reply if available, then a minimal save signal
           if (chatReply) {
-            const display = chatReply.length > 80 ? chatReply.slice(0, 77) + '…' : chatReply;
+            const display = chatReply.length > 120 ? chatReply.slice(0, 117) + '…' : chatReply;
             setLastReply(display);
             addMessage('nebula', chatReply);
-            setTimeout(() => addMessage('nebula', `✦ ${confirmTag}`), 600);
+            setTimeout(() => addMessage('nebula', `✦ ${meta.icon}`), 800);
           } else {
-            const reply = `${meta.icon}  ${meta.label}`;
+            const reply = `✦ ${meta.icon} Registrato in ${meta.label}`;
             setLastReply(reply); addMessage('nebula', reply);
           }
 
@@ -344,7 +359,7 @@ export default function NebulaCore() {
 
       } else if (action.type === 'chat') {
         const reply = await aiChat(text);
-        setLastReply(reply.length > 80 ? reply.slice(0, 77) + '…' : reply);
+        setLastReply(reply.length > 120 ? reply.slice(0, 117) + '…' : reply);
         addMessage('nebula', reply);
 
       } else if (action.type === 'delete') {

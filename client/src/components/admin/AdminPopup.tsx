@@ -194,6 +194,14 @@ export default function AdminPopup({ onClose }: { onClose: () => void }) {
     setApprovedBugs(prev => prev.filter(b => b.id !== id));
   }
 
+  async function copyBug(id: string) {
+    const src = approvedBugs.find(b => b.id === id);
+    if (!src) return;
+    const { id: _id, created_at: _ca, ...rest } = src;
+    const { data } = await supabase.from('bug_reports').insert({ ...rest, user_description: '[COPIA] ' + src.user_description }).select().single();
+    if (data) setApprovedBugs(prev => [data as BugTicket, ...prev]);
+  }
+
   async function deleteResolved() {
     const ids = approvedBugs.filter(b => b.status === 'resolved').map(b => b.id);
     if (!ids.length || !window.confirm(`Eliminare ${ids.length} ticket risolti?`)) return;
@@ -263,7 +271,7 @@ export default function AdminPopup({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px', overscrollBehavior: 'contain' }}>
           {!unlocked ? (
             /* ── Password ── */
             <div style={{ padding: '28px 0 16px' }}>
@@ -340,6 +348,7 @@ export default function AdminPopup({ onClose }: { onClose: () => void }) {
                       onDiscard={handleDiscard}
                       onUpdate={updateBug}
                       onDelete={deleteBug}
+                      onCopy={copyBug}
                       onDeleteResolved={deleteResolved}
                     />
                   )}
@@ -362,7 +371,7 @@ export default function AdminPopup({ onClose }: { onClose: () => void }) {
 
 function TicketsTab({
   pendingBugs, approvedBugs, reviewIdx, setReviewIdx,
-  onApprove, onDiscard, onUpdate, onDelete, onDeleteResolved,
+  onApprove, onDiscard, onUpdate, onDelete, onCopy, onDeleteResolved,
 }: {
   pendingBugs:      BugTicket[];
   approvedBugs:     BugTicket[];
@@ -372,6 +381,7 @@ function TicketsTab({
   onDiscard:        (id: string) => void;
   onUpdate:         (id: string, field: string, value: string) => void;
   onDelete:         (id: string) => void;
+  onCopy:           (id: string) => void;
   onDeleteResolved: () => void;
 }) {
   const [filter, setFilter] = useState<FilterId>('all');
@@ -523,6 +533,7 @@ function TicketsTab({
               bug={bug}
               onUpdate={(field, val) => onUpdate(bug.id, field, val)}
               onDelete={() => onDelete(bug.id)}
+              onCopy={() => onCopy(bug.id)}
             />
           ))}
         </div>
@@ -570,6 +581,7 @@ function SwipeCard({ bug, index, total, onApprove, onDiscard }: {
         borderRadius: 14, padding: '14px 16px', position: 'relative', userSelect: 'none',
         boxShadow: isRight ? '0 0 24px rgba(74,222,128,0.14)' : isLeft ? '0 0 24px rgba(240,80,80,0.14)' : 'none',
         transition: 'border-color 0.12s, box-shadow 0.12s',
+        touchAction: 'pan-y',
       }}
     >
       <AnimatePresence>
@@ -616,12 +628,15 @@ function SwipeCard({ bug, index, total, onApprove, onDiscard }: {
 }
 
 /* ── Ticket row in list ── */
-function TicketRow({ bug, onUpdate, onDelete }: {
+function TicketRow({ bug, onUpdate, onDelete, onCopy }: {
   bug: BugTicket;
   onUpdate: (field: string, value: string) => void;
   onDelete: () => void;
+  onCopy: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [descDraft, setDescDraft] = useState(bug.user_description);
 
   const sCfg = STATUS_CFG[bug.status] ?? STATUS_CFG.open;
   const pCfg = PRIORITY_CFG[bug.priority ?? 'low'];
@@ -668,12 +683,42 @@ function TicketRow({ bug, onUpdate, onDelete }: {
           >
             <div style={{ padding: '0 12px 12px' }}>
               {/* Description */}
-              <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.3)', marginBottom: 6 }}>
-                DESCRIZIONE
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.3)' }}>DESCRIZIONE</span>
+                {!editingDesc ? (
+                  <button onClick={() => { setDescDraft(bug.user_description); setEditingDesc(true); }} style={{
+                    fontSize: 9, padding: '1px 7px', borderRadius: 5, cursor: 'pointer',
+                    background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.25)', color: '#a78bfa',
+                  }}>✎ Modifica</button>
+                ) : (
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button onClick={() => { onUpdate('user_description', descDraft); setEditingDesc(false); }} style={{
+                      fontSize: 9, padding: '1px 7px', borderRadius: 5, cursor: 'pointer',
+                      background: 'rgba(64,224,208,0.08)', border: '1px solid rgba(64,224,208,0.25)', color: '#40e0d0',
+                    }}>✓ Salva</button>
+                    <button onClick={() => setEditingDesc(false)} style={{
+                      fontSize: 9, padding: '1px 7px', borderRadius: 5, cursor: 'pointer',
+                      background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-dim)',
+                    }}>✕</button>
+                  </div>
+                )}
               </div>
-              <p style={{ fontSize: 12, color: 'var(--text)', opacity: 0.82, lineHeight: 1.55, margin: '0 0 12px' }}>
-                {bug.user_description}
-              </p>
+              {editingDesc ? (
+                <textarea
+                  value={descDraft}
+                  onChange={e => setDescDraft(e.target.value)}
+                  style={{
+                    width: '100%', fontSize: 12, color: 'var(--text)', background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(167,139,250,0.3)', borderRadius: 6, padding: '6px 8px',
+                    lineHeight: 1.55, resize: 'vertical', minHeight: 70, outline: 'none',
+                    fontFamily: 'inherit', marginBottom: 12, boxSizing: 'border-box',
+                  }}
+                />
+              ) : (
+                <p style={{ fontSize: 12, color: 'var(--text)', opacity: 0.82, lineHeight: 1.55, margin: '0 0 12px' }}>
+                  {bug.user_description}
+                </p>
+              )}
 
               {/* History */}
               {bug.interaction_history && bug.interaction_history.length > 0 && (
@@ -762,8 +807,13 @@ function TicketRow({ bug, onUpdate, onDelete }: {
                 })}
               </div>
 
-              {/* Delete */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              {/* Actions */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                <button onClick={onCopy} style={{
+                  fontSize: 9.5, padding: '4px 12px', borderRadius: 7, cursor: 'pointer',
+                  background: 'rgba(240,192,64,0.07)', border: '1px solid rgba(240,192,64,0.25)',
+                  color: '#f0c040', display: 'flex', alignItems: 'center', gap: 4,
+                }}>⎘ Copia</button>
                 <button onClick={onDelete} style={{
                   fontSize: 9.5, padding: '4px 12px', borderRadius: 7, cursor: 'pointer',
                   background: 'rgba(240,80,80,0.07)', border: '1px solid rgba(240,80,80,0.25)',

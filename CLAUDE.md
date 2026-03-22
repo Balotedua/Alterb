@@ -41,12 +41,16 @@ src/
     └── widget/PolymorphicWidget.tsx # polymorphic renderer
 ```
 
-## 🎨 UI/UX (DNA del progetto)
-- **Background**: `#050508` (spazio profondo)
-- **Glass**: `rgba(10,10,18,0.9)` + `border rgba(255,255,255,0.07)`
-- **Accenti**: gold `#f0c040`, teal `#40e0d0`, violet `#a78bfa`
-- **Stelle**: colori deterministici per categoria, glow proporzionale all'intensità
-- **Zero bottoni inutili**: tutto via input testuale/vocale
+3. **No Fluff**: Skip intros, apologies, and "Here is the code". Output ONLY code or 1-line bullets.
+4. **Fragment Focus**: Modify only the requested fragment (Finance, Health, etc.)—ignore the rest.
+5. **Briefing**: Keep all explanations under 3 sentences.
+
+## 🧠 Token-Saver Skills (Strict)
+1. **Diffs Only**: Never rewrite full files. Use `// ... existing code` for unchanged parts.
+## 🎨 UI/UX (Premium Minimal)
+- **Style**: Dark, Glassmorphism (border 0.05 opacity), High Whitespace.
+- **Motion**: Transitions 0.2s, Hover scale 1.02x.
+- **Rules**: Use variables from `styles/themes.ts`. No hardcoded hex. Elite/Minimal tone.
 
 ## 🔑 Env vars (.env in /client)
 ```

@@ -3,8 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAlterStore } from '../../store/alterStore';
 import type { Theme } from '../../types';
 import { getCategorySummaries, deleteCategory, deleteAllUserData } from '../../vault/vaultService';
+import { updateDisplayName } from '../../social/nexusService';
 import type { CategorySummary } from '../../vault/vaultService';
 import AdminPopup from '../admin/AdminPopup';
+import { isGoogleFitConnected, connectGoogleFit, disconnectGoogleFit } from '../../core/wearableSync';
 
 const THEMES: { id: Theme; label: string; desc: string; preview: string[] }[] = [
   {
@@ -38,8 +40,10 @@ export default function SettingsPanel() {
   const [nameInput, setNameInput] = useState(username);
   const [nameSaved, setNameSaved] = useState(false);
 
-  const saveUsername = () => {
-    setUsername(nameInput.trim());
+  const saveUsername = async () => {
+    const trimmed = nameInput.trim();
+    setUsername(trimmed);
+    if (user?.id && trimmed) updateDisplayName(user.id, trimmed);
     setNameSaved(true);
     setTimeout(() => setNameSaved(false), 1800);
   };
@@ -164,6 +168,9 @@ export default function SettingsPanel() {
 
             {/* Data management section */}
             <DataSection userId={user?.id ?? null} />
+
+            {/* Wearables section */}
+            <WearableSection />
 
             {/* Placeholder for future features */}
             <Section label="PROSSIMAMENTE">
@@ -437,6 +444,67 @@ function ThemeCard({ theme, active, onSelect }: {
         {theme.desc}
       </div>
     </button>
+  );
+}
+
+function WearableSection() {
+  const [connected, setConnected] = useState(isGoogleFitConnected());
+  const hasClientId = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+  function handleConnect() {
+    connectGoogleFit();
+  }
+
+  function handleDisconnect() {
+    disconnectGoogleFit();
+    setConnected(false);
+  }
+
+  return (
+    <Section label="WEARABLES">
+      <div style={{
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        padding: '12px 14px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 18 }}>🏃</span>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>
+              Google Fit
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>
+              {connected ? 'Connesso · sync ogni 6h' : hasClientId ? 'Passi, sonno, peso' : 'Configura VITE_GOOGLE_CLIENT_ID'}
+            </div>
+          </div>
+        </div>
+        {hasClientId && (
+          <button
+            onClick={connected ? handleDisconnect : handleConnect}
+            style={{
+              background: connected ? 'rgba(239,68,68,0.12)' : 'rgba(52,211,153,0.12)',
+              border: `1px solid ${connected ? 'rgba(239,68,68,0.3)' : 'rgba(52,211,153,0.3)'}`,
+              borderRadius: 8,
+              padding: '6px 12px',
+              cursor: 'pointer',
+              color: connected ? '#f87171' : '#34d399',
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: '0.06em',
+              whiteSpace: 'nowrap',
+              transition: 'opacity 0.2s',
+            }}
+          >
+            {connected ? 'Disconnetti' : 'Connetti'}
+          </button>
+        )}
+      </div>
+    </Section>
   );
 }
 

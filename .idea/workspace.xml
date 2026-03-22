@@ -8,10 +8,12 @@
       <change beforePath="$PROJECT_DIR$/.claude/settings.local.json" beforeDir="false" afterPath="$PROJECT_DIR$/.claude/settings.local.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/STATO_ATTUALE.md" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/documentStorage-O6Q52HNE.js" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-BHSB3BuS.js" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-BOBV1yRL.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/dist/assets/index-BW2UW_Tj.js" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-BhYahvB8.css" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-BvIcRllm.css" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-BxBpokYP.js" beforeDir="false" />
@@ -28,17 +30,20 @@
       <change beforePath="$PROJECT_DIR$/client/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/client/package-lock.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/client/package.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/App.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/components/admin/AdminPopup.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/admin/AdminPopup.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/auth/LoginScreen.css" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/auth/LoginScreen.css" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/auth/LoginScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/auth/LoginScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/chat/ChatHistorySidebar.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/chat/ChatHistorySidebar.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/chat/ChatView.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/chat/ChatView.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/dashboard/DashboardView.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/dashboard/DashboardView.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/dashboard/DataAnalyticsView.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/dashboard/DataAnalyticsView.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/components/layout/TabBar.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/layout/TabBar.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/nebula/NebulaChatInput.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/nebula/NebulaChatInput.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/settings/SettingsPanel.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/settings/SettingsPanel.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/starfield/StarfieldView.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/starfield/StarfieldView.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/widget/PolymorphicWidget.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/widget/PolymorphicWidget.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/core/aiParser.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/core/aiParser.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/core/insightEngine.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/core/insightEngine.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/core/localParser.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/core/localParser.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/core/orchestrator.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/core/orchestrator.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/import/bankCsvImport.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/import/bankCsvImport.ts" afterDir="false" />

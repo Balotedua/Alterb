@@ -3,7 +3,7 @@ import { useAlterStore } from '../../store/alterStore';
 const TABS = [
   { id: 'chat' as const,    label: 'Chat' },
   { id: 'galaxy' as const,  label: 'Galaxy' },
-  { id: 'dashboard' as const, label: 'Data' },
+  { id: 'nexus' as const,   label: 'Nexus' },
 ];
 
 export default function TabBar() {

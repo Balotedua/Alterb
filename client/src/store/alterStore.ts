@@ -22,6 +22,10 @@ interface AlterStore {
   addMessage: (role: 'user' | 'nebula', text: string) => void;
   setMessages: (msgs: ChatMessage[]) => void;
 
+  // ── Pending greeting (shown on first nebula reply after login) ──
+  pendingGreeting: string | null;
+  setPendingGreeting: (g: string | null) => void;
+
   // ── Chat sidebar ─────────────────────────────────────────
   showChatSidebar: boolean;
   setShowChatSidebar: (v: boolean) => void;
@@ -46,6 +50,11 @@ interface AlterStore {
   alertEvent: { title: string; scheduledAt: string } | null;
   setAlertEvent: (e: { title: string; scheduledAt: string } | null) => void;
 
+  // ── Dynamic Island timers ─────────────────────────────────────
+  activeTimers: Array<{ id: string; title: string; endsAt: number }>;
+  addTimer: (t: { id: string; title: string; endsAt: number }) => void;
+  removeTimer: (id: string) => void;
+
   // ── Nexus beam ───────────────────────────────────────────────
   nexusBeam: NexusBeam | null;
   setNexusBeam: (beam: NexusBeam | null) => void;
@@ -59,8 +68,8 @@ interface AlterStore {
   setGhostStarPrompt: (prompt: string | null) => void;
 
   // ── View mode ─────────────────────────────────────────────────
-  viewMode: 'chat' | 'galaxy' | 'dashboard';
-  setViewMode: (mode: 'chat' | 'galaxy' | 'dashboard') => void;
+  viewMode: 'chat' | 'galaxy' | 'dashboard' | 'nexus';
+  setViewMode: (mode: 'chat' | 'galaxy' | 'dashboard' | 'nexus') => void;
 
   // ── Data Analytics ────────────────────────────────────────────
   activeDataCategory: string | null;
@@ -102,10 +111,22 @@ export const useAlterStore = create<AlterStore>((set) => ({
 
   messages: [],
   addMessage: (role, text) =>
-    set((s) => ({
-      messages: [...s.messages, { role, text, ts: Date.now() }],
-    })),
+    set((s) => {
+      let finalText = text;
+      let pendingGreeting = s.pendingGreeting;
+      if (role === 'nebula' && pendingGreeting) {
+        finalText = `${pendingGreeting}\n\n${text}`;
+        pendingGreeting = null;
+      }
+      return {
+        pendingGreeting,
+        messages: [...s.messages, { role, text: finalText, ts: Date.now() }],
+      };
+    }),
   setMessages: (messages) => set({ messages }),
+
+  pendingGreeting: null,
+  setPendingGreeting: (pendingGreeting) => set({ pendingGreeting }),
 
   showChatSidebar: false,
   setShowChatSidebar: (showChatSidebar) => set({ showChatSidebar }),
@@ -132,6 +153,10 @@ export const useAlterStore = create<AlterStore>((set) => ({
   alertEvent: null,
   setAlertEvent: (alertEvent) => set({ alertEvent }),
 
+  activeTimers: [],
+  addTimer: (t) => set((s) => ({ activeTimers: [...s.activeTimers, t] })),
+  removeTimer: (id) => set((s) => ({ activeTimers: s.activeTimers.filter(t => t.id !== id) })),
+
   nexusBeam: null,
   setNexusBeam: (nexusBeam) => set({ nexusBeam }),
 
@@ -141,8 +166,8 @@ export const useAlterStore = create<AlterStore>((set) => ({
   ghostStarPrompt: null,
   setGhostStarPrompt: (ghostStarPrompt) => set({ ghostStarPrompt }),
 
-  viewMode: 'chat',
-  setViewMode: (viewMode) => set({ viewMode }),
+  viewMode: (localStorage.getItem('alter-view') as 'chat' | 'galaxy' | 'dashboard' | 'nexus') ?? 'chat',
+  setViewMode: (viewMode) => { localStorage.setItem('alter-view', viewMode); set({ viewMode }); },
 
   activeDataCategory: null,
   setActiveDataCategory: (activeDataCategory) => set({ activeDataCategory }),

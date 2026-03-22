@@ -11,7 +11,8 @@
       "Bash(cmd.exe /c \"cd C:\\\\Users\\\\danie\\\\Desktop\\\\vercelesercizio\\\\client && npm run build\")",
       "Bash(vercel --prod)",
       "Bash(grep -i \"\\\\.\\(tsx|ts\\)$\")",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(node -e \":*)"
     ]
   }
 }

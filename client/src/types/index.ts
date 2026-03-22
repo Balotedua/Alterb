@@ -57,6 +57,7 @@ export interface WidgetData {
   color: string;
   entries: VaultEntry[];
   renderType: RenderType;
+  subTab?: string;
 }
 
 // ─── Chat ────────────────────────────────────────────────────
@@ -82,3 +83,47 @@ export interface AlterUser {
 
 // ─── Theme ───────────────────────────────────────────────────
 export type Theme = 'dark' | 'matrix' | 'nebula' | 'light';
+
+// ─── Social (Nexus) ──────────────────────────────────────────
+export interface UserProfile {
+  user_id: string;
+  username: string | null;
+  display_name: string | null;
+  public_stats: Record<string, number>;
+  created_at: string;
+}
+
+export type FriendStatus = 'pending' | 'accepted' | 'declined';
+
+export interface Friendship {
+  id: string;
+  requester_id: string;
+  addressee_id: string;
+  status: FriendStatus;
+  created_at: string;
+}
+
+export type FriendWithProfile = Friendship & { profile: UserProfile };
+
+export interface FriendMessage {
+  id: string;
+  sender_id: string;
+  recipient_id: string;
+  text: string;
+  created_at: string;
+}
+
+export interface Challenge {
+  id: string;
+  creator_id: string;
+  target_id: string;
+  title: string;
+  category: string;
+  target_value: number | null;
+  unit: string | null;
+  end_date: string | null;
+  creator_progress: number;
+  target_progress: number;
+  status: 'active' | 'completed' | 'declined';
+  created_at: string;
+}

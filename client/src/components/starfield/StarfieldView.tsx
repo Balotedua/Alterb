@@ -34,7 +34,7 @@ export function getCategoryMeta(cat: string) {
 
 // ─── Subcategory constellation map (L1 zoom) ─────────────────
 export const SUBCATEGORY_MAP: Record<string, Array<{ id: string; label: string; icon: string }>> = {
-  finance:      [{ id: 'transazioni', label: 'Transazioni', icon: '💳' }, { id: 'budget', label: 'Budget', icon: '📊' }, { id: 'burn_rate', label: 'Burn Rate', icon: '🔥' }, { id: 'analisi', label: 'Analisi', icon: '📈' }],
+  finance:      [{ id: 'transazioni', label: 'Transazioni', icon: '💳' }, { id: 'cashflow', label: 'Cashflow', icon: '📊' }, { id: 'aggiungi', label: 'Aggiungi', icon: '➕' }, { id: 'budget', label: 'Budget', icon: '🎯' }, { id: 'ricorrenti', label: 'Ricorrenti', icon: '🔄' }, { id: 'analisi', label: 'Analisi', icon: '🔥' }],
   health:       [{ id: 'peso', label: 'Peso', icon: '⚖️' }, { id: 'allenamento', label: 'Allenamento', icon: '🏋️' }, { id: 'sonno', label: 'Sonno', icon: '😴' }, { id: 'nutrizione', label: 'Nutrizione', icon: '🥗' }],
   psychology:   [{ id: 'umore', label: 'Umore', icon: '🎭' }, { id: 'stress', label: 'Stress', icon: '💆' }, { id: 'gratitudine', label: 'Gratitudine', icon: '✨' }, { id: 'riflessioni', label: 'Riflessioni', icon: '📝' }],
   mental_health:[{ id: 'umore', label: 'Umore', icon: '🎭' }, { id: 'stress', label: 'Stress', icon: '💆' }, { id: 'gratitudine', label: 'Gratitudine', icon: '✨' }, { id: 'riflessioni', label: 'Riflessioni', icon: '📝' }],
@@ -45,8 +45,24 @@ export const SUBCATEGORY_MAP: Record<string, Array<{ id: string; label: string; 
   routine:      [{ id: 'mattina', label: 'Mattina', icon: '☀️' }, { id: 'sera', label: 'Sera', icon: '🌙' }, { id: 'abitudini', label: 'Abitudini', icon: '✅' }],
 };
 
+// ─── Fixed positions for known categories (well-distributed) ─
+const FIXED_STAR_POSITIONS: Record<string, { x: number; y: number }> = {
+  finance:      { x: 0.22, y: 0.28 },
+  health:       { x: 0.72, y: 0.24 },
+  psychology:   { x: 0.82, y: 0.62 },
+  mental_health:{ x: 0.82, y: 0.62 },
+  calendar:     { x: 0.30, y: 0.72 },
+  routine:      { x: 0.60, y: 0.74 },
+  notes:        { x: 0.14, y: 0.56 },
+  interests:    { x: 0.50, y: 0.20 },
+  career:       { x: 0.80, y: 0.38 },
+  badges:       { x: 0.48, y: 0.68 },
+  insight:      { x: 0.35, y: 0.40 },
+};
+
 // ─── Deterministic star position ─────────────────────────────
 export function starPosition(cat: string): { x: number; y: number } {
+  if (FIXED_STAR_POSITIONS[cat]) return FIXED_STAR_POSITIONS[cat];
   let h1 = 0, h2 = 0;
   for (let i = 0; i < cat.length; i++) {
     h1 = ((h1 << 5) - h1) + cat.charCodeAt(i);
@@ -59,25 +75,42 @@ export function starPosition(cat: string): { x: number; y: number } {
   };
 }
 
+// ─── Subcategory star position — clustered near parent ────────
+function substarPos(parentX: number, parentY: number, subId: string, idx: number, total: number): { x: number; y: number } {
+  let hash = 0;
+  for (const c of subId) hash = ((hash << 5) - hash) + c.charCodeAt(0);
+  hash |= 0;
+  const baseAngle = (idx / total) * Math.PI * 2 - Math.PI / 2;
+  const jitter    = ((Math.abs(hash) % 200) / 200 - 0.5) * 0.55;
+  const angle     = baseAngle + jitter;
+  const dist      = 0.052 + (Math.abs(hash >> 8) % 100) / 100 * 0.068;
+  return {
+    x: Math.max(0.02, Math.min(0.98, parentX + Math.cos(angle) * dist)),
+    y: Math.max(0.02, Math.min(0.98, parentY + Math.sin(angle) * dist)),
+  };
+}
+
 // ─── Particles ────────────────────────────────────────────────
 // layer 0 = distant/slow, layer 1 = mid, layer 2 = near/fast
-interface Particle { x: number; y: number; r: number; a: number; da: number; layer: 0 | 1 | 2; }
+interface Particle { x: number; y: number; r: number; a: number; da: number; layer: 0 | 1 | 2; sparkle?: boolean; }
 
 // Parallax factors per layer (applied to panX/panY)
 const LAYER_PARALLAX = [0.12, 0.38, 0.78] as const;
-const LAYER_RADIUS   = [[0.2, 0.5], [0.4, 1.0], [0.7, 1.8]] as const;
-const LAYER_FLICKER  = [0.0008, 0.0018, 0.0035] as const;
+const LAYER_RADIUS   = [[0.12, 0.35], [0.28, 0.72], [0.45, 1.3]] as const;
+const LAYER_FLICKER  = [0.0006, 0.0014, 0.0028] as const;
 
 function initParticles(count: number): Particle[] {
   return Array.from({ length: count }, () => {
     const layer = Math.floor(Math.random() * 3) as 0 | 1 | 2;
     const [rMin, rMax] = LAYER_RADIUS[layer];
+    const r = rMin + Math.random() * (rMax - rMin);
     return {
       x: Math.random(), y: Math.random(),
-      r: rMin + Math.random() * (rMax - rMin),
+      r,
       a: Math.random(),
       da: (Math.random() - 0.5) * LAYER_FLICKER[layer] * 2 + LAYER_FLICKER[layer],
       layer,
+      sparkle: layer === 2 && r > 0.9 && Math.random() < 0.22,
     };
   });
 }
@@ -105,6 +138,7 @@ interface CanvasState {
   pinchDist: number;
   pinchMidX: number;
   pinchMidY: number;
+  pinching: boolean; // true while 2-finger pinch is active → skip scale lerp
   constellationAlpha: number; // 0..0.12, fades in when idle
   touchStartX: number;
   touchStartY: number;
@@ -116,23 +150,19 @@ export default function StarfieldView() {
   const isMobile  = window.innerWidth < 768;
 
   const stateRef = useRef<CanvasState>({
-    particles: initParticles(isMobile ? 35 : 60),
+    particles: initParticles(isMobile ? 26 : 48),
     raf: 0, hovered: null, t: 0,
     panX: 0, panY: 0, velX: 0, velY: 0, scale: 1, targetScale: 1,
     dragging: false, dragX: 0, dragY: 0, didDrag: false,
-    pinchDist: -1, pinchMidX: 0, pinchMidY: 0,
+    pinchDist: -1, pinchMidX: 0, pinchMidY: 0, pinching: false,
     touchStartX: 0, touchStartY: 0,
     constellationAlpha: 0,
   });
 
   const { stars, focusMode, setActiveWidget, user, markStarSeen, highlightedStarId, alertEvent, setSemanticLinks, setGhostStarPrompt } = useAlterStore();
 
-  // Galaxy zoom state (L0 = full galaxy, L1 = category focus)
-  const [galaxyFocus, setGalaxyFocus] = useState<string | null>(null);
-
   // Subtle ripple at click position
   const [clickRipple, setClickRipple] = useState<{ x: number; y: number; color: string } | null>(null);
-  const [explosionOrigin, setExplosionOrigin] = useState<{ x: number; y: number } | null>(null);
   const [nexusScanning, setNexusScanning] = useState(false);
 
   // Load semantic links whenever the star count changes
@@ -146,12 +176,6 @@ export default function StarfieldView() {
     stars.filter(s => s.isNew).forEach(s => markStarSeen(s.id));
   }, [stars, markStarSeen]);
 
-  // Escape → back to L0
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setGalaxyFocus(null); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
 
   // ── Camera: normalized → screen coords ────────────────────
   const toScreen = useCallback((nx: number, ny: number, W: number, H: number) => {
@@ -171,11 +195,11 @@ export default function StarfieldView() {
     const state = stateRef.current;
     state.t += 0.007;
 
-    // Smooth zoom: lerp toward targetScale
-    if (Math.abs(state.scale - state.targetScale) > 0.0005) {
-      state.scale += (state.targetScale - state.scale) * 0.14;
-    } else {
+    // Smooth zoom: snap during pinch (no lag), lerp otherwise
+    if (state.pinching || Math.abs(state.scale - state.targetScale) <= 0.0005) {
       state.scale = state.targetScale;
+    } else {
+      state.scale += (state.targetScale - state.scale) * 0.14;
     }
 
     // Pan inertia: apply velocity when not dragging
@@ -204,11 +228,27 @@ export default function StarfieldView() {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
 
+    // Subtle nebula wisps — tinted dust clouds for depth
+    const NEBULA_TINTS: Record<string, [number,number,number]> = {
+      dark:   [28, 46, 128],
+      matrix: [0,  130, 28],
+      nebula: [88, 36, 175],
+      light:  [55, 75, 195],
+    };
+    const [nt_r, nt_g, nt_b] = NEBULA_TINTS[currentTheme] ?? NEBULA_TINTS.dark;
+    [[0.15, 0.25, 0.30], [0.80, 0.68, 0.26], [0.50, 0.10, 0.22]].forEach(([wx, wy, wr]) => {
+      const wg = ctx.createRadialGradient(wx * W, wy * H, 0, wx * W, wy * H, Math.min(W, H) * wr);
+      wg.addColorStop(0, `rgba(${nt_r},${nt_g},${nt_b},0.032)`);
+      wg.addColorStop(1, `rgba(${nt_r},${nt_g},${nt_b},0)`);
+      ctx.fillStyle = wg;
+      ctx.fillRect(0, 0, W, H);
+    });
+
     // ── Constellation alpha: fade in when idle, out when dragging ──
     if (state.dragging) {
       state.constellationAlpha = Math.max(0, state.constellationAlpha - 0.025);
     } else {
-      state.constellationAlpha = Math.min(0.08, state.constellationAlpha + 0.004);
+      state.constellationAlpha = Math.min(0.05, state.constellationAlpha + 0.003);
     }
 
     // ── Parallax particles — 3 depth layers ──
@@ -224,16 +264,28 @@ export default function StarfieldView() {
       const py = p.y * H + state.panY * factor;
       ctx.beginPath();
       ctx.arc(px, py, p.r, 0, Math.PI * 2);
-      const particleAlpha = p.a * (0.10 + p.layer * 0.06);
+      const particleAlpha = p.a * (0.08 + p.layer * 0.045);
       const pColor = isLightTheme
-        ? `rgba(80,80,160,${particleAlpha * 0.6})`
+        ? `rgba(80,80,160,${particleAlpha * 0.55})`
         : isMatrixTheme
-        ? `rgba(0,255,65,${particleAlpha * 0.7})`
+        ? `rgba(0,255,65,${particleAlpha * 0.65})`
         : isNebulaTheme
-        ? `rgba(180,140,255,${particleAlpha * 0.65})`
+        ? `rgba(180,140,255,${particleAlpha * 0.60})`
         : `rgba(255,255,255,${particleAlpha})`;
       ctx.fillStyle = pColor;
       ctx.fill();
+      // 4-point cross sparkle on select bright particles
+      if (p.sparkle && particleAlpha > 0.038) {
+        const sl = p.r * 3.8;
+        const sa = particleAlpha * 0.65;
+        const sc = isLightTheme ? `rgba(80,80,180,${sa})` : `rgba(255,255,255,${sa})`;
+        ctx.save();
+        ctx.strokeStyle = sc;
+        ctx.lineWidth = 0.35;
+        ctx.beginPath(); ctx.moveTo(px - sl, py); ctx.lineTo(px + sl, py); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(px, py - sl * 0.65); ctx.lineTo(px, py + sl * 0.65); ctx.stroke();
+        ctx.restore();
+      }
     });
 
     const starsNow        = useAlterStore.getState().stars;
@@ -297,51 +349,145 @@ export default function StarfieldView() {
       const alpha   = (isEphemeral ? 0.35 : 0.45) + (intensity * (isEphemeral ? 0.35 : 0.55));
       const a       = alpha * pulse;
 
-      // Outer glow halo — neon OLED bloom
-      const glowR = (isHov ? 55 : 26 + intensity * 36) * s;
+      // Planet vs star: main CATEGORY_META entries are planets
+      const isPlanet = !!CATEGORY_META[star.id];
+      // Outer glow halo — tight, precise corona
+      const glowR = isPlanet
+        ? (isHov ? 68 : 38 + intensity * 28) * s
+        : (isHov ? 40 : 18 + intensity * 24) * s;
       const glowGrd = ctx.createRadialGradient(px, py, 0, px, py, glowR);
-      glowGrd.addColorStop(0,    `rgba(${r},${g},${b},${a * 0.65})`);
-      glowGrd.addColorStop(0.22, `rgba(${r},${g},${b},${a * 0.30})`);
-      glowGrd.addColorStop(0.55, `rgba(${r},${g},${b},${a * 0.09})`);
+      glowGrd.addColorStop(0,    `rgba(${r},${g},${b},${a * 0.55})`);
+      glowGrd.addColorStop(0.18, `rgba(${r},${g},${b},${a * 0.22})`);
+      glowGrd.addColorStop(0.50, `rgba(${r},${g},${b},${a * 0.06})`);
       glowGrd.addColorStop(1,    `rgba(${r},${g},${b},0)`);
       ctx.beginPath(); ctx.arc(px, py, glowR, 0, Math.PI * 2);
       ctx.fillStyle = glowGrd; ctx.fill();
 
-      // Wide secondary bloom (OLED bleed)
-      const bloomR = glowR * 2.4;
+      // Wide secondary bloom (OLED bleed) — restrained
+      const bloomR = glowR * 1.7;
       const bloomGrd = ctx.createRadialGradient(px, py, 0, px, py, bloomR);
-      bloomGrd.addColorStop(0,   `rgba(${r},${g},${b},${a * 0.14})`);
-      bloomGrd.addColorStop(0.4, `rgba(${r},${g},${b},${a * 0.04})`);
+      bloomGrd.addColorStop(0,   `rgba(${r},${g},${b},${a * 0.09})`);
+      bloomGrd.addColorStop(0.4, `rgba(${r},${g},${b},${a * 0.025})`);
       bloomGrd.addColorStop(1,   `rgba(${r},${g},${b},0)`);
       ctx.beginPath(); ctx.arc(px, py, bloomR, 0, Math.PI * 2);
       ctx.fillStyle = bloomGrd; ctx.fill();
 
-      // Colored core: white hot center → neon star color
-      const coreR = (isHov ? 9 : 3.5 + intensity * 6) * s * (isHighlit || isAlert ? 1.5 : 1);
-      const coreGrd = ctx.createRadialGradient(px, py, 0, px, py, coreR);
+      // Colored core: sphere gradient for planets, point star for others
+      const coreR = isPlanet
+        ? (isHov ? 32 : 19 + intensity * 13) * s
+        : (isHov ? 9 : 3.5 + intensity * 6) * s * (isHighlit || isAlert ? 1.5 : 1);
       const efa = isEphemeral ? 0.55 : 1;
-      coreGrd.addColorStop(0,    `rgba(255,255,255,${a * efa})`);
-      coreGrd.addColorStop(0.35, `rgba(${r},${g},${b},${a * efa})`);
-      coreGrd.addColorStop(1,    `rgba(${r},${g},${b},${a * 0.55 * efa})`);
+      const coreGrd = isPlanet
+        ? ctx.createRadialGradient(px - coreR * 0.30, py - coreR * 0.30, 0, px, py, coreR)
+        : ctx.createRadialGradient(px, py, 0, px, py, coreR);
+      if (isPlanet) {
+        coreGrd.addColorStop(0,    `rgba(255,255,255,${a * 0.96 * efa})`);
+        coreGrd.addColorStop(0.16, `rgba(255,255,255,${a * 0.55 * efa})`);
+        coreGrd.addColorStop(0.42, `rgba(${r},${g},${b},${a * efa})`);
+        coreGrd.addColorStop(0.74, `rgba(${Math.max(0,r-70)},${Math.max(0,g-70)},${Math.max(0,b-70)},${a * 0.80 * efa})`);
+        coreGrd.addColorStop(1,    `rgba(0,0,0,${a * 0.94 * efa})`);
+      } else {
+        coreGrd.addColorStop(0,    `rgba(255,255,255,${a * efa})`);
+        coreGrd.addColorStop(0.35, `rgba(${r},${g},${b},${a * efa})`);
+        coreGrd.addColorStop(1,    `rgba(${r},${g},${b},${a * 0.55 * efa})`);
+      }
       ctx.beginPath(); ctx.arc(px, py, coreR, 0, Math.PI * 2);
       ctx.fillStyle = coreGrd;
-      // Neon shadow glow
-      ctx.shadowBlur  = isHov ? 38 : (16 + intensity * 24) * s;
+      ctx.shadowBlur  = isHov ? 38 : (isPlanet ? 30 + intensity * 22 : 16 + intensity * 24) * s;
       ctx.shadowColor = `rgba(${r},${g},${b},0.95)`;
       ctx.fill();
       ctx.shadowBlur = 0;
 
-      // Label — larger, more visible
+      // Dual orbital rings + icon for planets
+      if (isPlanet) {
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(-0.28);
+        // Inner ring — precise hairline
+        ctx.beginPath();
+        ctx.ellipse(0, 0, coreR * 1.60, coreR * 0.36, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${r},${g},${b},${a * 0.42})`;
+        ctx.lineWidth = 0.85 * s;
+        ctx.shadowBlur = 5;
+        ctx.shadowColor = `rgba(${r},${g},${b},0.55)`;
+        ctx.stroke();
+        // Outer ghost ring
+        ctx.beginPath();
+        ctx.ellipse(0, 0, coreR * 2.15, coreR * 0.50, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${r},${g},${b},${a * 0.09})`;
+        ctx.lineWidth = 0.45 * s;
+        ctx.shadowBlur = 0;
+        ctx.stroke();
+        ctx.restore();
+        const pmeta = getCategoryMeta(star.id);
+        ctx.save();
+        ctx.font = `${Math.round(coreR * 0.80)}px system-ui`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.globalAlpha = isHov ? 0.88 : 0.68;
+        ctx.fillText(pmeta.icon, px, py);
+        ctx.restore();
+      }
+
+      // Label
       ctx.save();
-      ctx.font = `500 10.5px -apple-system, "SF Pro Display", system-ui, sans-serif`;
+      ctx.font = isPlanet
+        ? `300 ${Math.round(8.5 * Math.max(s, 1))}px -apple-system, "SF Pro Display", system-ui, sans-serif`
+        : `300 8px -apple-system, "SF Pro Display", system-ui, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillStyle = `rgba(${r},${g},${b},${isHov ? 1 : 0.68})`;
-      ctx.shadowBlur  = isHov ? 10 : 5;
-      ctx.shadowColor = `rgba(${r},${g},${b},0.6)`;
-      ctx.fillText(star.label.toUpperCase(), px, py + coreR + 15 * s);
+      ctx.fillStyle = `rgba(${r},${g},${b},${isHov ? 0.95 : isPlanet ? 0.68 : 0.44})`;
+      ctx.shadowBlur  = isHov ? 10 : isPlanet ? 7 : 3;
+      ctx.shadowColor = `rgba(${r},${g},${b},${isPlanet ? 0.50 : 0.35})`;
+      ctx.fillText(star.label.toUpperCase(), px, py + coreR + (isPlanet ? 22 : 16) * s);
       ctx.shadowBlur = 0;
       ctx.restore();
       void isInsight;
+    });
+
+    // ── Subcategory stars — colored pixels near each planet ──
+    starsNow.forEach((pStar) => {
+      const subs = SUBCATEGORY_MAP[pStar.id] ?? [];
+      if (!subs.length) return;
+      const [sr, sg, sb] = hexToRgb(pStar.color);
+      subs.forEach((sub, i) => {
+        const pos = substarPos(pStar.x, pStar.y, sub.id, i, subs.length);
+        const { sx: spx, sy: spy } = toScreen(pos.x, pos.y, W, H);
+        if (spx < -40 || spx > W + 40 || spy < -40 || spy > H + 40) return;
+        const isSubHov = hov === `sub:${pStar.id}:${sub.id}`;
+        const twinkle  = 0.60 + Math.sin(state.t * (0.50 + pos.x * 1.7) + pos.y * 4.0 + i * 1.3) * 0.40;
+        // Soft glow
+        const subGlowR = (isSubHov ? 18 : 5 + scale * 1.8) * s;
+        const subGlowGrd = ctx.createRadialGradient(spx, spy, 0, spx, spy, subGlowR);
+        subGlowGrd.addColorStop(0, `rgba(${sr},${sg},${sb},${twinkle * 0.28})`);
+        subGlowGrd.addColorStop(1, `rgba(${sr},${sg},${sb},0)`);
+        ctx.beginPath(); ctx.arc(spx, spy, subGlowR, 0, Math.PI * 2);
+        ctx.fillStyle = subGlowGrd; ctx.fill();
+        // Pixel core
+        const subCoreR = Math.min((1.3 + Math.min(scale - 1, 2.8) * 0.60) * s, 6 * s);
+        const subCoreGrd = ctx.createRadialGradient(spx, spy, 0, spx, spy, subCoreR);
+        subCoreGrd.addColorStop(0,   `rgba(255,255,255,${twinkle * (isSubHov ? 1 : 0.92)})`);
+        subCoreGrd.addColorStop(0.4, `rgba(${sr},${sg},${sb},${twinkle * 0.9})`);
+        subCoreGrd.addColorStop(1,   `rgba(${sr},${sg},${sb},0)`);
+        ctx.beginPath(); ctx.arc(spx, spy, subCoreR, 0, Math.PI * 2);
+        ctx.fillStyle = subCoreGrd;
+        ctx.shadowBlur  = isSubHov ? 16 : 4;
+        ctx.shadowColor = `rgba(${sr},${sg},${sb},0.95)`;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        // Label — fades in when zoomed in (scale > 1.8)
+        const labelAlpha = isSubHov ? 1 : Math.max(0, Math.min(1, (scale - 1.8) / 0.6));
+        if (labelAlpha > 0.02) {
+          ctx.save();
+          ctx.font = `400 ${Math.round(8 * Math.max(s, 1))}px -apple-system, "SF Pro Display", system-ui, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.fillStyle = `rgba(${sr},${sg},${sb},${labelAlpha * 0.82})`;
+          ctx.shadowBlur  = 5;
+          ctx.shadowColor = `rgba(${sr},${sg},${sb},${labelAlpha * 0.6})`;
+          ctx.fillText(sub.label.toUpperCase(), spx, spy + subCoreR + 10 * Math.max(s, 1));
+          ctx.shadowBlur = 0;
+          ctx.restore();
+        }
+      });
     });
 
     // ── Ghost Stars: missing pillar categories ──
@@ -491,6 +637,16 @@ export default function StarfieldView() {
       if (Math.hypot(sx - e.clientX, sy - e.clientY) < 22) { found = star.id; break; }
     }
     if (!found) {
+      outer: for (const star of starsNow) {
+        const subs = SUBCATEGORY_MAP[star.id] ?? [];
+        for (let i = 0; i < subs.length; i++) {
+          const pos = substarPos(star.x, star.y, subs[i].id, i, subs.length);
+          const { sx, sy } = toScreen(pos.x, pos.y, W, H);
+          if (Math.hypot(sx - e.clientX, sy - e.clientY) < 14) { found = `sub:${star.id}:${subs[i].id}`; break outer; }
+        }
+      }
+    }
+    if (!found) {
       const PILLARS = ['finance', 'health', 'psychology', 'calendar'];
       for (const cat of PILLARS) {
         if (starsNow.some(s => s.id === cat)) continue;
@@ -547,11 +703,11 @@ export default function StarfieldView() {
     if (nebulaCameraRef.nebula) nebulaCameraRef.nebula.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
   }, []);
 
-  const openWidget = useCallback(async (star: { id: string; label: string; color: string }) => {
+  const openWidget = useCallback(async (star: { id: string; label: string; color: string }, subTab?: string) => {
     if (!user) return;
     const entries = await getByCategory(user.id, star.id);
     const renderType = star.id === 'insight' ? 'insight' : inferRenderType(entries, star.id);
-    setActiveWidget({ category: star.id, label: star.label, color: star.color, entries, renderType });
+    setActiveWidget({ category: star.id, label: star.label, color: star.color, entries, renderType, subTab });
     markStarSeen(star.id);
   }, [user, setActiveWidget, markStarSeen]);
 
@@ -562,28 +718,36 @@ export default function StarfieldView() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const W = canvas.width, H = canvas.height;
-    const cx = W / 2, cy = H / 2;
     const starsNow = useAlterStore.getState().stars;
 
+    // Planet click
     for (const star of starsNow) {
       const { sx, sy } = toScreen(star.x, star.y, W, H);
-      if (Math.hypot(sx - e.clientX, sy - e.clientY) < 22) {
+      if (Math.hypot(sx - e.clientX, sy - e.clientY) < 28) {
         setClickRipple({ x: sx, y: sy, color: star.color });
-        if (SUBCATEGORY_MAP[star.id]?.length) {
-          setExplosionOrigin({ x: sx, y: sy });
-          setGalaxyFocus(star.id);
-        } else {
-          openWidget(star);
-        }
+        openWidget(star);
         return;
+      }
+    }
+    // Subcategory star click
+    for (const star of starsNow) {
+      const subs = SUBCATEGORY_MAP[star.id] ?? [];
+      for (let i = 0; i < subs.length; i++) {
+        const sub = subs[i];
+        const pos = substarPos(star.x, star.y, sub.id, i, subs.length);
+        const { sx, sy } = toScreen(pos.x, pos.y, W, H);
+        if (Math.hypot(sx - e.clientX, sy - e.clientY) < 14) {
+          setClickRipple({ x: sx, y: sy, color: star.color });
+          openWidget(star, sub.id);
+          return;
+        }
       }
     }
     // Ghost star click → pre-fill input
     const GHOST_PROMPTS: Record<string, string> = {
       finance: 'Ho speso ', health: 'Peso ', psychology: 'Umore ', calendar: 'Domani ',
     };
-    const PILLARS_CLICK = ['finance', 'health', 'psychology', 'calendar'];
-    for (const cat of PILLARS_CLICK) {
+    for (const cat of ['finance', 'health', 'psychology', 'calendar']) {
       if (starsNow.some(s => s.id === cat)) continue;
       const pos = starPosition(cat);
       const { sx, sy } = toScreen(pos.x, pos.y, W, H);
@@ -613,6 +777,7 @@ export default function StarfieldView() {
       state.pinchMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
       state.pinchMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
       state.dragging  = false;
+      state.pinching  = true;
     }
   }, []);
 
@@ -663,21 +828,30 @@ export default function StarfieldView() {
       // Tap (not drag) → star click
       if (!state.didDrag && user && canvas) {
         const W = canvas.width, H = canvas.height;
-        const cx = W / 2, cy = H / 2;
         const starsNow = useAlterStore.getState().stars;
         let touchHit = false;
         for (const star of starsNow) {
           const { sx, sy } = toScreen(star.x, star.y, W, H);
           if (Math.hypot(sx - state.touchStartX, sy - state.touchStartY) < 36) {
             setClickRipple({ x: sx, y: sy, color: star.color });
-            if (SUBCATEGORY_MAP[star.id]?.length) {
-              setExplosionOrigin({ x: sx, y: sy });
-              setGalaxyFocus(star.id);
-            } else {
-              openWidget(star);
-            }
+            openWidget(star);
             touchHit = true;
             break;
+          }
+        }
+        if (!touchHit) {
+          outer: for (const star of starsNow) {
+            const subs = SUBCATEGORY_MAP[star.id] ?? [];
+            for (let i = 0; i < subs.length; i++) {
+              const pos = substarPos(star.x, star.y, subs[i].id, i, subs.length);
+              const { sx, sy } = toScreen(pos.x, pos.y, W, H);
+              if (Math.hypot(sx - state.touchStartX, sy - state.touchStartY) < 18) {
+                setClickRipple({ x: sx, y: sy, color: star.color });
+                openWidget(star, subs[i].id);
+                touchHit = true;
+                break outer;
+              }
+            }
           }
         }
         if (!touchHit) {
@@ -697,9 +871,11 @@ export default function StarfieldView() {
       }
       state.dragging  = false;
       state.pinchDist = -1;
+      state.pinching  = false;
       state.didDrag   = false;
     } else if (e.touches.length === 1) {
       state.pinchDist = -1;
+      state.pinching  = false;
       state.dragging  = true;
       state.dragX     = e.touches[0].clientX;
       state.dragY     = e.touches[0].clientY;
@@ -733,12 +909,15 @@ export default function StarfieldView() {
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
             style={{
               position: 'absolute',
-              top: '50%', left: '50%',
-              transform: 'translate(-50%, -58%)',
+              top: '42%',
+              left: 0, right: 0,
+              transform: 'translateY(-50%)',
               textAlign: 'center',
               pointerEvents: 'none',
               zIndex: 10,
-              width: 'min(340px, 90vw)',
+              width: '100%',
+              padding: '0 20px',
+              boxSizing: 'border-box',
             }}
           >
             <div style={{ fontSize: 36, marginBottom: 18, opacity: 0.18 }}>✦</div>
@@ -874,218 +1053,6 @@ export default function StarfieldView() {
         </motion.button>
       )}
 
-      {/* ── Galaxy Zoom L1: Neon Explosion ── */}
-      <AnimatePresence>
-        {galaxyFocus && (() => {
-          const focusedStar = stars.find(s => s.id === galaxyFocus);
-          if (!focusedStar) return null;
-          const meta = getCategoryMeta(galaxyFocus);
-          const subs = SUBCATEGORY_MAP[galaxyFocus] ?? [];
-          const [fr, fg, fb] = hexToRgb(meta.color);
-          const isMob = window.innerWidth < 640;
-          const orbR  = isMob ? 118 : 164;
-          const W2 = window.innerWidth;
-          const H2 = window.innerHeight;
-          const originX = explosionOrigin ? explosionOrigin.x - W2 / 2 : 0;
-          const originY = explosionOrigin ? explosionOrigin.y - H2 / 2 : 0;
-          return (
-            <motion.div
-              key="galaxy-zoom"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.22 }}
-              style={{
-                position: 'absolute', inset: 0,
-                background: 'rgba(2,2,5,0.93)',
-                backdropFilter: 'blur(10px) saturate(160%)',
-                zIndex: 28,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-              onClick={() => { setGalaxyFocus(null); setExplosionOrigin(null); }}
-            >
-
-
-              {/* ── Shockwave ring on arrival ── */}
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: [0.8, 3.8, 4.5], opacity: [0, 0.9, 0] }}
-                transition={{ duration: 0.65, delay: 0.40, ease: 'easeOut' }}
-                style={{
-                  position: 'absolute',
-                  width: 96, height: 96, marginLeft: -48, marginTop: -48,
-                  borderRadius: '50%',
-                  border: `2px solid rgba(${fr},${fg},${fb},0.95)`,
-                  boxShadow: `0 0 24px rgba(${fr},${fg},${fb},0.6), inset 0 0 24px rgba(${fr},${fg},${fb},0.15)`,
-                  pointerEvents: 'none',
-                }}
-              />
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: [0.8, 2.9, 3.6], opacity: [0, 0.55, 0] }}
-                transition={{ duration: 0.72, delay: 0.48, ease: 'easeOut' }}
-                style={{
-                  position: 'absolute',
-                  width: 96, height: 96, marginLeft: -48, marginTop: -48,
-                  borderRadius: '50%',
-                  border: `1px solid rgba(${fr},${fg},${fb},0.7)`,
-                  pointerEvents: 'none',
-                }}
-              />
-
-              {/* ── Explosion particles ── */}
-              {Array.from({ length: 20 }, (_, i) => {
-                const angle = (i / 20) * Math.PI * 2;
-                const dist  = 95 + (i * 17 % 75);
-                const size  = 2.5 + (i % 3);
-                return (
-                  <motion.div
-                    key={`p-${i}`}
-                    initial={{ x: 0, y: 0, scale: 1.5, opacity: 1 }}
-                    animate={{ x: Math.cos(angle) * dist, y: Math.sin(angle) * dist, scale: 0, opacity: 0 }}
-                    transition={{ duration: 0.8, delay: 0.40 + (i % 5) * 0.018, ease: [0.2, 0, 0.8, 1] }}
-                    style={{
-                      position: 'absolute',
-                      width: size, height: size,
-                      marginLeft: -size / 2, marginTop: -size / 2,
-                      borderRadius: '50%',
-                      background: `rgba(${fr},${fg},${fb},1)`,
-                      boxShadow: `0 0 ${size * 4}px rgba(${fr},${fg},${fb},0.95)`,
-                      pointerEvents: 'none',
-                    }}
-                  />
-                );
-              })}
-
-              {/* ── SVG connector lines — dashed, glowing ── */}
-              <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-                <defs>
-                  <filter id={`ln-glow-${galaxyFocus}`} x="-50%" y="-50%" width="200%" height="200%">
-                    <feGaussianBlur stdDeviation="2.5" result="b"/>
-                    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-                  </filter>
-                </defs>
-                {subs.map((sub, i) => {
-                  const angle = (i / subs.length) * Math.PI * 2 - Math.PI / 2;
-                  const cx = W2 / 2, cy = H2 / 2;
-                  return (
-                    <motion.line
-                      key={sub.id}
-                      x1={cx} y1={cy}
-                      x2={cx + Math.cos(angle) * orbR}
-                      y2={cy + Math.sin(angle) * orbR}
-                      stroke={`rgba(${fr},${fg},${fb},1)`}
-                      strokeWidth={0.8}
-                      strokeDasharray="4 9"
-                      filter={`url(#ln-glow-${galaxyFocus})`}
-                      initial={{ opacity: 0, pathLength: 0 }}
-                      animate={{ opacity: 0.55, pathLength: 1 }}
-                      exit={{ opacity: 0, pathLength: 0 }}
-                      transition={{ delay: 0.55 + i * 0.07, duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
-                    />
-                  );
-                })}
-              </svg>
-
-              {/* ── Center orb — collapsed sun, interactive ── */}
-              <motion.div
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0, opacity: 0 }}
-                transition={{
-                  scale: { delay: 0.45, type: 'spring', stiffness: 340, damping: 20 },
-                  opacity: { delay: 0.45, duration: 0.18 },
-                }}
-                whileHover={{ scale: 1.1 }}
-                style={{
-                  position: 'absolute',
-                  left: 'calc(50% - 50px)', top: 'calc(50% - 50px)',
-                  width: 100, height: 100,
-                  borderRadius: '50%',
-                  border: `0.5px solid rgba(${fr},${fg},${fb},0.75)`,
-                  boxShadow: `
-                    0 0 0 1px rgba(${fr},${fg},${fb},0.2),
-                    0 0 55px rgba(${fr},${fg},${fb},0.7),
-                    0 0 120px rgba(${fr},${fg},${fb},0.32),
-                    0 0 220px rgba(${fr},${fg},${fb},0.12),
-                    inset 0 0 32px rgba(${fr},${fg},${fb},0.22),
-                    inset 0 0.5px 0 rgba(255,255,255,0.28)
-                  `,
-                  background: `radial-gradient(circle at 40% 32%, rgba(255,255,255,0.14) 0%, rgba(${fr},${fg},${fb},0.32) 35%, rgba(${fr},${fg},${fb},0.07) 70%, transparent 100%)`,
-                  backdropFilter: 'blur(20px) saturate(200%)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer',
-                }}
-                onClick={(e) => { e.stopPropagation(); setGalaxyFocus(null); setExplosionOrigin(null); openWidget(focusedStar); }}
-              >
-                <span style={{
-                  fontSize: 30, position: 'relative', zIndex: 1,
-                  filter: `drop-shadow(0 0 10px rgba(${fr},${fg},${fb},0.9))`,
-                }}>{meta.icon}</span>
-              </motion.div>
-
-              {/* ── Subcategory orbs — neon glassmorphism ── */}
-              {subs.map((sub, i) => {
-                const angle = (i / subs.length) * Math.PI * 2 - Math.PI / 2;
-                const tx = Math.cos(angle) * orbR;
-                const ty = Math.sin(angle) * orbR;
-                return (
-                  <motion.button
-                    key={sub.id}
-                    initial={{ x: 0, y: 0, opacity: 0, scale: 0 }}
-                    animate={{ x: tx, y: ty, opacity: 1, scale: 1 }}
-                    exit={{ x: 0, y: 0, opacity: 0, scale: 0 }}
-                    transition={{ type: 'spring', stiffness: 260, damping: 22, delay: 0.55 + i * 0.07 }}
-                    whileHover={{ scale: 1.22, transition: { duration: 0.16 } }}
-                    whileTap={{ scale: 0.91 }}
-                    style={{
-                      position: 'absolute',
-                      left: 'calc(50% - 38px)', top: 'calc(50% - 38px)',
-                      width: 76, height: 76,
-                      borderRadius: '50%',
-                      background: `radial-gradient(circle at 38% 30%, rgba(255,255,255,0.1) 0%, rgba(${fr},${fg},${fb},0.11) 55%, transparent 100%)`,
-                      border: `0.5px solid rgba(${fr},${fg},${fb},0.65)`,
-                      backdropFilter: 'blur(22px) saturate(180%)',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                      gap: 4, cursor: 'pointer', color: `rgba(${fr},${fg},${fb},1)`,
-                      boxShadow: `
-                        0 0 38px rgba(${fr},${fg},${fb},0.38),
-                        0 0 75px rgba(${fr},${fg},${fb},0.14),
-                        inset 0 0.5px 0 rgba(255,255,255,0.2),
-                        inset 0 0 20px rgba(${fr},${fg},${fb},0.1)
-                      `,
-                    }}
-                    onClick={(e) => { e.stopPropagation(); setGalaxyFocus(null); setExplosionOrigin(null); openWidget(focusedStar); }}
-                  >
-                    <span style={{ fontSize: 20, filter: `drop-shadow(0 0 7px rgba(${fr},${fg},${fb},0.8))` }}>{sub.icon}</span>
-                    <span style={{
-                      fontSize: 7.5, letterSpacing: '0.09em', textTransform: 'uppercase',
-                      textAlign: 'center', lineHeight: 1.2, padding: '0 4px',
-                      textShadow: `0 0 8px rgba(${fr},${fg},${fb},0.7)`,
-                    }}>{sub.label}</span>
-                  </motion.button>
-                );
-              })}
-
-              {/* Back hint */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ delay: 0.78 }}
-                style={{
-                  position: 'absolute', bottom: 108,
-                  fontSize: 9.5, color: 'rgba(255,255,255,0.18)',
-                  letterSpacing: '0.13em', textTransform: 'uppercase',
-                  pointerEvents: 'none', fontWeight: 300,
-                }}
-              >
-                tap fuori · esc
-              </motion.div>
-            </motion.div>
-          );
-        })()}
-      </AnimatePresence>
 
       {/* Subtle click ripple */}
       <AnimatePresence>

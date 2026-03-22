@@ -151,10 +151,18 @@ export async function classifyDocument(text: string): Promise<DocumentClassifica
 // ─── Chat: conversational reply (no data saved) ───────────────
 export async function aiChat(text: string): Promise<string> {
   const reply = await deepseekChat([
-    { role: 'system', content: `Sei Nebula, l'assistente di Alter OS — un sistema personale liquido che registra la vita dell'utente come stelle in una galassia. Rispondi in modo conciso e caldo (max 1-2 frasi). Non salvare nulla, non analizzare dati. È solo conversazione.` },
+    { role: 'system', content: `Sei Nebula, il compagno digitale di Alter OS. Hai la personalità di un amico autentico: curioso, caldo, diretto. Mai banale, mai formale.
+
+Quando l'utente condivide qualcosa — un allenamento, una spesa, un umore, qualsiasi cosa — reagisci come farebbe un amico che ci tiene davvero. Commenta il dettaglio specifico di ciò che ha detto, non generici "bravo!". Puoi fare una domanda curiosa, dare un incoraggiamento concreto, o semplicemente rispecchiare l'emozione.
+
+Regole:
+- Rispondi in italiano, max 2 frasi scorrevoli
+- Sii specifico su ciò che l'utente ha condiviso (cita il dato: i minuti, i km, l'importo, ecc.)
+- Mai iniziare con "Certo!", "Perfetto!", "Ottimo lavoro!" da soli — sono vuoti
+- Tono: da amico, non da bot di fitness o app bancaria` },
     { role: 'user', content: text },
-  ], 120);
-  return reply ?? 'Ciao! Dimmi qualcosa da registrare nella tua galassia.';
+  ], 150);
+  return reply ?? 'Ci sono. Dimmi pure.';
 }
 
 // ─── Query: answer a question using vault entries as context ──
@@ -240,11 +248,13 @@ export interface ChatAndExtractResult {
   }>;
 }
 
-const SYSTEM_COMBINED = `Sei Nebula, l'assistente di Alter OS — un sistema personale che registra la vita dell'utente come stelle in una galassia.
+const SYSTEM_COMBINED = `Sei Nebula, il compagno digitale di Alter OS — un sistema personale che registra la vita dell'utente come stelle in una galassia.
 
-Per ogni messaggio dell'utente fai DUE cose contemporaneamente:
-1. RISPOSTA EMPATICA: rispondi in modo caldo e conciso (max 2 frasi in italiano).
-2. ESTRAZIONE DATI: analizza se il testo contiene informazioni da archiviare nelle galassie. Un messaggio può generare estrazioni in PIÙ categorie simultaneamente.
+Hai la personalità di un amico autentico: curioso, caldo, diretto. Mai banale, mai formale. Parli in italiano.
+
+Per ogni messaggio fai DUE cose contemporaneamente:
+1. RISPOSTA DA AMICO: reagisci in modo genuino a ciò che l'utente ha condiviso. Cita il dato specifico (minuti, euro, km, umore), commenta, fai una domanda curiosa se ha senso. Max 2 frasi scorrevoli. Non iniziare con "Certo!", "Perfetto!" da soli.
+2. ESTRAZIONE DATI: analizza se il testo contiene informazioni da archiviare. Un messaggio può generare estrazioni in PIÙ categorie simultaneamente.
 
 Galassie disponibili:
 - finance:       spese, entrate, budget → { type: "expense"|"income", amount: number, label: string }

@@ -5,7 +5,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from './config/supabase';
 import { getCategorySummaries, getUpcomingEvents } from './vault/vaultService';
 import { buildStar } from './components/starfield/StarfieldView';
-import { runInsightEngine } from './core/insightEngine';
+import { runInsightEngine, generateDailyGreeting } from './core/insightEngine';
+import { handleGoogleFitCallback, syncGoogleFit } from './core/wearableSync';
 import { useAlterStore } from './store/alterStore';
 import LoginScreen from './components/auth/LoginScreen';
 import StarfieldView from './components/starfield/StarfieldView';
@@ -15,19 +16,26 @@ import TabBar from './components/layout/TabBar';
 import ChatView from './components/chat/ChatView';
 import ChatHistorySidebar from './components/chat/ChatHistorySidebar';
 import DashboardView from './components/dashboard/DashboardView';
+import NexusView from './components/social/NexusView';
 import DataAnalyticsView from './components/dashboard/DataAnalyticsView';
 import SettingsPanel from './components/settings/SettingsPanel';
 import BugReportPanel from './components/panels/BugReportPanel';
+import DynamicIslandTimer from './components/timer/DynamicIslandTimer';
 
 export default function App() {
   const [authUser, setAuthUser] = useState<User | null | undefined>(undefined);
   const [authError, setAuthError] = useState<string | null>(null);
-  const { setUser, setStars, upsertStar, removeStar, addKnownCategory, setAlertEvent, alertEvent, activeWidget, viewMode, theme, activeDataCategory, setShowBugReport, setShowChatSidebar } = useAlterStore();
+  const { setUser, setStars, upsertStar, removeStar, addKnownCategory, setAlertEvent, alertEvent, activeWidget, viewMode, theme, activeDataCategory, setShowBugReport, setShowChatSidebar, setPendingGreeting } = useAlterStore();
 
   // Apply theme to document root
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
+
+  // ── Google Fit OAuth callback ─────────────────────────────
+  useEffect(() => {
+    handleGoogleFitCallback(); // captures token from URL hash if present
+  }, []);
 
   // ── Auth listener ────────────────────────────────────────
   useEffect(() => {
@@ -87,6 +95,20 @@ export default function App() {
         if (!entry) return;
         const insightStar = buildStar('insight', 1, entry.created_at);
         upsertStar({ ...insightStar, isInsight: true });
+      });
+
+      // Daily greeting — held silently, prepended to first nebula reply
+      generateDailyGreeting(authUser.id).then((greeting) => {
+        if (greeting) setPendingGreeting(greeting);
+      });
+
+      // Google Fit sync — merged into pending greeting, not a separate message
+      syncGoogleFit(authUser.id).then((saved) => {
+        if (saved > 0) {
+          const fitNote = `Ho sincronizzato ${saved} dato${saved > 1 ? 'i' : 'o'} da Google Fit.`;
+          const current = useAlterStore.getState().pendingGreeting;
+          setPendingGreeting(current ? `${current} ${fitNote}` : fitNote);
+        }
       });
     });
   }, [authUser, setUser, setStars, upsertStar, removeStar, addKnownCategory]);
@@ -168,6 +190,11 @@ export default function App() {
         {viewMode === 'dashboard' && <DashboardView />}
       </AnimatePresence>
 
+      {/* ── Nexus (social) view ── */}
+      <AnimatePresence>
+        {viewMode === 'nexus' && <NexusView />}
+      </AnimatePresence>
+
       {/* ── Data Analytics overlay ── */}
       <AnimatePresence>
         {activeDataCategory && <DataAnalyticsView key="data-analytics" />}
@@ -179,6 +206,7 @@ export default function App() {
       </AnimatePresence>
 
       <PolymorphicWidget />
+      <DynamicIslandTimer />
       <SettingsPanel />
       <ChatHistorySidebar />
       <TabBar />

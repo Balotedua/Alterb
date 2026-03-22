@@ -1,6 +1,62 @@
 import { getRecentAll, saveEntry } from '../vault/vaultService';
 import type { VaultEntry, Star } from '../types';
 
+// ── Daily greeting (spontaneous reflection) ──────────────────
+const GREETING_KEY = 'alter_last_greeting';
+const GREETING_COOLDOWN = 4 * 60 * 60 * 1000; // 4h
+
+export async function generateDailyGreeting(userId: string): Promise<string | null> {
+  const last = localStorage.getItem(GREETING_KEY);
+  if (last && Date.now() - parseInt(last, 10) < GREETING_COOLDOWN) return null;
+
+  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
+  if (!apiKey) return null;
+
+  const entries = (await getRecentAll(userId, 30)).filter(
+    e => e.category !== 'insight' && e.category !== 'chat'
+  );
+  if (entries.length < 3) return null;
+
+  const context = entries.slice(0, 20).map(e =>
+    `[${new Date(e.created_at).toLocaleDateString('it-IT')} · ${e.category}] ${JSON.stringify(e.data)}`
+  ).join('\n');
+
+  const hour = new Date().getHours();
+  const momento = hour < 12 ? 'mattina' : hour < 18 ? 'pomeriggio' : 'sera';
+
+  try {
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [
+          {
+            role: 'system',
+            content: `Sei Nebula, il compagno digitale di Alter OS. L'utente ha appena riaperto l'app di ${momento}. Genera UN messaggio di benvenuto personalizzato (max 2 frasi) che:
+- Cita qualcosa di specifico dai suoi ultimi dati (un numero, un'attività, uno stato d'animo, una data)
+- Offre un piccolo insight o una domanda curiosa basata su pattern nei dati
+- È caldo e autentico, non generico né da bot
+Rispondi SOLO con il testo del messaggio, senza formattazioni.`,
+          },
+          { role: 'user', content: `Dati recenti:\n${context}` },
+        ],
+        temperature: 0.72,
+        max_tokens: 120,
+      }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const text = json.choices[0]?.message?.content as string | undefined;
+    if (!text?.trim()) return null;
+    localStorage.setItem(GREETING_KEY, Date.now().toString());
+    return text.trim();
+  } catch (e) {
+    console.error('[generateDailyGreeting]', e);
+    return null;
+  }
+}
+
 // ── quickConnect: L1 semantic beam (zero API cost) ───────────
 
 const STOPWORDS = new Set([

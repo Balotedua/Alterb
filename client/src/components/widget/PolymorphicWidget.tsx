@@ -184,8 +184,29 @@ function TabBar({ tabs, active, color, onChange }: {
 }
 
 // ─── Finance Dashboard ────────────────────────────────────────
-function FinanceDashboard({ entries, color }: { entries: VaultEntry[]; color: string }) {
-  const [tab, setTab] = useState<'cashflow' | 'analisi'>('cashflow');
+type FinanceTab = 'transazioni' | 'cashflow' | 'aggiungi' | 'budget' | 'ricorrenti' | 'analisi';
+
+const FINANCE_FRAGMENTS: { id: FinanceTab; label: string; desc: string }[] = [
+  { id: 'transazioni', label: 'Transazioni',  desc: 'Storico entrate e uscite' },
+  { id: 'cashflow',    label: 'Cashflow',     desc: 'Trend ultimi 6 mesi' },
+  { id: 'budget',      label: 'Budget',       desc: 'Obiettivi per categoria' },
+  { id: 'ricorrenti',  label: 'Ricorrenti',   desc: 'Abbonamenti & fissi' },
+  { id: 'analisi',     label: 'Analisi',      desc: 'Burn rate & proiezioni' },
+  { id: 'aggiungi',    label: 'Aggiungi',     desc: 'Log veloce via chat' },
+];
+
+function FinanceDashboard({ entries, color, initialTab }: { entries: VaultEntry[]; color: string; initialTab?: string }) {
+  const singleMode = !!initialTab;
+  const normalizedTab = (initialTab === 'grafici' ? 'cashflow' : initialTab) as FinanceTab | undefined;
+  const [tab, setTab] = useState<FinanceTab | null>(normalizedTab ?? null);
+  const [filter, setFilter] = useState<'all' | 'expense' | 'income'>('all');
+  const [search, setSearch] = useState('');
+  const [budgets, setBudgets] = useState<Record<string, number>>(() => {
+    try { return JSON.parse(localStorage.getItem('_alter_budget') ?? '{}'); } catch { return {}; }
+  });
+  const [editBudgetLabel, setEditBudgetLabel] = useState<string | null>(null);
+  const [editBudgetVal, setEditBudgetVal] = useState('');
+  const { setActiveWidget } = useAlterStore();
 
   const expenses = entries.filter(e => e.data.type === 'expense');
   const income   = entries.filter(e => e.data.type === 'income');
@@ -193,23 +214,28 @@ function FinanceDashboard({ entries, color }: { entries: VaultEntry[]; color: st
   const totalIn  = income.reduce((s, e)  => s + ((e.data.amount as number) ?? 0), 0);
   const balance  = totalIn - totalOut;
   const savings  = totalIn > 0 ? Math.round((balance / totalIn) * 100) : null;
-
-  // Burn rate: avg spesa giornaliera × 30
   const dayOfMonth = new Date().getDate();
   const burnRate   = dayOfMonth > 0 ? (totalOut / dayOfMonth) * 30 : 0;
+  const daysLeft   = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() - dayOfMonth;
+  const projMonthEnd = dayOfMonth > 0 ? (totalOut / dayOfMonth) * (dayOfMonth + daysLeft) : 0;
 
-  // Dual-line chart data
-  const incByDay: Map<string, number> = new Map();
-  const outByDay: Map<string, number> = new Map();
-  for (const e of [...entries].reverse()) {
-    const day = new Date(e.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
-    if (e.data.type === 'income')  incByDay.set(day,  (incByDay.get(day)  ?? 0) + ((e.data.amount as number) ?? 0));
-    if (e.data.type === 'expense') outByDay.set(day, (outByDay.get(day) ?? 0) + ((e.data.amount as number) ?? 0));
+  // Cashflow: last 6 months aggregated
+  const MESI = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+  const _now = new Date();
+  const months6 = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(_now.getFullYear(), _now.getMonth() - (5 - i), 1);
+    return { key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`, label: MESI[d.getMonth()], entrate: 0, uscite: 0, netto: 0 };
+  });
+  for (const e of entries) {
+    const key = e.created_at.slice(0, 7);
+    const m = months6.find(mx => mx.key === key);
+    if (!m) continue;
+    if (e.data.type === 'income')  m.entrate += (e.data.amount as number) ?? 0;
+    if (e.data.type === 'expense') m.uscite  += (e.data.amount as number) ?? 0;
   }
-  const allDays   = [...new Set([...incByDay.keys(), ...outByDay.keys()])].slice(-20);
-  const chartData = allDays.map(date => ({ date, entrate: incByDay.get(date) ?? 0, uscite: outByDay.get(date) ?? 0 }));
+  for (const m of months6) m.netto = m.entrate - m.uscite;
 
-  // Pie data
+  // Pie / label breakdown
   const labelMap = new Map<string, number>();
   for (const e of expenses) {
     const lbl = (e.data.label as string) || 'altro';
@@ -217,135 +243,342 @@ function FinanceDashboard({ entries, color }: { entries: VaultEntry[]; color: st
   }
   const pieData = [...labelMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 7).map(([name, value]) => ({ name, value }));
 
+  // Day of week
+  const daySpend = Array(7).fill(0) as number[];
+  for (const e of expenses) {
+    const d = new Date(e.created_at).getDay();
+    daySpend[d] += (e.data.amount as number) ?? 0;
+  }
+  const DAYS_IT = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+  const maxDaySpend = Math.max(...daySpend);
+  const topDay = daySpend.indexOf(maxDaySpend);
+
+  // Recurring detection: same label in ≥2 different months
+  const labelMonths = new Map<string, Set<string>>();
+  for (const e of expenses) {
+    const lbl = (e.data.label as string) || 'altro';
+    const month = e.created_at.slice(0, 7);
+    if (!labelMonths.has(lbl)) labelMonths.set(lbl, new Set());
+    labelMonths.get(lbl)!.add(month);
+  }
+  const recurring = [...labelMonths.entries()]
+    .filter(([, months]) => months.size >= 2)
+    .sort((a, b) => b[1].size - a[1].size);
+
+  // Filtered transactions list
+  const filtered = entries
+    .filter(e => filter === 'all' || e.data.type === filter)
+    .filter(e => !search || ((e.data.label as string) ?? '').toLowerCase().includes(search.toLowerCase()));
+
   const kpis = [
-    { label: 'Entrate',   value: `+€${totalIn.toFixed(0)}`,  clr: '#4ade80' },
-    { label: 'Uscite',    value: `-€${totalOut.toFixed(0)}`, clr: '#f87171' },
-    { label: 'Saldo',     value: `€${balance.toFixed(0)}`,   clr: balance >= 0 ? '#4ade80' : '#f87171' },
-    { label: 'Risparmio', value: savings != null ? `${savings}%` : '—', clr: '#f0c040' },
+    { label: 'Entrate',   value: `€${totalIn.toFixed(0)}`,           clr: '#4ade80', sign: '+' },
+    { label: 'Uscite',    value: `€${totalOut.toFixed(0)}`,          clr: '#f87171', sign: '-' },
+    { label: 'Saldo',     value: `€${Math.abs(balance).toFixed(0)}`, clr: balance >= 0 ? '#4ade80' : '#f87171', sign: balance >= 0 ? '' : '-' },
+    { label: 'Risparmio', value: savings != null ? `${savings}%` : '—', clr: '#f0c040', sign: '' },
   ];
+
+  // ── Hub ──────────────────────────────────────────────────────
+  if (!singleMode && tab === null) {
+    return (
+      <div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 22 }}>
+          {kpis.map(k => (
+            <div key={k.label} style={{ padding: '11px 8px', borderRadius: 10, background: `${k.clr}06`, border: `1px solid ${k.clr}10`, textAlign: 'center' }}>
+              <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>{k.label}</div>
+              <div style={{ fontSize: 16, fontWeight: 100, color: k.clr, letterSpacing: '-0.02em' }}>
+                {k.sign && <span style={{ fontSize: 10, opacity: 0.5 }}>{k.sign}</span>}{k.value}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+          {FINANCE_FRAGMENTS.map(f => (
+            <div key={f.id} onClick={() => setTab(f.id)}
+              style={{ padding: '13px 14px', borderRadius: 12, cursor: 'pointer', background: 'rgba(255,255,255,0.016)', border: '1px solid rgba(255,255,255,0.042)', transition: 'all 0.18s' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = `${color}28`; (e.currentTarget as HTMLElement).style.background = `${color}06`; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.042)'; (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.016)'; }}
+            >
+              <div style={{ fontSize: 11, fontWeight: 300, color: 'rgba(255,255,255,0.65)', marginBottom: 4, letterSpacing: '0.01em' }}>{f.label}</div>
+              <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.04em' }}>{f.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const currentTab = tab ?? normalizedTab ?? 'transazioni';
 
   return (
     <div>
-      <TabBar tabs={['Cashflow', 'Analisi']} active={tab === 'cashflow' ? 'Cashflow' : 'Analisi'}
-        color={color} onChange={t => setTab(t === 'Cashflow' ? 'cashflow' : 'analisi')} />
+      {!singleMode && (
+        <button onClick={() => setTab(null)} style={{
+          background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 16px', display: 'flex', alignItems: 'center', gap: 6,
+          color: 'rgba(255,255,255,0.2)', fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', transition: 'color 0.15s',
+        }}
+        onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.45)')}
+        onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.2)')}
+        >
+          ← {FINANCE_FRAGMENTS.find(f => f.id === currentTab)?.label ?? currentTab}
+        </button>
+      )}
 
-      {tab === 'cashflow' && (
+      {/* ── TRANSAZIONI ── */}
+      {currentTab === 'transazioni' && (
         <div>
-          {/* KPI chips */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-            {kpis.map(k => (
-              <div key={k.label} style={{
-                flex: 1, padding: '9px 10px', borderRadius: 10,
-                background: `${k.clr}08`, border: `1px solid ${k.clr}15`,
+          <div style={{ display: 'flex', gap: 5, marginBottom: 12, alignItems: 'center' }}>
+            {(['all', 'expense', 'income'] as const).map(f => (
+              <button key={f} onClick={() => setFilter(f)} style={{
+                padding: '4px 10px', borderRadius: 20, fontSize: 8.5, border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+                background: filter === f ? `${color}20` : 'rgba(255,255,255,0.04)',
+                color: filter === f ? color : 'rgba(255,255,255,0.25)',
               }}>
-                <div style={{ fontSize: 8, color: '#4b5268', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5 }}>{k.label}</div>
-                <div style={{ fontSize: 15, fontWeight: 100, color: k.clr }}>{k.value}</div>
-              </div>
+                {f === 'all' ? 'Tutte' : f === 'expense' ? 'Uscite' : 'Entrate'}
+              </button>
             ))}
+            <input placeholder="Cerca..." value={search} onChange={e => setSearch(e.target.value)} style={{
+              flex: 1, background: 'transparent', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.06)',
+              padding: '3px 2px', fontSize: 9.5, color: 'rgba(255,255,255,0.5)', outline: 'none',
+            }} />
           </div>
-
-          {/* Burn rate */}
-          {burnRate > 0 && (
-            <div style={{
-              marginBottom: 12, padding: '7px 12px', borderRadius: 8,
-              background: 'rgba(255,255,255,0.016)', borderLeft: '2px solid rgba(248,113,113,0.2)',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              fontSize: 10, color: '#4b5268',
-            }}>
-              <span>Burn rate mensile proiettato</span>
-              <span style={{ color: '#f87171', fontWeight: 500 }}>€{burnRate.toFixed(0)}</span>
-            </div>
-          )}
-
-          {/* Dual-line chart */}
-          {chartData.length >= 2 && (
-            <div style={{ marginBottom: 14 }}>
-              <ResponsiveContainer width="100%" height={130}>
-                <LineChart data={chartData}>
-                  <XAxis dataKey="date" tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} width={32} />
-                  <Tooltip
-                    contentStyle={{ background: 'rgba(3,3,7,0.97)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10 }}
-                    labelStyle={{ color: '#6b7280', fontSize: 10 }}
-                    formatter={(v: number, name: string) => [`€${v.toFixed(2)}`, name]}
-                  />
-                  <Line type="monotone" dataKey="entrate" name="Entrate" stroke="#4ade80" strokeWidth={1.5} dot={false} activeDot={{ r: 4, fill: '#4ade80', strokeWidth: 0 }} />
-                  <Line type="monotone" dataKey="uscite"  name="Uscite"  stroke="#f87171" strokeWidth={1.5} dot={false} activeDot={{ r: 4, fill: '#f87171', strokeWidth: 0 }} />
-                </LineChart>
-              </ResponsiveContainer>
-              <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
-                {[['#4ade80', 'Entrate'], ['#f87171', 'Uscite']].map(([c, l]) => (
-                  <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 9, color: '#4b5268' }}>
-                    <div style={{ width: 18, height: 1.5, background: c, borderRadius: 1 }} />{l}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 260, overflowY: 'auto' }}>
+            {filtered.length === 0 && <div style={{ fontSize: 10, color: '#3a3f52', textAlign: 'center', padding: 20 }}>Nessuna transazione</div>}
+            {filtered.map(e => {
+              const isIncome = e.data.type === 'income';
+              const amt = (e.data.amount as number)?.toFixed(2) ?? '?';
+              const lbl = (e.data.label as string) ?? '—';
+              const date = new Date(e.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
+              return (
+                <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 2px', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                  <div style={{ width: 4, height: 4, borderRadius: '50%', background: isIncome ? '#4ade80' : '#f87171', flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 300, color: 'rgba(255,255,255,0.65)', letterSpacing: '0.01em' }}>{lbl}</div>
+                    <div style={{ fontSize: 7.5, color: 'rgba(255,255,255,0.2)', marginTop: 1 }}>{date}</div>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Recent transactions */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 130, overflowY: 'auto' }}>
-            {entries.slice(0, 20).map(e => (
-              <EntryRow key={e.id} entry={e} color={color}
-                label={(e.data.label as string) ?? '—'}
-                value={`${e.data.type === 'income' ? '+' : '-'}€${(e.data.amount as number)?.toFixed(2) ?? '?'}`}
-              />
-            ))}
+                  <div style={{ fontSize: 11, fontWeight: 300, color: isIncome ? '#4ade80' : '#f87171' }}>
+                    {isIncome ? '+' : '-'}€{amt}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {tab === 'analisi' && (
+      {/* ── CASHFLOW ── */}
+      {currentTab === 'cashflow' && (
         <div>
-          {/* Donut + legend */}
-          {pieData.length >= 2 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-              <ResponsiveContainer width={110} height={110}>
-                <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={28} outerRadius={50} dataKey="value" strokeWidth={0}>
-                    {pieData.map((_, i) => <Cell key={i} fill={PIE_PALETTE[i % PIE_PALETTE.length]} fillOpacity={0.88} />)}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{ background: 'rgba(3,3,7,0.97)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, fontSize: 10 }}
-                    formatter={(v: number, _: string, entry: { name?: string }) => [`€${v.toFixed(2)}`, entry.name ?? '']}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              <div style={{ flex: 1 }}>
-                {pieData.map((d, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, marginBottom: 4 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: PIE_PALETTE[i % PIE_PALETTE.length], flexShrink: 0 }} />
-                    <span style={{ color: '#6b7280', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
-                    <span style={{ color: PIE_PALETTE[i % PIE_PALETTE.length], fontWeight: 500 }}>€{d.value.toFixed(0)}</span>
-                  </div>
-                ))}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 7.5, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>Cashflow · ultimi 6 mesi</div>
+            <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end' }}>
+              <div>
+                <div style={{ fontSize: 24, fontWeight: 100, color: balance >= 0 ? '#4ade80' : '#f87171', letterSpacing: '-0.03em' }}>
+                  {balance >= 0 ? '+' : '-'}€{Math.abs(balance).toFixed(0)}
+                </div>
+                <div style={{ fontSize: 7.5, color: 'rgba(255,255,255,0.18)', marginTop: 3 }}>saldo totale</div>
               </div>
+              {savings != null && (
+                <div style={{ borderLeft: '1px solid rgba(255,255,255,0.06)', paddingLeft: 18, paddingBottom: 2 }}>
+                  <div style={{ fontSize: 24, fontWeight: 100, color: '#f0c040', letterSpacing: '-0.03em' }}>{savings}%</div>
+                  <div style={{ fontSize: 7.5, color: 'rgba(255,255,255,0.18)', marginTop: 3 }}>risparmio</div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
+          <ResponsiveContainer width="100%" height={130}>
+            <BarChart data={months6} barGap={2} barCategoryGap="30%">
+              <XAxis dataKey="label" tick={{ fill: 'rgba(255,255,255,0.2)', fontSize: 8.5 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: 'rgba(255,255,255,0.12)', fontSize: 8 }} axisLine={false} tickLine={false} width={28} />
+              <Tooltip
+                contentStyle={{ background: 'rgba(3,3,7,0.97)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, fontSize: 9.5 }}
+                labelStyle={{ color: 'rgba(255,255,255,0.35)', marginBottom: 4 }}
+                formatter={(v: number, name: string) => [`€${v.toFixed(0)}`, name === 'entrate' ? 'Entrate' : 'Uscite']}
+                cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+              />
+              <Bar dataKey="entrate" fill="#4ade80" fillOpacity={0.65} radius={[3,3,0,0]} />
+              <Bar dataKey="uscite"  fill="#f87171" fillOpacity={0.65} radius={[3,3,0,0]} />
+            </BarChart>
+          </ResponsiveContainer>
+          <div style={{ display: 'flex', gap: 4, marginTop: 14, justifyContent: 'space-between' }}>
+            {months6.map(m => {
+              const c = m.netto >= 0 ? '#4ade80' : '#f87171';
+              return (
+                <div key={m.key} style={{ flex: 1, textAlign: 'center' }}>
+                  <div style={{ fontSize: 9, fontWeight: 200, color: c }}>{m.netto >= 0 ? '+' : ''}{m.netto.toFixed(0)}</div>
+                  <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.15)', marginTop: 2 }}>{m.label}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
-          {/* Category bars */}
-          {pieData.length > 0 && totalOut > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-              {pieData.map((d, i) => {
-                const pct = (d.value / totalOut) * 100;
-                const c   = PIE_PALETTE[i % PIE_PALETTE.length];
-                return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 9, color: '#4b5268', minWidth: 64, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
-                    <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,0.04)', borderRadius: 2, overflow: 'hidden' }}>
-                      <div style={{ width: `${pct}%`, height: '100%', background: c, borderRadius: 2, boxShadow: `0 0 6px ${c}50` }} />
+      {/* ── AGGIUNGI ── */}
+      {currentTab === 'aggiungi' && (
+        <div>
+          <div style={{ marginBottom: 12, padding: '12px 14px', borderRadius: 12, background: 'rgba(245,200,66,0.03)', border: '1px solid rgba(245,200,66,0.07)' }}>
+            <div style={{ fontSize: 7.5, color: 'rgba(245,200,66,0.5)', marginBottom: 10, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Log via chat</div>
+            {[
+              { label: 'Spesa',       ex: 'Ho speso 45€ al supermercato' },
+              { label: 'Entrata',     ex: 'Stipendio 1800€' },
+              { label: 'Ristorante',  ex: 'Cena al ristorante 35€' },
+              { label: 'Abbonamento', ex: 'Netflix 12.99€ mensile' },
+            ].map(t => (
+              <div key={t.label} onClick={() => { useAlterStore.getState().setGhostStarPrompt(t.ex); setActiveWidget(null); }}
+                style={{ marginBottom: 6, padding: '7px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center', transition: 'background 0.15s' }}
+                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = 'rgba(245,200,66,0.05)')}
+                onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.02)')}
+              >
+                <span style={{ fontSize: 8.5, color: 'rgba(245,200,66,0.6)', minWidth: 60 }}>{t.label}</span>
+                <span style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.3)' }}>{t.ex}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: '10px 14px', borderRadius: 12, background: 'rgba(248,113,113,0.03)', border: '1px solid rgba(248,113,113,0.07)' }}>
+            <div style={{ fontSize: 7.5, color: 'rgba(248,113,113,0.5)', marginBottom: 10, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Elimina recenti</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 130, overflowY: 'auto' }}>
+              {entries.slice(0, 8).map(e => (
+                <EntryRow key={e.id} entry={e} color={color}
+                  label={(e.data.label as string) ?? '—'}
+                  value={`${e.data.type === 'income' ? '+' : '-'}€${(e.data.amount as number)?.toFixed(2) ?? '?'}`}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── BUDGET ── */}
+      {currentTab === 'budget' && (
+        <div>
+          <div style={{ fontSize: 7.5, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 18 }}>Budget mensile</div>
+          {pieData.length === 0 && <div style={{ fontSize: 10, color: '#3a3f52', textAlign: 'center', padding: 20 }}>Nessuna spesa registrata</div>}
+          {pieData.map((d, i) => {
+            const bgt = budgets[d.name];
+            const pct = bgt ? Math.min(100, Math.round((d.value / bgt) * 100)) : null;
+            const over = bgt != null && d.value > bgt;
+            const c = over ? '#f87171' : PIE_PALETTE[i % PIE_PALETTE.length];
+            return (
+              <div key={d.name} style={{ marginBottom: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 300, color: 'rgba(255,255,255,0.55)', flex: 1 }}>{d.name}</span>
+                  <span style={{ fontSize: 12, fontWeight: 200, color: c }}>€{d.value.toFixed(0)}</span>
+                  {bgt != null ? (
+                    <span style={{ fontSize: 8.5, color: 'rgba(255,255,255,0.2)' }}>/ €{bgt}</span>
+                  ) : editBudgetLabel !== d.name ? (
+                    <button onClick={() => { setEditBudgetLabel(d.name); setEditBudgetVal(''); }}
+                      style={{ fontSize: 8, color: 'rgba(255,255,255,0.2)', background: 'none', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 4, padding: '1px 6px', cursor: 'pointer' }}>
+                      Set
+                    </button>
+                  ) : null}
+                  {over && <span style={{ fontSize: 8, color: '#f87171', letterSpacing: '0.04em' }}>over</span>}
+                  {editBudgetLabel === d.name ? (
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                      <input value={editBudgetVal} onChange={ev => setEditBudgetVal(ev.target.value)} placeholder="€" autoFocus
+                        onKeyDown={ev => {
+                          if (ev.key === 'Enter') {
+                            const n = parseFloat(editBudgetVal);
+                            if (!isNaN(n)) { const u = { ...budgets, [d.name]: n }; setBudgets(u); localStorage.setItem('_alter_budget', JSON.stringify(u)); }
+                            setEditBudgetLabel(null);
+                          }
+                          if (ev.key === 'Escape') setEditBudgetLabel(null);
+                        }}
+                        style={{ width: 50, background: 'transparent', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.15)', padding: '1px 2px', fontSize: 9.5, color: '#fff', outline: 'none' }}
+                      />
+                      <button onClick={() => { const n = parseFloat(editBudgetVal); if (!isNaN(n)) { const u = { ...budgets, [d.name]: n }; setBudgets(u); localStorage.setItem('_alter_budget', JSON.stringify(u)); } setEditBudgetLabel(null); }}
+                        style={{ fontSize: 9, color: '#4ade80', background: 'none', border: 'none', cursor: 'pointer' }}>✓</button>
                     </div>
-                    <span style={{ fontSize: 9, color: c, minWidth: 28, textAlign: 'right' }}>{pct.toFixed(0)}%</span>
+                  ) : bgt != null ? (
+                    <button onClick={() => { setEditBudgetLabel(d.name); setEditBudgetVal(bgt.toString()); }}
+                      style={{ fontSize: 8, color: 'rgba(255,255,255,0.18)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px' }}>✏</button>
+                  ) : null}
+                </div>
+                <div style={{ height: 2, background: 'rgba(255,255,255,0.05)', borderRadius: 1 }}>
+                  {pct != null && <div style={{ width: `${pct}%`, height: '100%', background: c, borderRadius: 1, boxShadow: `0 0 4px ${c}50`, transition: 'width 0.4s ease' }} />}
+                </div>
+                {pct != null && <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: 7, color: c, marginTop: 3, opacity: 0.7 }}>{pct}%</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── RICORRENTI ── */}
+      {currentTab === 'ricorrenti' && (
+        <div>
+          <div style={{ fontSize: 7.5, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 18 }}>Spese ricorrenti · ≥2 mesi</div>
+          {recurring.length === 0 ? (
+            <div style={{ fontSize: 10, color: '#3a3f52', textAlign: 'center', padding: 24, lineHeight: 1.8 }}>
+              Nessuna spesa ricorrente.<br /><span style={{ fontSize: 8.5 }}>Serve almeno 2 mesi di dati.</span>
+            </div>
+          ) : (
+            <>
+              {recurring.map(([lbl, months], i) => {
+                const total = labelMap.get(lbl) ?? 0;
+                const avg   = months.size > 0 ? total / months.size : 0;
+                const c     = PIE_PALETTE[i % PIE_PALETTE.length];
+                return (
+                  <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                    <div style={{ width: 3, height: 3, borderRadius: '50%', background: c, flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 10.5, fontWeight: 300, color: 'rgba(255,255,255,0.6)' }}>{lbl}</div>
+                      <div style={{ fontSize: 7.5, color: 'rgba(255,255,255,0.2)', marginTop: 2 }}>{months.size} mesi rilevati</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 12, fontWeight: 200, color: c }}>€{avg.toFixed(0)}<span style={{ fontSize: 8, opacity: 0.5 }}>/m</span></div>
+                    </div>
                   </div>
                 );
               })}
-            </div>
+              <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '12px 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                <span style={{ fontSize: 8.5, color: 'rgba(255,255,255,0.22)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Impegni fissi/mese</span>
+                <span style={{ fontSize: 16, fontWeight: 100, color: '#f5c842' }}>€{recurring.reduce((s, [lbl]) => s + (labelMap.get(lbl) ?? 0) / (labelMonths.get(lbl)?.size ?? 1), 0).toFixed(0)}</span>
+              </div>
+            </>
           )}
+        </div>
+      )}
+
+      {/* ── ANALISI ── */}
+      {currentTab === 'analisi' && (
+        <div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
+            {[
+              { label: 'Burn Rate',    value: `€${burnRate.toFixed(0)}`,  sub: 'proiezione mensile', clr: '#f87171' },
+              { label: 'Media/giorno', value: `€${dayOfMonth > 0 ? (totalOut / dayOfMonth).toFixed(0) : '0'}`, sub: `ultimi ${dayOfMonth}gg`, clr: '#60a5fa' },
+              { label: 'Fine mese',    value: `€${projMonthEnd.toFixed(0)}`, sub: `${daysLeft}gg rimasti`, clr: '#34d399' },
+              { label: 'Top categoria', value: pieData[0]?.name ?? '—', sub: `€${(pieData[0]?.value ?? 0).toFixed(0)}`, clr: '#fbbf24' },
+            ].map(k => (
+              <div key={k.label} style={{ padding: '12px 14px', borderRadius: 11, background: `${k.clr}06`, border: `1px solid ${k.clr}10` }}>
+                <div style={{ fontSize: 7.5, color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>{k.label}</div>
+                <div style={{ fontSize: 18, fontWeight: 100, color: k.clr, letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.value}</div>
+                <div style={{ fontSize: 7.5, color: 'rgba(255,255,255,0.15)', marginTop: 3 }}>{k.sub}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 7.5, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>Spesa per giorno</div>
+          <div style={{ display: 'flex', gap: 5, alignItems: 'flex-end', height: 56 }}>
+            {DAYS_IT.map((d, i) => {
+              const v   = daySpend[i];
+              const pct = maxDaySpend > 0 ? (v / maxDaySpend) * 100 : 0;
+              const isTop = i === topDay && v > 0;
+              const barColor = isTop ? '#f87171' : 'rgba(255,255,255,0.1)';
+              return (
+                <div key={d} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: '100%', background: 'rgba(255,255,255,0.025)', borderRadius: 2, height: 42, display: 'flex', alignItems: 'flex-end', overflow: 'hidden' }}>
+                    <div style={{ width: '100%', height: `${Math.max(pct, v > 0 ? 4 : 0)}%`, background: barColor, borderRadius: 2, transition: 'height 0.4s', boxShadow: isTop ? `0 0 6px ${barColor}80` : 'none' }} />
+                  </div>
+                  <span style={{ fontSize: 7.5, color: isTop ? '#f87171' : 'rgba(255,255,255,0.18)' }}>{d}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
   );
 }
+
 
 function HealthChart({ entries, color }: { entries: VaultEntry[]; color: string }) {
   const type     = entries[0]?.data.type as string;
@@ -1223,7 +1456,7 @@ export default function PolymorphicWidget() {
             }}>
               Nessun dato ancora.
             </p>
-          ) : activeWidget.renderType === 'finance'     ? <FinanceDashboard  entries={activeWidget.entries} color={activeWidget.color} />
+          ) : activeWidget.renderType === 'finance'     ? <FinanceDashboard  entries={activeWidget.entries} color={activeWidget.color} initialTab={activeWidget.subTab} />
           : activeWidget.renderType === 'workout'     ? <WorkoutDashboard  entries={activeWidget.entries} color={activeWidget.color} />
           : activeWidget.renderType === 'chart'       ? <HealthChart       entries={activeWidget.entries} color={activeWidget.color} />
           : activeWidget.renderType === 'numeric'     ? <NumericChart      entries={activeWidget.entries} color={activeWidget.color} label={activeWidget.label} />
