@@ -7,8 +7,8 @@ import { parseBankCsv, importBankCsv } from '../../import/bankCsvImport';
 import type { BankTransaction } from '../../import/bankCsvImport';
 import { extractDocument, isDocumentFile } from '../../import/documentOcr';
 import { quickConnect } from '../../core/insightEngine';
-import { saveEntry, getByCategory, queryCalendarByDate, getRecentAll, deleteCategory, saveChatSession, updateChatSession } from '../../vault/vaultService';
-import { aiQuery, analyzeGalaxy, aiChat } from '../../core/aiParser';
+import { saveEntry, getByCategory, queryCalendarByDate, getRecentAll, deleteCategory, deleteByCategoryAndDateRange, deleteAllUserData, saveChatSession, updateChatSession } from '../../vault/vaultService';
+import { aiQuery, analyzeGalaxy, aiChat, aiChatAndExtract, aiNexusNarrative } from '../../core/aiParser';
 import { buildStar, getCategoryMeta, starPosition } from '../starfield/StarfieldView';
 import { useAlterStore } from '../../store/alterStore';
 
@@ -24,6 +24,9 @@ const HINTS = [
   'Acqua 1.5 litri...',
   'Mi sento stressato oggi...',
   '50€ abbonamento palestra...',
+  'Ricordami tra 10 minuti di chiamare Marco...',
+  'Perché sono sempre stanco?',
+  'Ricordami tra 1 ora di prendere le medicine...',
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -43,6 +46,7 @@ export default function NebulaCore() {
   const [csvImporting,     setCsvImporting]     = useState(false);
   const [pendingOcr,       setPendingOcr]       = useState<{ file: File; text: string; filename: string; pageCount?: number; confidence?: number } | null>(null);
   const [ocrLoading,       setOcrLoading]       = useState(false);
+  const [pendingDelete,    setPendingDelete]    = useState<{ label: string; onConfirm: () => Promise<void> } | null>(null);
   const evolveCmdRef   = useRef<string | null>(null);
   const inputRef       = useRef<HTMLInputElement>(null);
   const fileRef        = useRef<HTMLInputElement>(null);
@@ -65,6 +69,7 @@ export default function NebulaCore() {
     ghostStarPrompt, setGhostStarPrompt,
     showChatSidebar, setShowChatSidebar,
     currentSessionId, setCurrentSessionId,
+    viewMode,
   } = useAlterStore();
 
   // ── Ghost star → pre-fill input ───────────────────────────
@@ -261,8 +266,13 @@ export default function NebulaCore() {
 
       } else if (action.type === 'save') {
         const { intent } = action;
-        const saved = await saveEntry(user.id, intent.category, intent.data);
-        if (saved) {
+        // For L1 hits: fire aiChat in parallel (no AI call was made yet)
+        const chatPromise = intent.source === 'local' ? aiChat(text) : Promise.resolve(null);
+        const [saved, chatReply] = await Promise.all([
+          saveEntry(user.id, intent.category, intent.data),
+          chatPromise,
+        ]);
+        if (saved && intent.category !== 'chat') {
           addKnownCategory(intent.category);
           if (intent.source === 'ai' && intent.categoryMeta) {
             const { CATEGORY_META } = await import('../starfield/StarfieldView');
@@ -277,9 +287,17 @@ export default function NebulaCore() {
           const meta = getCategoryMeta(intent.category);
           setRay({ angle: Math.atan2(dy, dx) * 180 / Math.PI, length: Math.sqrt(dx*dx+dy*dy), color: meta.color });
           setTimeout(() => setRay(null), 900);
-          const src   = intent.source === 'local' ? '' : ' · AI';
-          const reply = `${meta.icon}  ${meta.label}${src}`;
-          setLastReply(reply); addMessage('nebula', reply);
+          const confirmTag = `${meta.icon} ${meta.label}`;
+          // Show warm chat reply if available, then the save confirmation
+          if (chatReply) {
+            const display = chatReply.length > 80 ? chatReply.slice(0, 77) + '…' : chatReply;
+            setLastReply(display);
+            addMessage('nebula', chatReply);
+            setTimeout(() => addMessage('nebula', `✦ ${confirmTag}`), 600);
+          } else {
+            const reply = `${meta.icon}  ${meta.label}`;
+            setLastReply(reply); addMessage('nebula', reply);
+          }
 
           // ── Big Bang: proactive follow-up on first entry ──
           if (!existing) {
@@ -330,14 +348,45 @@ export default function NebulaCore() {
         addMessage('nebula', reply);
 
       } else if (action.type === 'delete') {
-        const { category } = action;
-        if (category && user) {
+        const { category, dateRange, all } = action;
+
+        if (all && user) {
+          // Full reset — ask confirmation
+          addMessage('nebula', '⚠️ Stai per cancellare TUTTI i tuoi dati. Irreversibile. Confermi?');
+          setPendingDelete({
+            label: 'Cancella TUTTI i dati del vault',
+            onConfirm: async () => {
+              const ok = await deleteAllUserData(user.id);
+              const msg = ok ? 'Vault azzerato. Tutte le stelle sono state rimosse.' : 'Errore durante il reset.';
+              if (ok) stars.forEach(s => removeStar(s.id));
+              setLastReply(msg); addMessage('nebula', msg);
+            },
+          });
+        } else if (category && dateRange && user) {
+          // Date-range targeted delete — ask confirmation
+          const [from, to] = dateRange;
+          const fromStr = from.toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' });
+          const toStr   = to.toLocaleDateString('it-IT',   { day: '2-digit', month: 'short', year: 'numeric' });
+          const label = `Cancella "${category}" dal ${fromStr} al ${toStr}`;
+          addMessage('nebula', `Stai per cancellare i dati "${category}" dal ${fromStr} al ${toStr}. Confermi?`);
+          setPendingDelete({
+            label,
+            onConfirm: async () => {
+              const count = await deleteByCategoryAndDateRange(user.id, category, from, to);
+              const msg = count > 0
+                ? `${count} voci "${category}" cancellate (${fromStr} → ${toStr}).`
+                : `Nessuna voce trovata in quel periodo per "${category}".`;
+              setLastReply(msg); addMessage('nebula', msg);
+            },
+          });
+        } else if (category && user) {
+          // Delete entire category (star)
           const ok = await deleteCategory(user.id, category);
           const msg = ok ? `Stella "${category}" rimossa.` : `Categoria "${category}" non trovata.`;
           if (ok) removeStar(category);
           setLastReply(msg); addMessage('nebula', msg);
         } else {
-          const msg = 'Dimmi quale stella eliminare: "elimina stella [nome]"';
+          const msg = 'Dimmi cosa eliminare: "cancella spese ultima settimana", "cancella stella [nome]", o "cancella tutto".';
           setLastReply(msg); addMessage('nebula', msg);
         }
 
@@ -409,13 +458,31 @@ export default function NebulaCore() {
 
       } else if (action.type === 'nexus') {
         const { catA, catB } = action;
-        if (!catA || !catB) {
-          const msg = 'Specifica due categorie: es. "correlazione umore spese"';
-          setLastReply(msg); addMessage('nebula', msg);
+        // Free-form nexus: "Perché sono stanco?" — no explicit categories given
+        if (!catB) {
+          const entries = await getRecentAll(user.id, 60);
+          if (entries.length < 3) {
+            const msg = 'Registra più dati per attivare il Nexus. Prova a tracciare umore, sonno e spese.';
+            setLastReply(msg); addMessage('nebula', msg);
+          } else {
+            setLastReply('✦ Nexus in analisi...');
+            const narrative = await aiNexusNarrative(text, entries);
+            addMessage('nebula', narrative);
+            setLastReply('✦ Nexus');
+            setActiveWidget({
+              category: 'insight', label: '✦ Nexus Analysis', color: '#a78bfa',
+              entries: [{ id: 'nexus-ai', user_id: user.id, category: 'insight',
+                data: { insight: narrative }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }],
+              renderType: 'insight',
+            });
+          }
         } else {
+          // Both catA and catB are strings here (catB checked above, catA may still be null → fallback)
+          const a = catA ?? 'psychology';
+          const b = catB;
           const [entriesA, entriesB] = await Promise.all([
-            getByCategory(user.id, catA, 30),
-            getByCategory(user.id, catB, 30),
+            getByCategory(user.id, a, 30),
+            getByCategory(user.id, b, 30),
           ]);
           const valueKey = (cat: string) =>
             cat === 'finance' ? 'amount' : cat === 'psychology' ? 'score' : 'value';
@@ -427,11 +494,11 @@ export default function NebulaCore() {
             }
             return m;
           };
-          const mapA  = dayBucket(entriesA, valueKey(catA));
-          const mapB  = dayBucket(entriesB, valueKey(catB));
+          const mapA  = dayBucket(entriesA, valueKey(a));
+          const mapB  = dayBucket(entriesB, valueKey(b));
           const days  = [...mapA.keys()].filter(d => mapB.has(d)).sort();
           if (days.length < 3) {
-            const msg = `Non abbastanza dati in comune tra ${catA} e ${catB} (${days.length} giorni).`;
+            const msg = `Non abbastanza dati in comune tra ${a} e ${b} (${days.length} giorni).`;
             setLastReply(msg); addMessage('nebula', msg);
           } else {
             const xs = days.map(d => mapA.get(d)!);
@@ -445,14 +512,14 @@ export default function NebulaCore() {
             let num = 0, dx2 = 0, dy2 = 0;
             for (let i = 0; i < n; i++) { const dx = nx[i]-mx, dy = ny[i]-my; num += dx*dy; dx2 += dx*dx; dy2 += dy*dy; }
             const corr = Math.sqrt(dx2*dy2) === 0 ? 0 : num / Math.sqrt(dx2*dy2);
-            const metaA = getCategoryMeta(catA);
-            const metaB = getCategoryMeta(catB);
+            const metaA = getCategoryMeta(a);
+            const metaB = getCategoryMeta(b);
             const chartData = days.map((d, i) => ({
               date: d.slice(5).replace('-', '/'),
-              [catA]: +(nx[i] * 100).toFixed(1),
-              [catB]: +(ny[i] * 100).toFixed(1),
+              [a]: +(nx[i] * 100).toFixed(1),
+              [b]: +(ny[i] * 100).toFixed(1),
             }));
-            setNexusBeam({ catA, catB, colorA: metaA.color, colorB: metaB.color, correlation: corr });
+            setNexusBeam({ catA: a, catB: b, colorA: metaA.color, colorB: metaB.color, correlation: corr });
             setTimeout(() => setNexusBeam(null), 9000);
             const corrPct  = (Math.abs(corr) * 100).toFixed(0);
             const corrSign = corr > 0.25 ? 'positiva' : corr < -0.25 ? 'inversa' : 'debole';
@@ -463,7 +530,7 @@ export default function NebulaCore() {
               label: `${metaA.icon} ${metaA.label} ↔ ${metaB.icon} ${metaB.label}`,
               color: metaA.color,
               entries: [{ id: 'nexus', user_id: user.id, category: 'nexus',
-                data: { catA, catB, catALabel: metaA.label, catBLabel: metaB.label,
+                data: { catA: a, catB: b, catALabel: metaA.label, catBLabel: metaB.label,
                   colorA: metaA.color, colorB: metaB.color, correlation: corr, chartData },
                 created_at: new Date().toISOString(), updated_at: new Date().toISOString() }],
               renderType: 'nexus',
@@ -522,8 +589,34 @@ export default function NebulaCore() {
         addMessage('nebula', reply);
 
       } else {
-        const msg = '"15 pizza"  ·  "peso 80kg"  ·  "dormito 7 ore"';
-        setLastReply(msg); addMessage('nebula', msg);
+        // Chatbot-first: AI replies and optionally extracts data in one call
+        const result = await aiChatAndExtract(text);
+        const display = result.reply.length > 80 ? result.reply.slice(0, 77) + '…' : result.reply;
+        setLastReply(display);
+        addMessage('nebula', result.reply);
+
+        if (result.extractions.length > 0) {
+          const { CATEGORY_META } = await import('../starfield/StarfieldView');
+          const savedCats: string[] = [];
+          for (const ext of result.extractions) {
+            if (ext.category === 'chat') continue;
+            const saved = await saveEntry(user.id, ext.category, { ...ext.data, raw: text });
+            if (saved) {
+              addKnownCategory(ext.category);
+              if (ext.categoryMeta && !CATEGORY_META[ext.category]) {
+                CATEGORY_META[ext.category] = ext.categoryMeta;
+              }
+              const star     = buildStar(ext.category, 1, saved.created_at);
+              const existing = useAlterStore.getState().stars.find(s => s.id === ext.category);
+              upsertStar({ ...star, entryCount: (existing?.entryCount ?? 0) + 1, intensity: Math.min(1, (existing?.intensity ?? 0) + 0.12), isNew: !existing });
+              const meta = getCategoryMeta(ext.category);
+              savedCats.push(`${meta.icon} ${meta.label}`);
+            }
+          }
+          if (savedCats.length > 0) {
+            setTimeout(() => addMessage('nebula', `✦ ${savedCats.join(' · ')}`), 600);
+          }
+        }
       }
     } finally {
       // Persist chat session in vault (fire-and-forget)
@@ -609,22 +702,24 @@ export default function NebulaCore() {
         padding: '10px 14px',
         zIndex: 202, pointerEvents: 'none',
       }}>
-        <button
-          onMouseDown={e => { e.preventDefault(); setShowChatSidebar(!showChatSidebar); }}
-          onTouchStart={e => { e.preventDefault(); setShowChatSidebar(!showChatSidebar); }}
-          style={{
-            background: 'none', border: 'none',
-            borderRadius: 8, padding: '7px 8px',
-            cursor: 'pointer',
-            color: showChatSidebar ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.22)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'color 0.25s',
-            pointerEvents: 'all',
-          }}
-          title="Cronologia chat"
-        >
-          <Menu size={14} />
-        </button>
+        {viewMode === 'chat' && (
+          <button
+            onMouseDown={e => { e.preventDefault(); setShowChatSidebar(!showChatSidebar); }}
+            onTouchStart={e => { e.preventDefault(); setShowChatSidebar(!showChatSidebar); }}
+            style={{
+              background: 'none', border: 'none',
+              borderRadius: 8, padding: '7px 8px',
+              cursor: 'pointer',
+              color: showChatSidebar ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.22)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'color 0.25s',
+              pointerEvents: 'all',
+            }}
+            title="Cronologia chat"
+          >
+            <Menu size={14} />
+          </button>
+        )}
         <span style={{
           position: 'absolute', left: '50%', transform: 'translateX(-50%)',
           fontSize: 9, letterSpacing: '0.52em', textTransform: 'uppercase',
@@ -655,66 +750,74 @@ export default function NebulaCore() {
         )}
       </AnimatePresence>
 
-      {/* ── Welcome overlay: shown when no data yet ── */}
-      <AnimatePresence>
-        {stars.length === 0 && !isActive && !isProcessing && !lastReply && (
-          <motion.div
-            key="welcome"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, transition: { duration: 0.6 } }}
-            transition={{ duration: 1.2, delay: 0.5 }}
-            style={{
-              position: 'fixed',
-              top: '50%', left: '50%',
-              transform: 'translate(-50%, -58%)',
-              textAlign: 'center',
-              pointerEvents: 'none',
-              zIndex: 100,
-            }}
-          >
-            <div style={{
-              fontSize: 34, fontWeight: 100,
-              letterSpacing: '0.02em',
-              color: 'rgba(200,210,234,0.65)',
-              marginBottom: 14,
-              lineHeight: 1.2,
-              fontFamily: 'inherit',
-            }}>
-              Inizia il tuo<br/>universo.
-            </div>
-            <div style={{
-              fontSize: 9.5, letterSpacing: '0.2em',
-              color: 'rgba(58,63,82,0.65)',
-              textTransform: 'uppercase', fontWeight: 300,
-            }}>
-              Scrivi qualcosa · Usa la voce
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* ── World-space anchor (camera sync — invisible) ── */}
       <div ref={anchorRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', willChange: 'transform' }} />
 
-      {/* ── Bottom minimal input ── */}
-      <div ref={nebulaWrapRef} style={{
-        position: 'fixed',
-        bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 202,
-        width: 'min(440px, calc(100vw - 48px))',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 10,
-        pointerEvents: 'all',
-      }}>
+      {/* ── Central processing overlay ── */}
+      <AnimatePresence>
+        {isProcessing && (
+          <motion.div
+            key="proc-center"
+            initial={{ opacity: 0, scale: 0.7 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.7 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            style={{
+              position: 'fixed',
+              bottom: 'calc(64px + env(safe-area-inset-bottom, 0px) + 18px)',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 202,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              pointerEvents: 'none',
+            }}
+          >
+            {[0, 1, 2].map(i => (
+              <motion.span
+                key={i}
+                animate={{ opacity: [0.2, 1, 0.2], scaleY: [0.6, 1.3, 0.6] }}
+                transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut', delay: i * 0.18 }}
+                style={{
+                  display: 'block',
+                  width: 3, height: 18,
+                  borderRadius: 2,
+                  background: 'rgba(240,192,64,0.8)',
+                  transformOrigin: 'center',
+                }}
+              />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        {/* Status / reply above input */}
+      {/* ── Bottom minimal input ── */}
+      <motion.div
+        ref={nebulaWrapRef}
+        animate={{ opacity: isProcessing ? 0 : 1, y: isProcessing ? 24 : 0 }}
+        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+        style={{
+          position: 'fixed',
+          bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
+          left: 0,
+          right: 0,
+          marginLeft: 'auto',
+          marginRight: 'auto',
+          zIndex: 202,
+          width: 'min(440px, calc(100vw - 48px))',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 10,
+          pointerEvents: isProcessing ? 'none' : 'all',
+        }}
+      >
+
+        {/* Status / reply above input — only during processing */}
         <AnimatePresence mode="wait">
-          {lastReply && !isActive ? (
+          {lastReply && isProcessing ? (
             <motion.div
               key={`reply-${lastReply}`}
               initial={{ opacity: 0, y: 5 }}
@@ -756,6 +859,54 @@ export default function NebulaCore() {
               }}
             >
               {evolveSuggestion}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Delete confirmation */}
+        <AnimatePresence>
+          {pendingDelete && (
+            <motion.div
+              key="delete-confirm"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              style={{
+                width: '100%',
+                background: 'rgba(20,8,8,0.95)',
+                border: '1px solid rgba(240,80,80,0.28)',
+                borderRadius: 12,
+                padding: '10px 12px',
+              }}
+            >
+              <div style={{ fontSize: 10.5, color: 'rgba(240,80,80,0.8)', letterSpacing: '0.1em', marginBottom: 8 }}>
+                ⚠️ CONFERMA CANCELLAZIONE
+              </div>
+              <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.7)', marginBottom: 10 }}>
+                {pendingDelete.label}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={async () => { const fn = pendingDelete.onConfirm; setPendingDelete(null); await fn(); }}
+                  style={{
+                    flex: 1, background: 'rgba(240,80,80,0.15)', border: '1px solid rgba(240,80,80,0.35)',
+                    borderRadius: 9, padding: '7px', fontSize: 11.5, fontWeight: 600,
+                    color: '#f08080', cursor: 'pointer', letterSpacing: '0.04em',
+                  }}
+                >
+                  Sì, cancella
+                </button>
+                <button
+                  onClick={() => { setPendingDelete(null); addMessage('nebula', 'Cancellazione annullata.'); }}
+                  style={{
+                    background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)',
+                    borderRadius: 9, padding: '7px 14px', fontSize: 11.5,
+                    color: 'var(--text-dim)', cursor: 'pointer',
+                  }}
+                >
+                  Annulla
+                </button>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -919,26 +1070,31 @@ export default function NebulaCore() {
           }}
           onClick={openInput}
         >
-          {/* Processing ring */}
+          {/* Processing indicator */}
           <AnimatePresence>
             {isProcessing && (
               <motion.div
-                key="proc-wrap"
-                initial={{ opacity: 0, scale: 0.5 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.5 }}
-                transition={{ duration: 0.25 }}
-                style={{ width: 14, height: 14, flexShrink: 0 }}
+                key="proc-dots"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, paddingRight: 2 }}
               >
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 0.9, repeat: Infinity, ease: 'linear' }}
-                  style={{
-                    width: '100%', height: '100%', borderRadius: '50%',
-                    border: '1.5px solid rgba(240,192,64,0.12)',
-                    borderTopColor: 'rgba(240,192,64,0.7)',
-                  }}
-                />
+                {[0, 1, 2].map(i => (
+                  <motion.span
+                    key={i}
+                    animate={{ opacity: [0.2, 1, 0.2], scaleY: [0.6, 1, 0.6] }}
+                    transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut', delay: i * 0.18 }}
+                    style={{
+                      display: 'block',
+                      width: 3, height: 12,
+                      borderRadius: 2,
+                      background: 'rgba(240,192,64,0.75)',
+                      transformOrigin: 'center',
+                    }}
+                  />
+                ))}
               </motion.div>
             )}
           </AnimatePresence>
@@ -1022,7 +1178,7 @@ export default function NebulaCore() {
           )}
         </motion.div>
 
-      </div>
+      </motion.div>
     </div>
   );
 }

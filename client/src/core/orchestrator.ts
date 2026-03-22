@@ -1,5 +1,4 @@
 import { localParse } from './localParser';
-import { aiParse }   from './aiParser';
 import type { ParsedIntent } from '../types';
 
 // ── Document patterns ─────────────────────────────────────────
@@ -36,8 +35,9 @@ function extractDocTypeFromQuery(text: string): string | null {
 
 const HELP_TRIGGERS    = ['?', 'aiuto', 'help', 'cosa sai fare', 'cosa puoi fare'];
 const DELETE_PATTERN   = /^(cancella|elimina|rimuovi|delete)\s+/i;
+const DELETE_ALL_PATTERN = /^(cancella|elimina|rimuovi|svuota|reset)\s+(tutto|tutti\s+i\s+dati|il\s+vault|il\s+profilo|i\s+miei?\s+dati)[\s!.]*$/i;
 const ANALYSIS_PATTERN = /^(analizza|analisi|riassumi|riassunto|report|insight|come sto nel complesso)/i;
-const NEXUS_PATTERN    = /dipende\s+(da|dal|dalle?)|correlazione\s+(tra|umore|spes|peso|salute)|incrocio\s+tra|relazione\s+tra|nexus/i;
+const NEXUS_PATTERN    = /dipende\s+(da|dal|dalle?)|correlazione\s+(tra|umore|spes|peso|salute)|incrocio\s+tra|relazione\s+tra|nexus|perch[eé]\s+(sono|mi\s+sento|sto\s+(cos[iì]|male|bene)|sono\s+sempre)|cosa\s+(causa|influenza|c[''è]\s+dietro|mi\s+fa)/i;
 
 function extractNexusCategories(text: string): [string | null, string | null] {
   const lower = text.toLowerCase();
@@ -52,13 +52,54 @@ function extractNexusCategories(text: string): [string | null, string | null] {
 // Pure conversation — no data to save
 const CHAT_PATTERN = /^(ciao|salve|buongiorno|buonasera|buona\s*notte|hey|hello|hi|hola|come\s+stai|come\s+va|cosa\s+pensi|chi\s+sei|come\s+ti\s+chiami|grazie|prego|ok|okay|bene|perfetto|capito|va\s+bene|sì|si|no|ah|eh|oh|uh|hmm|mh|dai|esatto|giusto|certo|assolutamente|fantastico|ottimo|bravo|brava)[\s!.?]*$/i;
 
-// Conversational questions / opinions — route to aiChat, not vault
-const CONVERSATIONAL_PATTERN = /^(cosa\s+ne\s+pensi|che\s+ne\s+pensi|cosa\s+pensi\s+(di|del|della|dei|degli)|secondo\s+te|parlami\s+di|dimmi\s+(qualcosa\s+(su|di)|di\s+più)|cos['\s]+è|che\s+cos['\s]+è|chi\s+è|chi\s+sono|come\s+funziona|mi\s+(spieghi|puoi\s+spiegare|dici)|raccontami|hai\s+(mai|sentito|visto)|conosci|sai\s+(qualcosa\s+su|chi\s+è|cos['\s]+è)|qual\s*è\s+(il\s+tuo|la\s+tua)|ti\s+piace|ti\s+piacciono|cosa\s+(ti|ne)\s+(piace|pensi)|perché|quando\s+è\s+(stato|nata|nato|fondato)|dove\s+si\s+trova)/i;
 
 function extractDeleteCategory(text: string): string | null {
   const m = text.match(/^(?:cancella|elimina|rimuovi|delete)\s+(?:la\s+)?(?:stella|categoria|category)?\s*(.+)$/i);
   if (!m) return null;
   return m[1].trim().toLowerCase().replace(/\s+/g, '_');
+}
+
+function extractDeleteCategoryFromSentence(text: string): string | null {
+  const lower = text.toLowerCase();
+  if (/spes[oa]|finanz|soldi|euro|€|transazion|conto/.test(lower))     return 'finance';
+  if (/allenament|sport|palestra|corsa|eserciz|peso|sonno|salute/.test(lower)) return 'health';
+  if (/umore|mood|psiche|ansia|stress|emozion/.test(lower))             return 'psychology';
+  if (/appuntament|impegn|evento|riunione|calendario/.test(lower))      return 'calendar';
+  return null;
+}
+
+function extractDeleteDateRange(text: string): [Date, Date] | null {
+  const lower = text.toLowerCase();
+  const now = new Date();
+
+  const yearMatch = text.match(/\b(20\d{2})\b/);
+  if (yearMatch) {
+    const year = parseInt(yearMatch[1]);
+    const from = new Date(year, 0, 1, 0, 0, 0, 0);
+    const to   = new Date(year, 11, 31, 23, 59, 59, 999);
+    return [from, to];
+  }
+  if (/ultima\s+settimana|settimana\s+scors[ao]/.test(lower)) {
+    const from = new Date(now); from.setDate(now.getDate() - 7); from.setHours(0, 0, 0, 0);
+    return [from, new Date(now)];
+  }
+  if (/ultimo\s+mese|mese\s+scors[ao]/.test(lower)) {
+    const from = new Date(now); from.setMonth(now.getMonth() - 1); from.setHours(0, 0, 0, 0);
+    return [from, new Date(now)];
+  }
+  if (/ultimo\s+anno|anno\s+scors[ao]/.test(lower)) {
+    const from = new Date(now); from.setFullYear(now.getFullYear() - 1); from.setHours(0, 0, 0, 0);
+    return [from, new Date(now)];
+  }
+  if (/questa\s+settimana/.test(lower)) {
+    const from = new Date(now); from.setDate(now.getDate() - now.getDay()); from.setHours(0, 0, 0, 0);
+    return [from, new Date(now)];
+  }
+  if (/questo\s+mese/.test(lower)) {
+    const from = new Date(now); from.setDate(1); from.setHours(0, 0, 0, 0);
+    return [from, new Date(now)];
+  }
+  return null;
 }
 
 // Questions that query existing data (not create new entries)
@@ -131,7 +172,7 @@ export type OrchestratorAction =
   | { type: 'save';         intent: ParsedIntent }
   | { type: 'help' }
   | { type: 'chat';         raw: string }
-  | { type: 'delete';       raw: string; category: string | null }
+  | { type: 'delete';       raw: string; category: string | null; dateRange: [Date, Date] | null; all: boolean }
   | { type: 'query';        raw: string; category: string | null; dateRange: [Date, Date] | null }
   | { type: 'analyse';      raw: string }
   | { type: 'nexus';        raw: string; catA: string | null; catB: string | null }
@@ -140,10 +181,10 @@ export type OrchestratorAction =
   | { type: 'doc_query';    raw: string; docType: string | null; keyword: string }
   | { type: 'unknown';      raw: string };
 
-export async function orchestrate(
+export function orchestrate(
   text: string,
   knownCategories: string[]
-): Promise<OrchestratorAction> {
+): OrchestratorAction {
   const trimmed = text.trim();
   if (!trimmed) return { type: 'unknown', raw: trimmed };
 
@@ -163,8 +204,20 @@ export async function orchestrate(
   if (HELP_TRIGGERS.some(h => lower === h || lower.startsWith(h)))
     return { type: 'help' };
 
-  if (DELETE_PATTERN.test(trimmed))
-    return { type: 'delete', raw: trimmed, category: extractDeleteCategory(trimmed) };
+  if (DELETE_ALL_PATTERN.test(trimmed))
+    return { type: 'delete', raw: trimmed, category: null, dateRange: null, all: true };
+
+  if (DELETE_PATTERN.test(trimmed)) {
+    // Try smart sentence extraction first (e.g. "cancella le spese del 2023")
+    const sentCat   = extractDeleteCategoryFromSentence(trimmed);
+    const dateRange = extractDeleteDateRange(trimmed);
+    if (sentCat && dateRange)
+      return { type: 'delete', raw: trimmed, category: sentCat, dateRange, all: false };
+    if (sentCat)
+      return { type: 'delete', raw: trimmed, category: sentCat, dateRange: null, all: false };
+    // Fallback: "cancella stella [nome]"
+    return { type: 'delete', raw: trimmed, category: extractDeleteCategory(trimmed), dateRange: null, all: false };
+  }
 
   if (ANALYSIS_PATTERN.test(lower))
     return { type: 'analyse', raw: trimmed };
@@ -207,18 +260,6 @@ export async function orchestrate(
     };
   }
 
-  // ── Conversational question: route to aiChat before L2 ───
-  if (CONVERSATIONAL_PATTERN.test(trimmed))
-    return { type: 'chat', raw: trimmed };
-
-  // ── L2: AI parser ────────────────────────────────────────
-  const ai = await aiParse(trimmed);
-  if (ai) {
-    return {
-      type: 'save',
-      intent: { ...ai, source: 'ai', rawText: trimmed },
-    };
-  }
-
+  // ── Fallback: hybrid AI (empathetic reply + optional extraction) ─
   return { type: 'unknown', raw: trimmed };
 }

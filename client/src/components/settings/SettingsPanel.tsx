@@ -1,45 +1,10 @@
-import { useRef, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAlterStore } from '../../store/alterStore';
 import type { Theme } from '../../types';
-import { importBankCsv, parseBankCsv } from '../../import/bankCsvImport';
-import type { BankTransaction } from '../../import/bankCsvImport';
-import { importAppleHealthXml, importHealthConnectJson } from '../../import/healthImport';
-import { getAdminStats, getLastActiveUsers } from '../../vault/vaultService';
-import type { AdminStats, ActiveUser } from '../../vault/vaultService';
-import { supabase } from '../../config/supabase';
-
-interface BugTicket {
-  id: string;
-  created_at: string;
-  user_description: string;
-  type: 'bug' | 'improvement';
-  status: string;
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  pending_review: 'In attesa',
-  open: 'Aperto',
-  in_progress: 'In corso',
-  resolved: 'Risolto',
-  wont_fix: 'Non fix',
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  pending_review: '#f0c040',
-  open: '#a78bfa',
-  in_progress: '#40e0d0',
-  resolved: '#4ade80',
-  wont_fix: '#f08080',
-};
-
-const STATUS_FLOW: Record<string, string> = {
-  pending_review: 'open',
-  open: 'in_progress',
-  in_progress: 'resolved',
-  resolved: 'wont_fix',
-  wont_fix: 'pending_review',
-};
+import { getCategorySummaries, deleteCategory, deleteAllUserData } from '../../vault/vaultService';
+import type { CategorySummary } from '../../vault/vaultService';
+import AdminPopup from '../admin/AdminPopup';
 
 const THEMES: { id: Theme; label: string; desc: string; preview: string[] }[] = [
   {
@@ -68,69 +33,10 @@ const THEMES: { id: Theme; label: string; desc: string; preview: string[] }[] = 
   },
 ];
 
-type ImportStatus = { label: string; ok: boolean } | null;
-
 export default function SettingsPanel() {
   const { showSettings, setShowSettings, theme, setTheme, username, setUsername, user } = useAlterStore();
   const [nameInput, setNameInput] = useState(username);
   const [nameSaved, setNameSaved] = useState(false);
-  const [importStatus, setImportStatus] = useState<ImportStatus>(null);
-  const [importing, setImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
-  const [csvPreview, setCsvPreview] = useState<BankTransaction[] | null>(null);
-  const [csvRawText, setCsvRawText] = useState('');
-  const csvRef  = useRef<HTMLInputElement>(null);
-  const xmlRef  = useRef<HTMLInputElement>(null);
-  const jsonRef = useRef<HTMLInputElement>(null);
-
-  async function handleImport(
-    file: File,
-    fn: (text: string, userId: string) => Promise<number>
-  ) {
-    if (!user) return;
-    setImporting(true);
-    setImportStatus(null);
-    try {
-      const text = await file.text();
-      const count = await fn(text, user.id);
-      setImportStatus({ label: `${count} record importati`, ok: true });
-    } catch {
-      setImportStatus({ label: 'Errore durante l\'import', ok: false });
-    } finally {
-      setImporting(false);
-    }
-  }
-
-  async function handleCsvUpload(file: File) {
-    const text = await file.text();
-    const txs = parseBankCsv(text);
-    if (txs.length === 0) {
-      setImportStatus({ label: 'Nessuna transazione trovata nel file', ok: false });
-      return;
-    }
-    setCsvRawText(text);
-    setCsvPreview(txs);
-  }
-
-  async function confirmCsvImport() {
-    if (!user || !csvRawText) return;
-    setCsvPreview(null);
-    setImporting(true);
-    setImportProgress(null);
-    setImportStatus(null);
-    try {
-      const count = await importBankCsv(csvRawText, user.id, (done, total) => {
-        setImportProgress({ done, total });
-      });
-      setImportStatus({ label: `${count} transazioni importate`, ok: true });
-    } catch {
-      setImportStatus({ label: 'Errore durante l\'import', ok: false });
-    } finally {
-      setImporting(false);
-      setImportProgress(null);
-      setCsvRawText('');
-    }
-  }
 
   const saveUsername = () => {
     setUsername(nameInput.trim());
@@ -256,125 +162,8 @@ export default function SettingsPanel() {
               </div>
             </Section>
 
-            {/* Import section */}
-            <Section label="IMPORTA DATI">
-              {/* Hidden file inputs */}
-              <input ref={csvRef}  type="file" accept=".csv,.txt" style={{ display: 'none' }}
-                onChange={e => { if (e.target.files?.[0]) { handleCsvUpload(e.target.files[0]); e.target.value = ''; } }} />
-              <input ref={xmlRef}  type="file" accept=".xml" style={{ display: 'none' }}
-                onChange={e => e.target.files?.[0] && handleImport(e.target.files[0], importAppleHealthXml)} />
-              <input ref={jsonRef} type="file" accept=".json" style={{ display: 'none' }}
-                onChange={e => e.target.files?.[0] && handleImport(e.target.files[0], importHealthConnectJson)} />
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <ImportButton label="Estratto conto banca (CSV)" icon="🏦" disabled={importing}
-                  onClick={() => csvRef.current?.click()} />
-                <ImportButton label="Apple Health (export.xml)" icon="🍎" disabled={importing}
-                  onClick={() => xmlRef.current?.click()} />
-                <ImportButton label="Health Connect (JSON)" icon="🤖" disabled={importing}
-                  onClick={() => jsonRef.current?.click()} />
-              </div>
-
-              {/* CSV Preview */}
-              <AnimatePresence>
-                {csvPreview && (
-                  <motion.div
-                    key="csv-preview"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 4 }}
-                    style={{
-                      marginTop: 10,
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid rgba(255,255,255,0.09)',
-                      borderRadius: 12,
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <div style={{ padding: '10px 12px 6px', fontSize: 10.5, color: 'var(--text-dim)', letterSpacing: '0.1em' }}>
-                      ANTEPRIMA · {csvPreview.length} TRANSAZIONI
-                    </div>
-                    <div style={{ maxHeight: 160, overflowY: 'auto' }}>
-                      {csvPreview.slice(0, 12).map((tx, i) => (
-                        <div key={i} style={{
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          padding: '5px 12px',
-                          borderTop: '1px solid rgba(255,255,255,0.04)',
-                          fontSize: 11,
-                        }}>
-                          <span style={{ color: 'var(--text)', opacity: 0.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '68%' }}>
-                            {tx.description}
-                          </span>
-                          <span style={{ color: tx.type === 'income' ? '#4ecb71' : '#f08080', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
-                            {tx.type === 'income' ? '+' : '-'}{Math.abs(tx.amount).toFixed(2)}€
-                          </span>
-                        </div>
-                      ))}
-                      {csvPreview.length > 12 && (
-                        <div style={{ padding: '5px 12px', fontSize: 10, color: 'var(--text-dim)', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                          +{csvPreview.length - 12} altre...
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, padding: '8px 12px 10px' }}>
-                      <button
-                        onClick={confirmCsvImport}
-                        style={{
-                          flex: 1, background: 'rgba(240,192,64,0.12)', border: '1px solid rgba(240,192,64,0.28)',
-                          borderRadius: 9, padding: '7px', fontSize: 11.5, fontWeight: 600,
-                          color: '#f0c040', cursor: 'pointer', letterSpacing: '0.04em',
-                        }}
-                      >
-                        Importa {csvPreview.length} transazioni
-                      </button>
-                      <button
-                        onClick={() => { setCsvPreview(null); setCsvRawText(''); }}
-                        style={{
-                          background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)',
-                          borderRadius: 9, padding: '7px 12px', fontSize: 11.5,
-                          color: 'var(--text-dim)', cursor: 'pointer',
-                        }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Progress bar */}
-              {importing && importProgress && (
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: 'var(--text-dim)', marginBottom: 5 }}>
-                    <span>Importazione in corso...</span>
-                    <span>{importProgress.done} / {importProgress.total}</span>
-                  </div>
-                  <div style={{ height: 3, background: 'rgba(255,255,255,0.07)', borderRadius: 2, overflow: 'hidden' }}>
-                    <motion.div
-                      animate={{ width: `${(importProgress.done / importProgress.total) * 100}%` }}
-                      transition={{ duration: 0.3 }}
-                      style={{ height: '100%', background: 'var(--accent)', borderRadius: 2 }}
-                    />
-                  </div>
-                </div>
-              )}
-              {importing && !importProgress && (
-                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-dim)' }}>
-                  Categorizzazione AI in corso...
-                </div>
-              )}
-
-              {importStatus && !importing && (
-                <div style={{
-                  marginTop: 10, fontSize: 11.5, padding: '7px 12px', borderRadius: 8,
-                  background: importStatus.ok ? 'rgba(80,200,120,0.12)' : 'rgba(240,80,80,0.12)',
-                  color: importStatus.ok ? '#4ecb71' : '#f08080',
-                  border: `1px solid ${importStatus.ok ? 'rgba(80,200,120,0.25)' : 'rgba(240,80,80,0.25)'}`,
-                }}>
-                  {importStatus.label}
-                </div>
-              )}
-            </Section>
+            {/* Data management section */}
+            <DataSection userId={user?.id ?? null} />
 
             {/* Placeholder for future features */}
             <Section label="PROSSIMAMENTE">
@@ -392,6 +181,157 @@ export default function SettingsPanel() {
         </>
       )}
     </AnimatePresence>
+  );
+}
+
+function DataSection({ userId }: { userId: string | null }) {
+  const [summaries,    setSummaries]    = useState<CategorySummary[]>([]);
+  const [confirmCat,   setConfirmCat]   = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resetStep,    setResetStep]    = useState(0); // 0 = idle, 1 = first confirm, 2 = done
+  const [busy,         setBusy]         = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    getCategorySummaries(userId).then(setSummaries);
+  }, [userId]);
+
+  async function handleDeleteCategory(cat: string) {
+    if (!userId) return;
+    setBusy(true);
+    await deleteCategory(userId, cat);
+    setSummaries(prev => prev.filter(s => s.category !== cat));
+    setConfirmCat(null);
+    setBusy(false);
+  }
+
+  async function handleResetAll() {
+    if (!userId) return;
+    setBusy(true);
+    await deleteAllUserData(userId);
+    setSummaries([]);
+    setResetStep(2);
+    setBusy(false);
+    setTimeout(() => { setResetStep(0); setConfirmReset(false); }, 3000);
+  }
+
+  if (!userId) return null;
+
+  return (
+    <Section label="GESTISCI DATI">
+      {summaries.length === 0 ? (
+        <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Nessun dato nel vault.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {summaries.map(s => (
+            <div key={s.category} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)',
+              borderRadius: 10, padding: '8px 12px',
+            }}>
+              <div>
+                <span style={{ fontSize: 12, color: 'var(--text)', textTransform: 'capitalize' }}>{s.category}</span>
+                <span style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: 8 }}>{s.count} voci</span>
+              </div>
+              {confirmCat === s.category ? (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    disabled={busy}
+                    onClick={() => handleDeleteCategory(s.category)}
+                    style={{
+                      background: 'rgba(240,80,80,0.15)', border: '1px solid rgba(240,80,80,0.35)',
+                      borderRadius: 7, padding: '4px 10px', fontSize: 10.5, fontWeight: 600,
+                      color: '#f08080', cursor: 'pointer',
+                    }}
+                  >
+                    Sì
+                  </button>
+                  <button
+                    onClick={() => setConfirmCat(null)}
+                    style={{
+                      background: 'none', border: '1px solid var(--border)',
+                      borderRadius: 7, padding: '4px 10px', fontSize: 10.5,
+                      color: 'var(--text-dim)', cursor: 'pointer',
+                    }}
+                  >
+                    No
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmCat(s.category)}
+                  style={{
+                    background: 'none', border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: 7, padding: '4px 10px', fontSize: 10.5,
+                    color: 'rgba(240,80,80,0.6)', cursor: 'pointer',
+                  }}
+                >
+                  Cancella
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Full reset */}
+      <div style={{ marginTop: 12 }}>
+        {resetStep === 2 ? (
+          <div style={{ fontSize: 11.5, color: '#4ecb71', textAlign: 'center', padding: '8px 0' }}>
+            ✓ Vault azzerato.
+          </div>
+        ) : confirmReset ? (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            style={{
+              background: 'rgba(20,8,8,0.95)', border: '1px solid rgba(240,80,80,0.28)',
+              borderRadius: 10, padding: '12px',
+            }}
+          >
+            <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.7)', marginBottom: 10, lineHeight: 1.5 }}>
+              ⚠️ Cancellare TUTTI i dati del vault? Questa azione è irreversibile.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                disabled={busy}
+                onClick={handleResetAll}
+                style={{
+                  flex: 1, background: 'rgba(240,80,80,0.15)', border: '1px solid rgba(240,80,80,0.35)',
+                  borderRadius: 9, padding: '8px', fontSize: 11.5, fontWeight: 600,
+                  color: '#f08080', cursor: 'pointer',
+                }}
+              >
+                {busy ? '...' : 'Sì, cancella tutto'}
+              </button>
+              <button
+                onClick={() => setConfirmReset(false)}
+                style={{
+                  background: 'none', border: '1px solid var(--border)',
+                  borderRadius: 9, padding: '8px 14px', fontSize: 11.5,
+                  color: 'var(--text-dim)', cursor: 'pointer',
+                }}
+              >
+                Annulla
+              </button>
+            </div>
+          </motion.div>
+        ) : (
+          <button
+            onClick={() => setConfirmReset(true)}
+            style={{
+              width: '100%', background: 'none',
+              border: '1px solid rgba(240,80,80,0.15)', borderRadius: 10,
+              padding: '9px 14px', cursor: 'pointer',
+              fontSize: 11.5, fontWeight: 600, letterSpacing: '0.04em',
+              color: 'rgba(240,80,80,0.5)', transition: 'border-color 0.2s, color 0.2s',
+            }}
+          >
+            ⚠ Reset completo profilo
+          </button>
+        )}
+      </div>
+    </Section>
   );
 }
 
@@ -500,89 +440,13 @@ function ThemeCard({ theme, active, onSelect }: {
   );
 }
 
-function ImportButton({ label, icon, onClick, disabled }: {
-  label: string; icon: string; onClick: () => void; disabled: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        background: 'rgba(255,255,255,0.04)',
-        border: '1px solid var(--border)',
-        borderRadius: 10,
-        padding: '9px 14px',
-        cursor: disabled ? 'default' : 'pointer',
-        textAlign: 'left',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        opacity: disabled ? 0.5 : 1,
-        transition: 'opacity 0.2s',
-      }}
-    >
-      <span style={{ fontSize: 16 }}>{icon}</span>
-      <span style={{ fontSize: 12, color: 'var(--text)' }}>{label}</span>
-    </button>
-  );
-}
-
-const ADMIN_PASSWORD = 'provaqwerty';
-
 function AdminSection() {
-  const [open, setOpen] = useState(false);
-  const [pwInput, setPwInput] = useState('');
-  const [unlocked, setUnlocked] = useState(false);
-  const [pwError, setPwError] = useState(false);
-  const [stats, setStats] = useState<AdminStats | null>(null);
-  const [users, setUsers] = useState<ActiveUser[]>([]);
-  const [bugs, setBugs] = useState<BugTicket[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [activeAdminTab, setActiveAdminTab] = useState<'consumi' | 'ticket'>('consumi');
-
-  useEffect(() => {
-    if (!unlocked) return;
-    setLoading(true);
-    Promise.all([
-      getAdminStats(),
-      getLastActiveUsers(),
-      supabase.from('bug_reports').select('id, created_at, user_description, type, status').order('created_at', { ascending: false }).limit(100),
-    ]).then(([s, u, { data: bugData }]) => {
-      setStats(s);
-      setUsers(u);
-      setBugs(bugData ?? []);
-      setLoading(false);
-    });
-  }, [unlocked]);
-
-  async function updateTicketStatus(id: string, newStatus: string) {
-    await supabase.from('bug_reports').update({ status: newStatus }).eq('id', id);
-    setBugs(prev => prev.map(b => b.id === id ? { ...b, status: newStatus } : b));
-  }
-
-  function tryUnlock() {
-    if (pwInput === ADMIN_PASSWORD) {
-      setUnlocked(true);
-      setPwError(false);
-    } else {
-      setPwError(true);
-      setTimeout(() => setPwError(false), 1200);
-    }
-  }
-
-  function fmtTime(iso: string) {
-    const d = new Date(iso);
-    return d.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-  }
-
-  function shortId(id: string) {
-    return id.slice(0, 8) + '…';
-  }
+  const [showPopup, setShowPopup] = useState(false);
 
   return (
     <div style={{ marginTop: 4 }}>
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setShowPopup(true)}
         style={{
           width: '100%',
           background: 'none',
@@ -601,218 +465,11 @@ function AdminSection() {
         }}
       >
         <span>⬡ ADMIN</span>
-        <span style={{ fontSize: 12, opacity: 0.6 }}>{open ? '▲' : '▼'}</span>
+        <span style={{ fontSize: 11, opacity: 0.55 }}>→</span>
       </button>
-
       <AnimatePresence>
-        {open && (
-          <motion.div
-            key="admin-body"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.22 }}
-            style={{ overflow: 'hidden' }}
-          >
-            <div style={{ paddingTop: 12 }}>
-              {!unlocked ? (
-                <div>
-                  <div style={{ fontSize: 10.5, color: 'var(--text-dim)', marginBottom: 8, letterSpacing: '0.08em' }}>
-                    Password admin
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <input
-                      type="password"
-                      value={pwInput}
-                      onChange={e => setPwInput(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && tryUnlock()}
-                      placeholder="••••••••"
-                      style={{
-                        flex: 1,
-                        background: pwError ? 'rgba(240,80,80,0.08)' : 'rgba(255,255,255,0.05)',
-                        border: `1px solid ${pwError ? 'rgba(240,80,80,0.4)' : 'var(--border)'}`,
-                        borderRadius: 10,
-                        padding: '9px 14px',
-                        fontSize: 13,
-                        color: 'var(--text)',
-                        outline: 'none',
-                        transition: 'border-color 0.2s, background 0.2s',
-                      }}
-                    />
-                    <button
-                      onClick={tryUnlock}
-                      style={{
-                        background: 'rgba(167,139,250,0.1)',
-                        border: '1px solid rgba(167,139,250,0.25)',
-                        borderRadius: 10,
-                        padding: '9px 16px',
-                        fontSize: 12,
-                        color: '#a78bfa',
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                      }}
-                    >
-                      Entra
-                    </button>
-                  </div>
-                  {pwError && (
-                    <div style={{ marginTop: 7, fontSize: 11, color: '#f08080' }}>Password errata</div>
-                  )}
-                </div>
-              ) : loading ? (
-                <div style={{ fontSize: 11, color: 'var(--text-dim)', padding: '8px 0' }}>Caricamento...</div>
-              ) : (
-                <div>
-                  {/* Admin tabs */}
-                  <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-                    {(['consumi', 'ticket'] as const).map(tab => (
-                      <button
-                        key={tab}
-                        onClick={() => setActiveAdminTab(tab)}
-                        style={{
-                          flex: 1, padding: '5px 0', fontSize: 10, fontWeight: 600,
-                          borderRadius: 7, border: '1px solid', cursor: 'pointer',
-                          background: activeAdminTab === tab ? 'rgba(167,139,250,0.1)' : 'transparent',
-                          borderColor: activeAdminTab === tab ? 'rgba(167,139,250,0.3)' : 'rgba(255,255,255,0.07)',
-                          color: activeAdminTab === tab ? '#a78bfa' : 'var(--text-dim)',
-                          letterSpacing: '0.1em', textTransform: 'uppercase',
-                        }}
-                      >
-                        {tab === 'consumi' ? '⬡ Consumi' : `⚡ Ticket (${bugs.length})`}
-                      </button>
-                    ))}
-                  </div>
-
-                  {activeAdminTab === 'ticket' ? (
-                    <div>
-                      {bugs.length === 0 ? (
-                        <div style={{ fontSize: 11, color: 'var(--text-dim)', padding: '8px 0' }}>Nessun ticket.</div>
-                      ) : bugs.map(bug => (
-                        <div key={bug.id} style={{
-                          background: 'rgba(255,255,255,0.02)',
-                          border: '1px solid rgba(255,255,255,0.06)',
-                          borderRadius: 10, padding: '10px 12px', marginBottom: 7,
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <span style={{ fontSize: 10, color: bug.type === 'bug' ? '#f0c040' : '#40e0d0', fontWeight: 700 }}>
-                                {bug.type === 'bug' ? '⚠ BUG' : '✦ IDEA'}
-                              </span>
-                              <span style={{ fontSize: 9.5, color: 'var(--text-dim)' }}>
-                                {new Date(bug.created_at).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                            <button
-                              onClick={() => updateTicketStatus(bug.id, STATUS_FLOW[bug.status] ?? 'open')}
-                              style={{
-                                fontSize: 9.5, fontWeight: 700, padding: '2px 8px', borderRadius: 5,
-                                border: 'none', cursor: 'pointer',
-                                background: `${STATUS_COLORS[bug.status] ?? '#a78bfa'}22`,
-                                color: STATUS_COLORS[bug.status] ?? '#a78bfa',
-                              }}
-                            >
-                              {STATUS_LABELS[bug.status] ?? bug.status}
-                            </button>
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--text)', opacity: 0.8, lineHeight: 1.5 }}>
-                            {bug.user_description.slice(0, 160)}{bug.user_description.length > 160 ? '…' : ''}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                  <div>
-                  {/* DB Stats */}
-                  <div style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.14em', color: 'rgba(167,139,250,0.6)', marginBottom: 8 }}>
-                      DATABASE
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
-                      <StatTile label="Totale record" value={String(stats?.totalEntries ?? 0)} />
-                      <StatTile label="Chiamate AI" value={String(stats?.aiCalls ?? 0)} />
-                      <StatTile label="Peso DB" value={stats ? (stats.totalSizeMB < 0.01 ? '<0.01 MB' : `${stats.totalSizeMB.toFixed(2)} MB`) : '—'} />
-                    </div>
-                    <div style={{
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid rgba(255,255,255,0.07)',
-                      borderRadius: 10,
-                      overflow: 'hidden',
-                    }}>
-                      {(stats?.byCategory ?? []).slice(0, 8).map(({ category, count }) => (
-                        <div key={category} style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          padding: '5px 12px',
-                          borderBottom: '1px solid rgba(255,255,255,0.04)',
-                          fontSize: 11,
-                        }}>
-                          <span style={{ color: 'var(--text)', opacity: 0.75 }}>{category}</span>
-                          <span style={{ color: '#a78bfa', fontVariantNumeric: 'tabular-nums' }}>{count}</span>
-                        </div>
-                      ))}
-                      {(stats?.byCategory.length ?? 0) === 0 && (
-                        <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-dim)' }}>
-                          Nessun dato (RLS attivo)
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Last active users */}
-                  <div>
-                    <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.14em', color: 'rgba(167,139,250,0.6)', marginBottom: 8 }}>
-                      ULTIMI UTENTI ATTIVI
-                    </div>
-                    <div style={{
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid rgba(255,255,255,0.07)',
-                      borderRadius: 10,
-                      overflow: 'hidden',
-                    }}>
-                      {users.slice(0, 10).map(u => (
-                        <div key={u.userId} style={{
-                          display: 'grid',
-                          gridTemplateColumns: '1fr auto auto',
-                          gap: 8,
-                          padding: '5px 12px',
-                          borderBottom: '1px solid rgba(255,255,255,0.04)',
-                          fontSize: 10.5,
-                          alignItems: 'center',
-                        }}>
-                          <span style={{ color: 'var(--text)', opacity: 0.6, fontFamily: 'monospace' }}>{shortId(u.userId)}</span>
-                          <span style={{ color: 'var(--text-dim)' }}>{u.entryCount} record</span>
-                          <span style={{ color: '#a78bfa', whiteSpace: 'nowrap' }}>{fmtTime(u.lastActivity)}</span>
-                        </div>
-                      ))}
-                      {users.length === 0 && (
-                        <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-dim)' }}>
-                          Nessun dato (RLS attivo)
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
+        {showPopup && <AdminPopup onClose={() => setShowPopup(false)} />}
       </AnimatePresence>
-    </div>
-  );
-}
-
-function StatTile({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{
-      background: 'rgba(167,139,250,0.06)',
-      border: '1px solid rgba(167,139,250,0.15)',
-      borderRadius: 10,
-      padding: '10px 12px',
-    }}>
-      <div style={{ fontSize: 18, fontWeight: 700, color: '#a78bfa', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
-      <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>{label}</div>
     </div>
   );
 }

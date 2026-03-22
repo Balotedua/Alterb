@@ -240,6 +240,9 @@ export interface AdminStats {
   totalEntries: number;
   byCategory: { category: string; count: number }[];
   aiCalls: number;
+  aiTokensIn: number;
+  aiTokensOut: number;
+  estimatedCostUSD: number;
   totalSizeMB: number;
 }
 
@@ -255,7 +258,7 @@ export async function getAdminStats(): Promise<AdminStats> {
     .select('category, created_at, data')
     .order('created_at', { ascending: false });
 
-  if (error || !data) return { totalEntries: 0, byCategory: [], aiCalls: 0, totalSizeMB: 0 };
+  if (error || !data) return { totalEntries: 0, byCategory: [], aiCalls: 0, aiTokensIn: 0, aiTokensOut: 0, estimatedCostUSD: 0, totalSizeMB: 0 };
 
   const map = new Map<string, number>();
   let totalBytes = 0;
@@ -267,9 +270,13 @@ export async function getAdminStats(): Promise<AdminStats> {
     .map(([category, count]) => ({ category, count }))
     .sort((a, b) => b.count - a.count);
 
-  const aiCalls = parseInt(localStorage.getItem('_alter_ai_calls') ?? '0', 10);
+  const aiCalls     = parseInt(localStorage.getItem('_alter_ai_calls')     ?? '0', 10);
+  const aiTokensIn  = parseInt(localStorage.getItem('_alter_ai_tokens_in')  ?? '0', 10);
+  const aiTokensOut = parseInt(localStorage.getItem('_alter_ai_tokens_out') ?? '0', 10);
+  // DeepSeek-chat pricing: $0.14/M input, $0.28/M output
+  const estimatedCostUSD = (aiTokensIn / 1_000_000) * 0.14 + (aiTokensOut / 1_000_000) * 0.28;
   const totalSizeMB = totalBytes / (1024 * 1024);
-  return { totalEntries: data.length, byCategory, aiCalls, totalSizeMB };
+  return { totalEntries: data.length, byCategory, aiCalls, aiTokensIn, aiTokensOut, estimatedCostUSD, totalSizeMB };
 }
 
 export async function getLastActiveUsers(): Promise<ActiveUser[]> {
@@ -294,6 +301,32 @@ export async function getLastActiveUsers(): Promise<ActiveUser[]> {
     .map(([userId, v]) => ({ userId, lastActivity: v.lastActivity, entryCount: v.count }))
     .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
     .slice(0, 20);
+}
+
+// ─── Delete: all data for a user (full reset) ────────────────
+export async function deleteAllUserData(userId: string): Promise<boolean> {
+  const { error } = await supabase.from('vault').delete().eq('user_id', userId);
+  return !error;
+}
+
+// ─── Delete: entries in a category within a date range ───────
+export async function deleteByCategoryAndDateRange(
+  userId: string,
+  category: string,
+  from: Date,
+  to: Date
+): Promise<number> {
+  const { data, error } = await supabase
+    .from('vault')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('category', category)
+    .gte('created_at', from.toISOString())
+    .lte('created_at', to.toISOString());
+  if (error || !data || data.length === 0) return 0;
+  const ids = data.map(r => r.id);
+  const { error: delErr } = await supabase.from('vault').delete().in('id', ids);
+  return delErr ? 0 : ids.length;
 }
 
 // ─── Delete: last entry of a category ────────────────────────

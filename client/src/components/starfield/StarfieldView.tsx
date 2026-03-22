@@ -1,18 +1,24 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAlterStore } from '../../store/alterStore';
-import { getByCategory, getSemanticLinks } from '../../vault/vaultService';
+import { getByCategory, getSemanticLinks, getRecentAll } from '../../vault/vaultService';
 import { inferRenderType } from '../widget/PolymorphicWidget';
 import type { Star } from '../../types';
 import { nebulaCameraRef } from '../nebula/nebulaCamera';
 
 // ─── Category meta registry ───────────────────────────────────
 export const CATEGORY_META: Record<string, { label: string; color: string; icon: string }> = {
-  finance:    { label: 'Finanza',     color: '#e8d090', icon: '💰' },
-  health:     { label: 'Salute',      color: '#90d8d2', icon: '💪' },
-  psychology: { label: 'Psiche',      color: '#c4b2f5', icon: '🧠' },
-  calendar:   { label: 'Calendario',  color: '#92bef5', icon: '📅' },
-  insight:    { label: 'Insight',     color: '#f0c040', icon: '✨' },
+  finance:      { label: 'Finanza',          color: '#f5c842', icon: '💰' },
+  health:       { label: 'Salute',           color: '#00e8d0', icon: '💪' },
+  psychology:   { label: 'Salute Mentale',   color: '#c084fc', icon: '🧠' },
+  mental_health:{ label: 'Salute Mentale',   color: '#c084fc', icon: '🧠' },
+  calendar:     { label: 'Calendario',       color: '#60a5fa', icon: '📅' },
+  routine:      { label: 'Tempo & Routine',  color: '#34d399', icon: '⏳' },
+  notes:        { label: 'Archivio',         color: '#e2e8f0', icon: '📓' },
+  interests:    { label: 'Interessi',        color: '#fb923c', icon: '🌍' },
+  career:       { label: 'Carriera',         color: '#818cf8', icon: '🚀' },
+  badges:       { label: 'Badge',            color: '#fbbf24', icon: '🏆' },
+  insight:      { label: 'Insight',          color: '#fcd34d', icon: '✨' },
 };
 
 export function getCategoryMeta(cat: string) {
@@ -25,6 +31,19 @@ export function getCategoryMeta(cat: string) {
   const icon    = ICONS[Math.abs(hash >> 4) % ICONS.length];
   return { label: cat.charAt(0).toUpperCase() + cat.slice(1), color, icon };
 }
+
+// ─── Subcategory constellation map (L1 zoom) ─────────────────
+export const SUBCATEGORY_MAP: Record<string, Array<{ id: string; label: string; icon: string }>> = {
+  finance:      [{ id: 'transazioni', label: 'Transazioni', icon: '💳' }, { id: 'budget', label: 'Budget', icon: '📊' }, { id: 'burn_rate', label: 'Burn Rate', icon: '🔥' }, { id: 'analisi', label: 'Analisi', icon: '📈' }],
+  health:       [{ id: 'peso', label: 'Peso', icon: '⚖️' }, { id: 'allenamento', label: 'Allenamento', icon: '🏋️' }, { id: 'sonno', label: 'Sonno', icon: '😴' }, { id: 'nutrizione', label: 'Nutrizione', icon: '🥗' }],
+  psychology:   [{ id: 'umore', label: 'Umore', icon: '🎭' }, { id: 'stress', label: 'Stress', icon: '💆' }, { id: 'gratitudine', label: 'Gratitudine', icon: '✨' }, { id: 'riflessioni', label: 'Riflessioni', icon: '📝' }],
+  mental_health:[{ id: 'umore', label: 'Umore', icon: '🎭' }, { id: 'stress', label: 'Stress', icon: '💆' }, { id: 'gratitudine', label: 'Gratitudine', icon: '✨' }, { id: 'riflessioni', label: 'Riflessioni', icon: '📝' }],
+  calendar:     [{ id: 'eventi', label: 'Eventi', icon: '📅' }, { id: 'promemoria', label: 'Promemoria', icon: '🔔' }, { id: 'routine', label: 'Routine', icon: '⏳' }],
+  career:       [{ id: 'obiettivi', label: 'Obiettivi', icon: '🎯' }, { id: 'skills', label: 'Skills', icon: '🚀' }, { id: 'log', label: 'Work Log', icon: '📋' }],
+  notes:        [{ id: 'note', label: 'Note', icon: '📓' }, { id: 'idee', label: 'Idee', icon: '💡' }],
+  interests:    [{ id: 'hobby', label: 'Hobby', icon: '🌍' }, { id: 'letture', label: 'Letture', icon: '📚' }, { id: 'musica', label: 'Musica', icon: '🎵' }],
+  routine:      [{ id: 'mattina', label: 'Mattina', icon: '☀️' }, { id: 'sera', label: 'Sera', icon: '🌙' }, { id: 'abitudini', label: 'Abitudini', icon: '✅' }],
+};
 
 // ─── Deterministic star position ─────────────────────────────
 export function starPosition(cat: string): { x: number; y: number } {
@@ -108,8 +127,13 @@ export default function StarfieldView() {
 
   const { stars, focusMode, setActiveWidget, user, markStarSeen, highlightedStarId, alertEvent, setSemanticLinks, setGhostStarPrompt } = useAlterStore();
 
+  // Galaxy zoom state (L0 = full galaxy, L1 = category focus)
+  const [galaxyFocus, setGalaxyFocus] = useState<string | null>(null);
+
   // Subtle ripple at click position
   const [clickRipple, setClickRipple] = useState<{ x: number; y: number; color: string } | null>(null);
+  const [explosionOrigin, setExplosionOrigin] = useState<{ x: number; y: number } | null>(null);
+  const [nexusScanning, setNexusScanning] = useState(false);
 
   // Load semantic links whenever the star count changes
   useEffect(() => {
@@ -121,6 +145,13 @@ export default function StarfieldView() {
   useEffect(() => {
     stars.filter(s => s.isNew).forEach(s => markStarSeen(s.id));
   }, [stars, markStarSeen]);
+
+  // Escape → back to L0
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setGalaxyFocus(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // ── Camera: normalized → screen coords ────────────────────
   const toScreen = useCallback((nx: number, ny: number, W: number, H: number) => {
@@ -160,7 +191,7 @@ export default function StarfieldView() {
     // Deep space background — theme-aware radial vignette
     const currentTheme = useAlterStore.getState().theme ?? 'dark';
     const BG_COLORS: Record<string, [string, string, string]> = {
-      dark:   ['#04040e', '#020208', '#000000'],
+      dark:   ['#020312', '#010209', '#000000'],
       matrix: ['#001200', '#000800', '#000300'],
       nebula: ['#0d0020', '#06000f', '#020008'],
       light:  ['#dde2ff', '#eaeeff', '#f4f6ff'],
@@ -266,37 +297,49 @@ export default function StarfieldView() {
       const alpha   = (isEphemeral ? 0.35 : 0.45) + (intensity * (isEphemeral ? 0.35 : 0.55));
       const a       = alpha * pulse;
 
-      // Outer glow halo
-      const glowR = (isHov ? 28 : 14 + intensity * 18) * s;
+      // Outer glow halo — neon OLED bloom
+      const glowR = (isHov ? 55 : 26 + intensity * 36) * s;
       const glowGrd = ctx.createRadialGradient(px, py, 0, px, py, glowR);
-      glowGrd.addColorStop(0,    `rgba(${r},${g},${b},${a * 0.45})`);
-      glowGrd.addColorStop(0.3,  `rgba(${r},${g},${b},${a * 0.18})`);
-      glowGrd.addColorStop(0.65, `rgba(${r},${g},${b},${a * 0.05})`);
+      glowGrd.addColorStop(0,    `rgba(${r},${g},${b},${a * 0.65})`);
+      glowGrd.addColorStop(0.22, `rgba(${r},${g},${b},${a * 0.30})`);
+      glowGrd.addColorStop(0.55, `rgba(${r},${g},${b},${a * 0.09})`);
       glowGrd.addColorStop(1,    `rgba(${r},${g},${b},0)`);
       ctx.beginPath(); ctx.arc(px, py, glowR, 0, Math.PI * 2);
       ctx.fillStyle = glowGrd; ctx.fill();
 
-      // Colored core: white hot center → star color rim
-      const coreR = (isHov ? 7 : 2.8 + intensity * 4.5) * s * (isHighlit || isAlert ? 1.5 : 1);
+      // Wide secondary bloom (OLED bleed)
+      const bloomR = glowR * 2.4;
+      const bloomGrd = ctx.createRadialGradient(px, py, 0, px, py, bloomR);
+      bloomGrd.addColorStop(0,   `rgba(${r},${g},${b},${a * 0.14})`);
+      bloomGrd.addColorStop(0.4, `rgba(${r},${g},${b},${a * 0.04})`);
+      bloomGrd.addColorStop(1,   `rgba(${r},${g},${b},0)`);
+      ctx.beginPath(); ctx.arc(px, py, bloomR, 0, Math.PI * 2);
+      ctx.fillStyle = bloomGrd; ctx.fill();
+
+      // Colored core: white hot center → neon star color
+      const coreR = (isHov ? 9 : 3.5 + intensity * 6) * s * (isHighlit || isAlert ? 1.5 : 1);
       const coreGrd = ctx.createRadialGradient(px, py, 0, px, py, coreR);
       const efa = isEphemeral ? 0.55 : 1;
       coreGrd.addColorStop(0,    `rgba(255,255,255,${a * efa})`);
-      coreGrd.addColorStop(0.45, `rgba(${r},${g},${b},${a * 0.95 * efa})`);
-      coreGrd.addColorStop(1,    `rgba(${r},${g},${b},${a * 0.5 * efa})`);
+      coreGrd.addColorStop(0.35, `rgba(${r},${g},${b},${a * efa})`);
+      coreGrd.addColorStop(1,    `rgba(${r},${g},${b},${a * 0.55 * efa})`);
       ctx.beginPath(); ctx.arc(px, py, coreR, 0, Math.PI * 2);
       ctx.fillStyle = coreGrd;
-      // Glow shadow on star
-      ctx.shadowBlur  = isHov ? 20 : (8 + intensity * 12) * s;
-      ctx.shadowColor = `rgba(${r},${g},${b},0.8)`;
+      // Neon shadow glow
+      ctx.shadowBlur  = isHov ? 38 : (16 + intensity * 24) * s;
+      ctx.shadowColor = `rgba(${r},${g},${b},0.95)`;
       ctx.fill();
       ctx.shadowBlur = 0;
 
       // Label — larger, more visible
       ctx.save();
-      ctx.font = `500 10px -apple-system, "SF Pro Display", system-ui, sans-serif`;
+      ctx.font = `500 10.5px -apple-system, "SF Pro Display", system-ui, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillStyle = `rgba(${r},${g},${b},${isHov ? 0.95 : 0.55})`;
+      ctx.fillStyle = `rgba(${r},${g},${b},${isHov ? 1 : 0.68})`;
+      ctx.shadowBlur  = isHov ? 10 : 5;
+      ctx.shadowColor = `rgba(${r},${g},${b},0.6)`;
       ctx.fillText(star.label.toUpperCase(), px, py + coreR + 15 * s);
+      ctx.shadowBlur = 0;
       ctx.restore();
       void isInsight;
     });
@@ -526,7 +569,12 @@ export default function StarfieldView() {
       const { sx, sy } = toScreen(star.x, star.y, W, H);
       if (Math.hypot(sx - e.clientX, sy - e.clientY) < 22) {
         setClickRipple({ x: sx, y: sy, color: star.color });
-        openWidget(star);
+        if (SUBCATEGORY_MAP[star.id]?.length) {
+          setExplosionOrigin({ x: sx, y: sy });
+          setGalaxyFocus(star.id);
+        } else {
+          openWidget(star);
+        }
         return;
       }
     }
@@ -622,7 +670,12 @@ export default function StarfieldView() {
           const { sx, sy } = toScreen(star.x, star.y, W, H);
           if (Math.hypot(sx - state.touchStartX, sy - state.touchStartY) < 36) {
             setClickRipple({ x: sx, y: sy, color: star.color });
-            openWidget(star);
+            if (SUBCATEGORY_MAP[star.id]?.length) {
+              setExplosionOrigin({ x: sx, y: sy });
+              setGalaxyFocus(star.id);
+            } else {
+              openWidget(star);
+            }
             touchHit = true;
             break;
           }
@@ -654,7 +707,7 @@ export default function StarfieldView() {
   }, [user, setActiveWidget, markStarSeen, toScreen, setGhostStarPrompt]);
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#050508' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#020205' }}>
       <canvas
         ref={canvasRef}
         style={{ display: 'block', width: '100%', height: '100%', cursor: 'grab', touchAction: 'none' }}
@@ -668,6 +721,46 @@ export default function StarfieldView() {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       />
+
+      {/* Empty galaxy onboarding */}
+      <AnimatePresence>
+        {stars.length === 0 && (
+          <motion.div
+            key="empty-galaxy"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            style={{
+              position: 'absolute',
+              top: '50%', left: '50%',
+              transform: 'translate(-50%, -58%)',
+              textAlign: 'center',
+              pointerEvents: 'none',
+              zIndex: 10,
+              width: 'min(340px, 90vw)',
+            }}
+          >
+            <div style={{ fontSize: 36, marginBottom: 18, opacity: 0.18 }}>✦</div>
+            <p style={{
+              fontSize: 13, fontWeight: 300, letterSpacing: '0.08em',
+              color: 'rgba(255,255,255,0.55)', marginBottom: 10, lineHeight: 1.6,
+            }}>
+              La tua galassia è vuota.
+            </p>
+            <p style={{
+              fontSize: 11, fontWeight: 300, letterSpacing: '0.06em',
+              color: 'rgba(255,255,255,0.28)', lineHeight: 1.8, maxWidth: '100%',
+            }}>
+              Ogni cosa che scrivi diventa una stella.<br />
+              Prova con <span style={{ color: '#e8d090' }}>«Ho speso 12€ al supermercato»</span>,<br />
+              <span style={{ color: '#90d8d2' }}>«Peso 74kg»</span> o{' '}
+              <span style={{ color: '#c4b2f5' }}>«Umore 8/10»</span>.<br />
+              Scrivi nell'input in basso e guarda la galassia prendere vita.
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Focus mode labels (normalized position, decorative) */}
       <AnimatePresence>
@@ -703,29 +796,295 @@ export default function StarfieldView() {
         {alertEvent && (
           <motion.div
             key="sentinel-alert"
-            initial={{ opacity: 0, y: -12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -16, scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+            onClick={() => useAlterStore.getState().setAlertEvent(null)}
             style={{
               position: 'absolute',
-              top: 'calc(50% - 80px)',
-              left: '50%', transform: 'translateX(-50%)',
-              background: 'rgba(0,0,0,0.92)',
-              border: '1px solid rgba(255,80,80,0.35)',
-              borderRadius: 12,
-              padding: '8px 18px',
-              pointerEvents: 'none',
+              top: 56, left: '50%', transform: 'translateX(-50%)',
+              background: 'rgba(10,10,18,0.95)',
+              border: '1px solid rgba(167,139,250,0.5)',
+              borderRadius: 14,
+              padding: '10px 18px',
+              display: 'flex', alignItems: 'center', gap: 10,
               whiteSpace: 'nowrap',
               zIndex: 50,
-              boxShadow: '0 0 20px rgba(255,80,80,0.25)',
+              boxShadow: '0 0 24px rgba(167,139,250,0.25)',
+              backdropFilter: 'blur(12px)',
+              cursor: 'pointer',
             }}
           >
-            <span style={{ fontSize: 11, color: '#f87171', letterSpacing: '0.06em', fontWeight: 400 }}>
-              🔔 {alertEvent.title} — {new Date(alertEvent.scheduledAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
-            </span>
+            <span style={{ fontSize: 18 }}>🔔</span>
+            <div>
+              <div style={{ fontSize: 10, color: '#a78bfa', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 1 }}>Promemoria</div>
+              <span style={{ fontSize: 13, color: '#ffffff', fontWeight: 500 }}>
+                {alertEvent.title} · {new Date(alertEvent.scheduledAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
           </motion.div>
         )}
+      </AnimatePresence>
+
+      {/* Nexus scan button */}
+      {stars.length >= 2 && (
+        <motion.button
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          onClick={async () => {
+            if (!user || nexusScanning) return;
+            setNexusScanning(true);
+            try {
+              const entries = await getRecentAll(user.id, 80);
+              const { aiNexusNarrative } = await import('../../core/aiParser');
+              const narrative = await aiNexusNarrative('Analizza le correlazioni tra tutte le mie categorie e dimmi cosa noti di interessante.', entries);
+              setActiveWidget({
+                category: 'insight', label: '✦ Scansione Nexus', color: '#a78bfa',
+                entries: [{ id: 'nexus-scan', user_id: user.id, category: 'insight',
+                  data: { insight: narrative }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }],
+                renderType: 'insight',
+              });
+            } finally {
+              setNexusScanning(false);
+            }
+          }}
+          style={{
+            position: 'absolute',
+            bottom: 90, left: '50%', transform: 'translateX(-50%)', margin: 0,
+            zIndex: 40,
+            background: nexusScanning ? 'rgba(167,139,250,0.15)' : 'rgba(10,10,18,0.8)',
+            border: '1px solid rgba(167,139,250,0.35)',
+            borderRadius: 20,
+            padding: '7px 18px',
+            display: 'flex', alignItems: 'center', gap: 8,
+            cursor: nexusScanning ? 'wait' : 'pointer',
+            color: '#a78bfa',
+            fontSize: 12, fontWeight: 500, letterSpacing: '0.06em',
+            backdropFilter: 'blur(10px)',
+            boxShadow: '0 0 20px rgba(167,139,250,0.12)',
+            transition: 'all 0.25s',
+          }}
+        >
+          <span style={{ fontSize: 14, animation: nexusScanning ? 'spin 1.2s linear infinite' : 'none' }}>
+            {nexusScanning ? '◌' : '✦'}
+          </span>
+          {nexusScanning ? 'Nexus in analisi...' : 'Scansione Nexus'}
+        </motion.button>
+      )}
+
+      {/* ── Galaxy Zoom L1: Neon Explosion ── */}
+      <AnimatePresence>
+        {galaxyFocus && (() => {
+          const focusedStar = stars.find(s => s.id === galaxyFocus);
+          if (!focusedStar) return null;
+          const meta = getCategoryMeta(galaxyFocus);
+          const subs = SUBCATEGORY_MAP[galaxyFocus] ?? [];
+          const [fr, fg, fb] = hexToRgb(meta.color);
+          const isMob = window.innerWidth < 640;
+          const orbR  = isMob ? 118 : 164;
+          const W2 = window.innerWidth;
+          const H2 = window.innerHeight;
+          const originX = explosionOrigin ? explosionOrigin.x - W2 / 2 : 0;
+          const originY = explosionOrigin ? explosionOrigin.y - H2 / 2 : 0;
+          return (
+            <motion.div
+              key="galaxy-zoom"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.22 }}
+              style={{
+                position: 'absolute', inset: 0,
+                background: 'rgba(2,2,5,0.93)',
+                backdropFilter: 'blur(10px) saturate(160%)',
+                zIndex: 28,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+              onClick={() => { setGalaxyFocus(null); setExplosionOrigin(null); }}
+            >
+
+
+              {/* ── Shockwave ring on arrival ── */}
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: [0.8, 3.8, 4.5], opacity: [0, 0.9, 0] }}
+                transition={{ duration: 0.65, delay: 0.40, ease: 'easeOut' }}
+                style={{
+                  position: 'absolute',
+                  width: 96, height: 96, marginLeft: -48, marginTop: -48,
+                  borderRadius: '50%',
+                  border: `2px solid rgba(${fr},${fg},${fb},0.95)`,
+                  boxShadow: `0 0 24px rgba(${fr},${fg},${fb},0.6), inset 0 0 24px rgba(${fr},${fg},${fb},0.15)`,
+                  pointerEvents: 'none',
+                }}
+              />
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: [0.8, 2.9, 3.6], opacity: [0, 0.55, 0] }}
+                transition={{ duration: 0.72, delay: 0.48, ease: 'easeOut' }}
+                style={{
+                  position: 'absolute',
+                  width: 96, height: 96, marginLeft: -48, marginTop: -48,
+                  borderRadius: '50%',
+                  border: `1px solid rgba(${fr},${fg},${fb},0.7)`,
+                  pointerEvents: 'none',
+                }}
+              />
+
+              {/* ── Explosion particles ── */}
+              {Array.from({ length: 20 }, (_, i) => {
+                const angle = (i / 20) * Math.PI * 2;
+                const dist  = 95 + (i * 17 % 75);
+                const size  = 2.5 + (i % 3);
+                return (
+                  <motion.div
+                    key={`p-${i}`}
+                    initial={{ x: 0, y: 0, scale: 1.5, opacity: 1 }}
+                    animate={{ x: Math.cos(angle) * dist, y: Math.sin(angle) * dist, scale: 0, opacity: 0 }}
+                    transition={{ duration: 0.8, delay: 0.40 + (i % 5) * 0.018, ease: [0.2, 0, 0.8, 1] }}
+                    style={{
+                      position: 'absolute',
+                      width: size, height: size,
+                      marginLeft: -size / 2, marginTop: -size / 2,
+                      borderRadius: '50%',
+                      background: `rgba(${fr},${fg},${fb},1)`,
+                      boxShadow: `0 0 ${size * 4}px rgba(${fr},${fg},${fb},0.95)`,
+                      pointerEvents: 'none',
+                    }}
+                  />
+                );
+              })}
+
+              {/* ── SVG connector lines — dashed, glowing ── */}
+              <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+                <defs>
+                  <filter id={`ln-glow-${galaxyFocus}`} x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="2.5" result="b"/>
+                    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+                  </filter>
+                </defs>
+                {subs.map((sub, i) => {
+                  const angle = (i / subs.length) * Math.PI * 2 - Math.PI / 2;
+                  const cx = W2 / 2, cy = H2 / 2;
+                  return (
+                    <motion.line
+                      key={sub.id}
+                      x1={cx} y1={cy}
+                      x2={cx + Math.cos(angle) * orbR}
+                      y2={cy + Math.sin(angle) * orbR}
+                      stroke={`rgba(${fr},${fg},${fb},1)`}
+                      strokeWidth={0.8}
+                      strokeDasharray="4 9"
+                      filter={`url(#ln-glow-${galaxyFocus})`}
+                      initial={{ opacity: 0, pathLength: 0 }}
+                      animate={{ opacity: 0.55, pathLength: 1 }}
+                      exit={{ opacity: 0, pathLength: 0 }}
+                      transition={{ delay: 0.55 + i * 0.07, duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
+                    />
+                  );
+                })}
+              </svg>
+
+              {/* ── Center orb — collapsed sun, interactive ── */}
+              <motion.div
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0, opacity: 0 }}
+                transition={{
+                  scale: { delay: 0.45, type: 'spring', stiffness: 340, damping: 20 },
+                  opacity: { delay: 0.45, duration: 0.18 },
+                }}
+                whileHover={{ scale: 1.1 }}
+                style={{
+                  position: 'absolute',
+                  left: 'calc(50% - 50px)', top: 'calc(50% - 50px)',
+                  width: 100, height: 100,
+                  borderRadius: '50%',
+                  border: `0.5px solid rgba(${fr},${fg},${fb},0.75)`,
+                  boxShadow: `
+                    0 0 0 1px rgba(${fr},${fg},${fb},0.2),
+                    0 0 55px rgba(${fr},${fg},${fb},0.7),
+                    0 0 120px rgba(${fr},${fg},${fb},0.32),
+                    0 0 220px rgba(${fr},${fg},${fb},0.12),
+                    inset 0 0 32px rgba(${fr},${fg},${fb},0.22),
+                    inset 0 0.5px 0 rgba(255,255,255,0.28)
+                  `,
+                  background: `radial-gradient(circle at 40% 32%, rgba(255,255,255,0.14) 0%, rgba(${fr},${fg},${fb},0.32) 35%, rgba(${fr},${fg},${fb},0.07) 70%, transparent 100%)`,
+                  backdropFilter: 'blur(20px) saturate(200%)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer',
+                }}
+                onClick={(e) => { e.stopPropagation(); setGalaxyFocus(null); setExplosionOrigin(null); openWidget(focusedStar); }}
+              >
+                <span style={{
+                  fontSize: 30, position: 'relative', zIndex: 1,
+                  filter: `drop-shadow(0 0 10px rgba(${fr},${fg},${fb},0.9))`,
+                }}>{meta.icon}</span>
+              </motion.div>
+
+              {/* ── Subcategory orbs — neon glassmorphism ── */}
+              {subs.map((sub, i) => {
+                const angle = (i / subs.length) * Math.PI * 2 - Math.PI / 2;
+                const tx = Math.cos(angle) * orbR;
+                const ty = Math.sin(angle) * orbR;
+                return (
+                  <motion.button
+                    key={sub.id}
+                    initial={{ x: 0, y: 0, opacity: 0, scale: 0 }}
+                    animate={{ x: tx, y: ty, opacity: 1, scale: 1 }}
+                    exit={{ x: 0, y: 0, opacity: 0, scale: 0 }}
+                    transition={{ type: 'spring', stiffness: 260, damping: 22, delay: 0.55 + i * 0.07 }}
+                    whileHover={{ scale: 1.22, transition: { duration: 0.16 } }}
+                    whileTap={{ scale: 0.91 }}
+                    style={{
+                      position: 'absolute',
+                      left: 'calc(50% - 38px)', top: 'calc(50% - 38px)',
+                      width: 76, height: 76,
+                      borderRadius: '50%',
+                      background: `radial-gradient(circle at 38% 30%, rgba(255,255,255,0.1) 0%, rgba(${fr},${fg},${fb},0.11) 55%, transparent 100%)`,
+                      border: `0.5px solid rgba(${fr},${fg},${fb},0.65)`,
+                      backdropFilter: 'blur(22px) saturate(180%)',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                      gap: 4, cursor: 'pointer', color: `rgba(${fr},${fg},${fb},1)`,
+                      boxShadow: `
+                        0 0 38px rgba(${fr},${fg},${fb},0.38),
+                        0 0 75px rgba(${fr},${fg},${fb},0.14),
+                        inset 0 0.5px 0 rgba(255,255,255,0.2),
+                        inset 0 0 20px rgba(${fr},${fg},${fb},0.1)
+                      `,
+                    }}
+                    onClick={(e) => { e.stopPropagation(); setGalaxyFocus(null); setExplosionOrigin(null); openWidget(focusedStar); }}
+                  >
+                    <span style={{ fontSize: 20, filter: `drop-shadow(0 0 7px rgba(${fr},${fg},${fb},0.8))` }}>{sub.icon}</span>
+                    <span style={{
+                      fontSize: 7.5, letterSpacing: '0.09em', textTransform: 'uppercase',
+                      textAlign: 'center', lineHeight: 1.2, padding: '0 4px',
+                      textShadow: `0 0 8px rgba(${fr},${fg},${fb},0.7)`,
+                    }}>{sub.label}</span>
+                  </motion.button>
+                );
+              })}
+
+              {/* Back hint */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ delay: 0.78 }}
+                style={{
+                  position: 'absolute', bottom: 108,
+                  fontSize: 9.5, color: 'rgba(255,255,255,0.18)',
+                  letterSpacing: '0.13em', textTransform: 'uppercase',
+                  pointerEvents: 'none', fontWeight: 300,
+                }}
+              >
+                tap fuori · esc
+              </motion.div>
+            </motion.div>
+          );
+        })()}
       </AnimatePresence>
 
       {/* Subtle click ripple */}

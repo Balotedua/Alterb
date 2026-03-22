@@ -2,7 +2,7 @@ import type { CategoryMeta, ParsedIntent } from '../types';
 
 const SYSTEM = `Sei il cervello di "Alter", un OS personale liquido.
 L'utente ti manda un testo in italiano (o misto). Il tuo compito:
-1. Capire la categoria (finance, health, psychology, o crea una nuova slug in snake_case)
+1. Capire la categoria tra le 8 galassie sistemiche (o crea una nuova slug in snake_case se non si adatta)
 2. Estrarre i dati strutturati
 3. Definire i metadati visivi della categoria
 
@@ -14,18 +14,22 @@ Schema risposta:
   "data": { ...campi rilevanti },
   "meta": {
     "label": "Nome Leggibile",
-    "icon": "lucide-icon-name",
+    "icon": "emoji",
     "color": "#hexcolor"
   }
 }
 
-Guida categorie:
-- finance: { type: "expense"|"income", amount: number, label: string }
-- health:  { type: "weight"|"sleep"|"water"|"activity", value?: number, hours?: number, unit?: string, label?: string }
-- psychology: { type: "mood"|"dream"|"note", score?: number (1-10), note: string }
-- Categorie custom: inventale (es. "gatto", "libri", "viaggi")
+Le 8 galassie sistemiche (usa questi slug preferibilmente):
+- finance:      spese, entrate, budget → { type: "expense"|"income", amount: number, label: string }
+- mental_health: umore, stress, riflessioni, sogni, terapia → { type: "mood"|"reflection"|"dream", score?: 1-10, note: string }
+- health:        peso, sonno, allenamenti, alimentazione → { type: "weight"|"sleep"|"activity"|"diet", value?: number, unit?: string, label?: string }
+- notes:         idee, appunti, pensieri profondi, "nota a me stesso" → { type: "idea"|"note"|"observation", content: string }
+- routine:       abitudini, task completati, orari, produttività → { type: "habit"|"task"|"schedule", label: string, duration?: number }
+- interests:     articoli letti, link salvati, cose scoperte → { type: "article"|"discovery"|"link", label: string, source?: string }
+- career:        obiettivi, corsi, feedback, successi lavorativi → { type: "goal"|"achievement"|"skill"|"work_log", label: string }
+- badges:        NON usare — assegnati automaticamente dal sistema
 
-Icone suggerite per lucide-react: Wallet, Heart, Brain, Star, Cat, Book, Plane, Dumbbell, Moon, Droplets, Target, Zap`;
+Alias accettati: psychology→mental_health, calendar→routine`;
 
 interface AiResult {
   category: string;
@@ -49,6 +53,10 @@ async function deepseekChat(messages: { role: string; content: string }[], maxTo
     if (!res.ok) throw new Error(`DeepSeek ${res.status}`);
     const json = await res.json();
     localStorage.setItem('_alter_ai_calls', String(parseInt(localStorage.getItem('_alter_ai_calls') ?? '0', 10) + 1));
+    const tokIn  = (json.usage?.prompt_tokens     ?? 0) as number;
+    const tokOut = (json.usage?.completion_tokens ?? 0) as number;
+    localStorage.setItem('_alter_ai_tokens_in',  String(parseInt(localStorage.getItem('_alter_ai_tokens_in')  ?? '0', 10) + tokIn));
+    localStorage.setItem('_alter_ai_tokens_out', String(parseInt(localStorage.getItem('_alter_ai_tokens_out') ?? '0', 10) + tokOut));
     return json.choices[0].message.content as string;
   } catch (e) {
     console.error('[deepseekChat]', e);
@@ -203,6 +211,82 @@ export async function aiDocumentQuery(question: string, docs: import('../types')
   ], 300);
 
   return reply ?? 'Non riesco a rispondere con i documenti disponibili.';
+}
+
+// ─── Nexus: narrative answer for open-ended correlation questions ─
+export async function aiNexusNarrative(
+  question: string,
+  entries: import('../types').VaultEntry[]
+): Promise<string> {
+  const context = entries.slice(0, 50).map(e =>
+    `[${new Date(e.created_at).toLocaleDateString('it-IT')} · ${e.category}] ${JSON.stringify(e.data)}`
+  ).join('\n');
+
+  const reply = await deepseekChat([
+    { role: 'system', content: `Sei Nebula, l'analista di Alter OS. L'utente fa una domanda sul proprio benessere o su pattern di vita. Analizza i dati vault cercando correlazioni temporali tra categorie diverse (salute, umore, finanze, sonno, sport, ecc.). Rispondi in italiano con 2-4 bullet points concreti che citano dati reali (date, valori). Sii scientifico ma caldo ed empatico. Se non ci sono abbastanza dati, dillo chiaramente.` },
+    { role: 'user', content: `Domanda: ${question}\n\nDati vault:\n${context || '(nessun dato)'}` },
+  ], 450);
+
+  return reply ?? 'Non ho abbastanza dati per rispondere a questa domanda.';
+}
+
+// ─── Combined: chat reply + multi-category extraction ─────────
+export interface ChatAndExtractResult {
+  reply: string;
+  extractions: Array<{
+    category: string;
+    data: Record<string, unknown>;
+    categoryMeta: CategoryMeta;
+  }>;
+}
+
+const SYSTEM_COMBINED = `Sei Nebula, l'assistente di Alter OS — un sistema personale che registra la vita dell'utente come stelle in una galassia.
+
+Per ogni messaggio dell'utente fai DUE cose contemporaneamente:
+1. RISPOSTA EMPATICA: rispondi in modo caldo e conciso (max 2 frasi in italiano).
+2. ESTRAZIONE DATI: analizza se il testo contiene informazioni da archiviare nelle galassie. Un messaggio può generare estrazioni in PIÙ categorie simultaneamente.
+
+Galassie disponibili:
+- finance:       spese, entrate, budget → { type: "expense"|"income", amount: number, label: string }
+- mental_health: umore, stress, riflessioni, sogni → { type: "mood"|"reflection"|"dream", score?: 1-10, note: string }
+- health:        peso, sonno, allenamenti, dieta → { type: "weight"|"sleep"|"activity"|"diet", value?: number, unit?: string, label?: string }
+- notes:         idee, appunti, pensieri → { type: "idea"|"note"|"observation", content: string }
+- routine:       abitudini, task, produttività, orari → { type: "habit"|"task"|"schedule", label: string, duration?: number }
+- interests:     articoli, link, scoperte → { type: "article"|"discovery"|"link", label: string }
+- career:        obiettivi, corsi, successi lavorativi → { type: "goal"|"achievement"|"skill"|"work_log", label: string }
+
+Se non ci sono dati da archiviare, "extractions" deve essere [].
+
+Rispondi SOLO con JSON valido:
+{
+  "reply": "risposta empatica in italiano",
+  "extractions": [
+    {
+      "category": "slug",
+      "data": { ...campi rilevanti },
+      "meta": { "label": "Nome Leggibile", "icon": "emoji", "color": "#hex" }
+    }
+  ]
+}`;
+
+export async function aiChatAndExtract(text: string): Promise<ChatAndExtractResult> {
+  const fallback = (): ChatAndExtractResult => ({ reply: 'Sono qui. Dimmi pure.', extractions: [] });
+  const raw = await deepseekChat([
+    { role: 'system', content: SYSTEM_COMBINED },
+    { role: 'user',   content: text },
+  ], 500);
+  if (!raw) return fallback();
+  try {
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return fallback();
+    const parsed = JSON.parse(jsonMatch[0]);
+    return {
+      reply:       typeof parsed.reply === 'string' ? parsed.reply : 'Compreso.',
+      extractions: Array.isArray(parsed.extractions) ? parsed.extractions : [],
+    };
+  } catch {
+    return fallback();
+  }
 }
 
 export async function aiParse(text: string): Promise<Omit<ParsedIntent, 'source' | 'rawText'> | null> {

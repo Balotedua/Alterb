@@ -22,7 +22,7 @@ import BugReportPanel from './components/panels/BugReportPanel';
 export default function App() {
   const [authUser, setAuthUser] = useState<User | null | undefined>(undefined);
   const [authError, setAuthError] = useState<string | null>(null);
-  const { setUser, setStars, upsertStar, removeStar, addKnownCategory, setAlertEvent, activeWidget, viewMode, theme, activeDataCategory, setShowBugReport, setShowChatSidebar } = useAlterStore();
+  const { setUser, setStars, upsertStar, removeStar, addKnownCategory, setAlertEvent, alertEvent, activeWidget, viewMode, theme, activeDataCategory, setShowBugReport, setShowChatSidebar } = useAlterStore();
 
   // Apply theme to document root
   useEffect(() => {
@@ -173,9 +173,9 @@ export default function App() {
         {activeDataCategory && <DataAnalyticsView key="data-analytics" />}
       </AnimatePresence>
 
-      {/* ── Input (always visible except when widget open or analytics open) ── */}
+      {/* ── Input (chat only, hidden in galaxy/dashboard) ── */}
       <AnimatePresence>
-        {!activeWidget && !activeDataCategory && <NebulaChatInput key="nebula-core" />}
+        {!activeWidget && !activeDataCategory && viewMode === 'chat' && <NebulaChatInput key="nebula-core" />}
       </AnimatePresence>
 
       <PolymorphicWidget />
@@ -184,8 +184,42 @@ export default function App() {
       <TabBar />
       <BugReportPanel />
 
-      {/* Hamburger button — top-left */}
-      <button
+      {/* ── Ghost Action: Reminder Alert (chat + dashboard only; galaxy has its own) ── */}
+      <AnimatePresence>
+        {alertEvent && viewMode !== 'galaxy' && (
+          <motion.div
+            key="reminder-alert"
+            initial={{ opacity: 0, y: -60, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -40, scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            style={{
+              position: 'fixed', top: 56, left: '50%', transform: 'translateX(-50%)',
+              zIndex: 900,
+              background: 'rgba(10,10,18,0.95)',
+              border: '1px solid rgba(167,139,250,0.5)',
+              borderRadius: 14,
+              padding: '12px 20px',
+              display: 'flex', alignItems: 'center', gap: 12,
+              boxShadow: '0 0 24px rgba(167,139,250,0.25), 0 4px 20px rgba(0,0,0,0.5)',
+              backdropFilter: 'blur(12px)',
+              maxWidth: 360,
+              cursor: 'pointer',
+            }}
+            onClick={() => setAlertEvent(null)}
+          >
+            <span style={{ fontSize: 22 }}>🔔</span>
+            <div>
+              <div style={{ color: '#a78bfa', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 2 }}>Promemoria</div>
+              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 500 }}>{alertEvent.title}</div>
+            </div>
+            <div style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>tocca per chiudere</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Hamburger button — top-left (chat only) */}
+      {viewMode === 'chat' && <button
         onClick={() => setShowChatSidebar(true)}
         title="Chat e impostazioni"
         style={{
@@ -214,7 +248,7 @@ export default function App() {
           <line x1="3" y1="12" x2="21" y2="12"/>
           <line x1="3" y1="18" x2="21" y2="18"/>
         </svg>
-      </button>
+      </button>}
 
       {/* Bug report button — top-right */}
       <button

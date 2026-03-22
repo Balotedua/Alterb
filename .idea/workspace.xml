@@ -10,6 +10,7 @@
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/STATO_ATTUALE.md" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/documentStorage-O6Q52HNE.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/dist/assets/index-BHSB3BuS.js" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-BOBV1yRL.js" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-BhYahvB8.css" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/client/dist/assets/index-BvIcRllm.css" beforeDir="false" />
@@ -29,6 +30,7 @@
       <change beforePath="$PROJECT_DIR$/client/src/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/App.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/auth/LoginScreen.css" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/auth/LoginScreen.css" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/auth/LoginScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/auth/LoginScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/components/chat/ChatHistorySidebar.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/chat/ChatHistorySidebar.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/chat/ChatView.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/chat/ChatView.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/dashboard/DashboardView.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/dashboard/DashboardView.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/dashboard/DataAnalyticsView.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/dashboard/DataAnalyticsView.tsx" afterDir="false" />
@@ -47,6 +49,7 @@
       <change beforePath="$PROJECT_DIR$/client/src/types/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/types/index.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/vault/vaultService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/vault/vaultService.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/tsconfig.tsbuildinfo" beforeDir="false" afterPath="$PROJECT_DIR$/client/tsconfig.tsbuildinfo" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sql/vault_schema.sql" beforeDir="false" afterPath="$PROJECT_DIR$/sql/vault_schema.sql" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

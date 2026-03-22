@@ -117,7 +117,7 @@ export default function ChatHistorySidebar() {
             style={{
               position: 'fixed', inset: 0,
               background: 'rgba(0,0,0,0.55)',
-              zIndex: 400,
+              zIndex: 510,
               backdropFilter: 'blur(3px)',
               WebkitBackdropFilter: 'blur(3px)',
             }}
@@ -132,7 +132,7 @@ export default function ChatHistorySidebar() {
             transition={{ type: 'spring', stiffness: 320, damping: 32 }}
             style={{
               position: 'fixed', left: 0, top: 0, bottom: 0,
-              width: 272, zIndex: 401,
+              width: 272, zIndex: 511,
               background: 'rgba(6,6,14,0.98)',
               backdropFilter: 'blur(24px)',
               WebkitBackdropFilter: 'blur(24px)',

@@ -24,6 +24,18 @@ function extractScheduledDate(text: string): string | null {
   const now   = new Date();
   let target: Date | null = null;
 
+  // ── Relative time: "tra N minuti/ore/secondi" ──────────────
+  const minM = lower.match(/tra\s+(\d+)\s*minut/);
+  if (minM) return new Date(now.getTime() + parseInt(minM[1]) * 60_000).toISOString();
+  const hrM = lower.match(/tra\s+(\d+)\s*or[ae]/);
+  if (hrM) return new Date(now.getTime() + parseInt(hrM[1]) * 3_600_000).toISOString();
+  if (/tra\s+(mezzora|mezz['']?ora)/.test(lower))
+    return new Date(now.getTime() + 30 * 60_000).toISOString();
+  if (/tra\s+un['']?\s*ora/.test(lower))
+    return new Date(now.getTime() + 3_600_000).toISOString();
+  const secM = lower.match(/tra\s+(\d+)\s*second/);
+  if (secM) return new Date(now.getTime() + parseInt(secM[1]) * 1_000).toISOString();
+
   const DAY_MAP: Record<string, number> = {
     'lunedì': 1, 'lun': 1, 'martedì': 2, 'mar': 2,
     'mercoledì': 3, 'mer': 3, 'giovedì': 4, 'gio': 4,

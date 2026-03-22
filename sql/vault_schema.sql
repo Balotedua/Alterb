@@ -52,3 +52,32 @@ create trigger vault_updated_at
 -- 5. REALTIME (enable for live star updates)
 -- ────────────────────────────────────────────────────────────
 alter publication supabase_realtime add table public.vault;
+
+-- ────────────────────────────────────────────────────────────
+-- 6. BUG REPORTS TABLE
+-- ────────────────────────────────────────────────────────────
+create table if not exists public.bug_reports (
+  id                   uuid        default gen_random_uuid() primary key,
+  user_id              uuid        references auth.users(id) on delete set null,
+  type                 text        not null check (type in ('bug', 'improvement')),
+  status               text        not null default 'pending_review'
+                                   check (status in ('pending_review','open','in_progress','resolved','wont_fix')),
+  priority             text        check (priority in ('high', 'medium', 'low')),
+  complexity           text        check (complexity in ('high', 'medium', 'low')),
+  user_description     text        not null,
+  interaction_history  jsonb       default '[]',
+  page_path            text,
+  created_at           timestamptz default now() not null
+);
+
+-- Allow anyone (incl. anon) to insert a report
+alter table public.bug_reports enable row level security;
+create policy "anyone_insert_bug"        on public.bug_reports for insert with check (true);
+-- Authenticated users can read, update and delete (admin gating is handled in the UI)
+create policy "auth_select_bug"          on public.bug_reports for select  using (auth.role() = 'authenticated');
+create policy "auth_update_bug"          on public.bug_reports for update  using (auth.role() = 'authenticated');
+create policy "auth_delete_bug"          on public.bug_reports for delete  using (auth.role() = 'authenticated');
+
+-- Migration: add columns if table already exists
+alter table public.bug_reports add column if not exists priority   text check (priority   in ('high','medium','low'));
+alter table public.bug_reports add column if not exists complexity text check (complexity in ('high','medium','low'));
