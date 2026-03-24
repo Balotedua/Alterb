@@ -85,6 +85,10 @@ interface AlterStore {
 
   showBugReport: boolean;
   setShowBugReport: (v: boolean) => void;
+
+  // ── Streaming output ──────────────────────────────────────────
+  streamingMessage: string | null;
+  setStreamingMessage: (msg: string | null) => void;
 }
 
 export const useAlterStore = create<AlterStore>((set) => ({
@@ -111,18 +115,9 @@ export const useAlterStore = create<AlterStore>((set) => ({
 
   messages: [],
   addMessage: (role, text) =>
-    set((s) => {
-      let finalText = text;
-      let pendingGreeting = s.pendingGreeting;
-      if (role === 'nebula' && pendingGreeting) {
-        finalText = `${pendingGreeting}\n\n${text}`;
-        pendingGreeting = null;
-      }
-      return {
-        pendingGreeting,
-        messages: [...s.messages, { role, text: finalText, ts: Date.now() }],
-      };
-    }),
+    set((s) => ({
+      messages: [...s.messages, { role, text, ts: Date.now() }],
+    })),
   setMessages: (messages) => set({ messages }),
 
   pendingGreeting: null,
@@ -181,4 +176,7 @@ export const useAlterStore = create<AlterStore>((set) => ({
 
   showBugReport: false,
   setShowBugReport: (showBugReport) => set({ showBugReport }),
+
+  streamingMessage: null,
+  setStreamingMessage: (streamingMessage) => set({ streamingMessage }),
 }));

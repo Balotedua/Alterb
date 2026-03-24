@@ -446,13 +446,32 @@ export default function FriendDetail({ friendId, friendProfile, myProfile, onBac
         {/* ════ CONFRONTO tab ════ */}
         {activeTab === 'confronto' && (
           <div style={{ height: '100%', overflowY: 'auto', padding: '16px' }}>
+            {/* Info box */}
             <div style={{
-              fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 20, lineHeight: 1.7,
-              background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
-              borderRadius: 10, padding: '10px 14px',
+              marginBottom: 20,
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: 12, padding: '14px 16px',
             }}>
-              Confronto basato sulle categorie condivise pubblicamente.
-              I numeri rappresentano il totale di entry per categoria.
+              {/* Title row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 14 }}>📊</span>
+                <span style={{ fontSize: 11, letterSpacing: '0.12em', fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>
+                  COME FUNZIONA IL CONFRONTO
+                </span>
+              </div>
+              {/* Rows */}
+              {[
+                { icon: '🔢', text: 'Il numero mostrato per ogni categoria è il totale di entry che tu e il tuo amico avete registrato in quella categoria.' },
+                { icon: '📏', text: 'La barra colorata mostra la proporzione relativa: più è lunga la tua parte (oro), più hai registrato rispetto a lui.' },
+                { icon: '🔒', text: 'Il confronto è completamente anonimo — nessun dato personale, importo o nota è mai visibile. Vengono condivisi solo i conteggi aggregati per categoria.' },
+                { icon: '👁', text: 'Appaiono solo le categorie che entrambi avete reso pubbliche nelle impostazioni del profilo. Categorie private restano invisibili.' },
+              ].map(({ icon, text }) => (
+                <div key={icon} style={{ display: 'flex', gap: 10, marginBottom: 8, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 13, flexShrink: 0, marginTop: 1 }}>{icon}</span>
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.38)', lineHeight: 1.65 }}>{text}</span>
+                </div>
+              ))}
             </div>
 
             {compRows.length === 0 ? (

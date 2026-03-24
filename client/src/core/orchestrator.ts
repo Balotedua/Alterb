@@ -33,10 +33,14 @@ function extractDocTypeFromQuery(text: string): string | null {
   return null;
 }
 
-const HELP_TRIGGERS    = ['?', 'aiuto', 'help', 'cosa sai fare', 'cosa puoi fare'];
+const HELP_TRIGGERS    = ['?', 'aiuto', 'help'];
+const CAPABILITY_PATTERN = /\b(cosa\s+(sai|puoi|riesci|supporti)\s+fare|cosa\s+posso\s+(fare|chiederti|dirti)|come\s+(funzion|si\s+usa)|posso\s+(caricare|inviarti|mandarti|uploadare|allegare|passarti)|supporti?\s+(pdf|csv|xlsx|documenti?|file)|puoi\s+(leggere|analizzare|importare|gestire).{0,30}(pdf|csv|documenti?|file|estratt)|hai\s+(funzion|capacit|feature)|cosa\s+fai|a\s+cosa\s+servi|come\s+ti\s+uso|come\s+funzioni|cosa\s+gestisci|quali\s+(funzioni|comandi|categorie))/i;
 const DELETE_PATTERN   = /^(cancella|elimina|rimuovi|delete)\s+/i;
 const DELETE_ALL_PATTERN = /^(cancella|elimina|rimuovi|svuota|reset)\s+(tutto|tutti\s+i\s+dati|il\s+vault|il\s+profilo|i\s+miei?\s+dati)[\s!.]*$/i;
 const ANALYSIS_PATTERN = /^(analizza|analisi|riassumi|riassunto|report|insight|come sto nel complesso)/i;
+
+// Ricerche web: notizie, situazioni geopolitiche, eventi attuali
+const WEB_SEARCH_PATTERN = /\b(notizie|news)\s+(su|di|da|riguard)\b|cosa\s+sta\s+succedendo\b|aggiornamenti?\s+(su|di)\b|ultimi\s+(sviluppi|aggiornamenti|eventi)\b|\b(situazione|crisi|guerra|conflitto|accordo|elezioni?)\b.{1,50}\b(trump|putin|biden|zelensky|meloni|musk|modi|xi|erdogan|iran|russia|ucraina|cina|usa|america|israele|palestina|nato|europa)\b|\b(trump|putin|biden|zelensky|meloni|musk)\b.{1,50}\b(iran|russia|ucraina|cina|usa|israele|palestina)\b|cerca\s+(informazioni|notizie)\s+su\b|cosa\s+(è\s+successo|succede)\s+(con|in|a)\b.{0,30}\b(trump|putin|biden|iran|russia|ucraina|cina|usa|israele)\b/i;
 const NEXUS_PATTERN    = /dipende\s+(da|dal|dalle?)|correlazione\s+(tra|umore|spes|peso|salute)|incrocio\s+tra|relazione\s+tra|nexus|perch[eé]\s+(sono|mi\s+sento|sto\s+(cos[iì]|male|bene)|sono\s+sempre)|cosa\s+(causa|influenza|c[''è]\s+dietro|mi\s+fa)/i;
 
 function extractNexusCategories(text: string): [string | null, string | null] {
@@ -171,6 +175,7 @@ export function inferQueryDateRange(text: string): [Date, Date] | null {
 export type OrchestratorAction =
   | { type: 'save';         intent: ParsedIntent }
   | { type: 'help' }
+  | { type: 'capability'; raw: string }
   | { type: 'chat';         raw: string }
   | { type: 'delete';       raw: string; category: string | null; dateRange: [Date, Date] | null; all: boolean }
   | { type: 'query';        raw: string; category: string | null; dateRange: [Date, Date] | null }
@@ -179,6 +184,8 @@ export type OrchestratorAction =
   | { type: 'doc_list';     raw: string }
   | { type: 'doc_retrieve'; raw: string; docType: string | null; year: number | null; download: boolean }
   | { type: 'doc_query';    raw: string; docType: string | null; keyword: string }
+  | { type: 'clarify';     field: 'amount'; category: 'finance'; raw: string }
+  | { type: 'web_search';   raw: string; query: string }
   | { type: 'unknown';      raw: string };
 
 export function orchestrate(
@@ -203,6 +210,9 @@ export function orchestrate(
   // ── Special commands ─────────────────────────────────────
   if (HELP_TRIGGERS.some(h => lower === h || lower.startsWith(h)))
     return { type: 'help' };
+
+  if (CAPABILITY_PATTERN.test(trimmed))
+    return { type: 'capability', raw: trimmed };
 
   if (DELETE_ALL_PATTERN.test(trimmed))
     return { type: 'delete', raw: trimmed, category: null, dateRange: null, all: true };
@@ -251,6 +261,10 @@ export function orchestrate(
     return { type: 'query', raw: trimmed, category: catMatch, dateRange: null };
   }
 
+  // ── Web search: notizie / eventi attuali ─────────────────
+  if (WEB_SEARCH_PATTERN.test(trimmed))
+    return { type: 'web_search', raw: trimmed, query: trimmed };
+
   // ── L1: Local parser (zero API cost) ─────────────────────
   const local = localParse(trimmed, knownCategories);
   if (local) {
@@ -258,6 +272,12 @@ export function orchestrate(
       type: 'save',
       intent: { ...local, source: 'local', rawText: trimmed },
     };
+  }
+
+  // ── Finance keyword present but no amount → ask for clarification ─
+  const FINANCE_VERBS = ['comprato','comprata','acquistato','acquistata','speso','pagato','preso','presa'];
+  if (FINANCE_VERBS.some(k => lower.includes(k)) && !/\d/.test(lower)) {
+    return { type: 'clarify', field: 'amount', category: 'finance', raw: trimmed };
   }
 
   // ── Fallback: hybrid AI (empathetic reply + optional extraction) ─

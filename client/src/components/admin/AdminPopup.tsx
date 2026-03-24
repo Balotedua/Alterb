@@ -194,12 +194,10 @@ export default function AdminPopup({ onClose }: { onClose: () => void }) {
     setApprovedBugs(prev => prev.filter(b => b.id !== id));
   }
 
-  async function copyBug(id: string) {
+  function copyBug(id: string) {
     const src = approvedBugs.find(b => b.id === id);
     if (!src) return;
-    const { id: _id, created_at: _ca, ...rest } = src;
-    const { data } = await supabase.from('bug_reports').insert({ ...rest, user_description: '[COPIA] ' + src.user_description }).select().single();
-    if (data) setApprovedBugs(prev => [data as BugTicket, ...prev]);
+    navigator.clipboard.writeText(src.user_description);
   }
 
   async function deleteResolved() {
@@ -565,7 +563,8 @@ function SwipeCard({ bug, index, total, onApprove, onDiscard }: {
     <motion.div
       drag="x"
       dragConstraints={{ left: -260, right: 260 }}
-      dragElastic={0.55}
+      dragElastic={0.15}
+      dragMomentum={false}
       onDragStart={() => setDragging(true)}
       onDrag={(_, info) => setDragX(info.offset.x)}
       onDragEnd={handleDragEnd}
@@ -1022,14 +1021,14 @@ function AccessiTab({ users }: { users: ActiveUser[] }) {
               <span style={{ fontSize: 9.5, color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums', textAlign: 'right', opacity: 0.5 }}>
                 {i + 1}
               </span>
-              <span style={{ fontSize: 10, color: 'var(--text)', opacity: 0.55, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {u.userId.slice(0, 14)}…
+              <span style={{ fontSize: 10, color: 'var(--text)', opacity: 0.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {u.email || u.userId.slice(0, 14) + '…'}
               </span>
-              <span style={{ fontSize: 10, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
-                {u.entryCount} voci
+              <span style={{ fontSize: 9.5, color: 'var(--text-dim)', whiteSpace: 'nowrap', opacity: 0.5 }}>
+                reg. {fmtTime(u.createdAt)}
               </span>
               <span style={{ fontSize: 9.5, color: 'var(--text-dim)', whiteSpace: 'nowrap', opacity: 0.7 }}>
-                {fmtTime(u.lastActivity)}
+                {u.lastSignIn ? fmtTime(u.lastSignIn) : '—'}
               </span>
             </div>
           ))}

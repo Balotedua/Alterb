@@ -3,12 +3,12 @@ import { nebulaCameraRef } from './nebulaCamera';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, ArrowUp, Menu, Paperclip } from 'lucide-react';
 import { orchestrate } from '../../core/orchestrator';
-import { parseBankCsv, importBankCsv } from '../../import/bankCsvImport';
+import { parseBankCsv, importBankCsv, importBankXlsx } from '../../import/bankCsvImport';
 import type { BankTransaction } from '../../import/bankCsvImport';
 import { extractDocument, isDocumentFile } from '../../import/documentOcr';
 import { quickConnect } from '../../core/insightEngine';
 import { saveEntry, getByCategory, queryCalendarByDate, getRecentAll, deleteCategory, deleteByCategoryAndDateRange, deleteAllUserData, saveChatSession, updateChatSession } from '../../vault/vaultService';
-import { aiQuery, analyzeGalaxy, aiChat, aiChatAndExtract, aiNexusNarrative } from '../../core/aiParser';
+import { aiQuery, analyzeGalaxy, aiChat, aiChatAndExtract, aiNexusNarrative, aiCapability, aiChatStream, aiChatAndExtractStream } from '../../core/aiParser';
 import { buildStar, getCategoryMeta, starPosition } from '../starfield/StarfieldView';
 import { useAlterStore } from '../../store/alterStore';
 
@@ -46,7 +46,9 @@ export default function NebulaCore() {
   const [csvImporting,     setCsvImporting]     = useState(false);
   const [pendingOcr,       setPendingOcr]       = useState<{ file: File; text: string; filename: string; pageCount?: number; confidence?: number } | null>(null);
   const [ocrLoading,       setOcrLoading]       = useState(false);
+  const [ocrElapsed,       setOcrElapsed]       = useState(0);
   const [pendingDelete,    setPendingDelete]    = useState<{ label: string; onConfirm: () => Promise<void> } | null>(null);
+  const [pendingClarification, setPendingClarification] = useState<{ originalText: string } | null>(null);
   const evolveCmdRef   = useRef<string | null>(null);
   const inputRef       = useRef<HTMLInputElement>(null);
   const fileRef        = useRef<HTMLInputElement>(null);
@@ -69,8 +71,22 @@ export default function NebulaCore() {
     ghostStarPrompt, setGhostStarPrompt,
     showChatSidebar, setShowChatSidebar,
     currentSessionId, setCurrentSessionId,
-    viewMode, addTimer,
+    viewMode, addTimer, messages,
+    pendingGreeting, setPendingGreeting,
+    setStreamingMessage,
   } = useAlterStore();
+
+  // ── Proactive greeting: show as standalone message on mount ──
+  useEffect(() => {
+    if (!pendingGreeting) return;
+    // Small delay to let the chat view render first
+    const t = setTimeout(() => {
+      addMessage('nebula', pendingGreeting);
+      setPendingGreeting(null);
+    }, 600);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingGreeting]);
 
   // ── Ghost star → pre-fill input ───────────────────────────
   useEffect(() => {
@@ -80,6 +96,13 @@ export default function NebulaCore() {
     setGhostStarPrompt(null);
     setTimeout(() => inputRef.current?.focus(), 60);
   }, [ghostStarPrompt, setGhostStarPrompt]);
+
+  // ── OCR elapsed timer ─────────────────────────────────────
+  useEffect(() => {
+    if (!ocrLoading) { setOcrElapsed(0); return; }
+    const t = setInterval(() => setOcrElapsed(s => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [ocrLoading]);
 
   // ── Rotate hints ──────────────────────────────────────────
   useEffect(() => {
@@ -112,9 +135,29 @@ export default function NebulaCore() {
     return () => { if (evolveTimerRef.current) clearTimeout(evolveTimerRef.current); };
   }, [isActive, isProcessing]);
 
-  // ── File upload: CSV or document (OCR) ───────────────────
+  // ── File upload: CSV / XLSX / document (OCR) ────────────
   const handleFileUpload = useCallback(async (file: File) => {
     const name = file.name.toLowerCase();
+
+    // XLSX → bank import pipeline (same as CSV)
+    if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+      if (!user) return;
+      addMessage('nebula', `Importazione ${file.name}...`);
+      try {
+        const result = await importBankXlsx(file, user.id, (d, t) => {
+          setLastReply(`Importazione ${d}/${t}...`);
+        });
+        const dupNote = result.duplicates.length > 0 ? ` · ⚠ ${result.duplicates.length} doppioni saltati` : '';
+        const msg = `✓ ${result.imported} transazioni importate da ${file.name}${dupNote}`;
+        addMessage('nebula', msg);
+        setLastReply(msg);
+      } catch {
+        addMessage('nebula', 'Errore durante l\'importazione XLSX.');
+      } finally {
+        setLastReply(null);
+      }
+      return;
+    }
 
     // Document: PDF / image / text → OCR pipeline
     if (isDocumentFile(file) && !name.endsWith('.csv')) {
@@ -158,20 +201,21 @@ export default function NebulaCore() {
     setProcessing(true);
     try {
       let lastDone = 0;
-      const count = await importBankCsv(text, user.id, (done, total) => {
+      const result = await importBankCsv(text, user.id, (done, total) => {
         if (done - lastDone >= 5 || done === total) {
           lastDone = done;
           setLastReply(`Importazione ${done}/${total}...`);
         }
       });
-      const reply = `🏦 ${count} transazioni importate nel vault`;
+      const dupNote = result.duplicates.length > 0 ? ` · ⚠ ${result.duplicates.length} doppioni saltati` : '';
+      const reply = `🏦 ${result.imported} transazioni importate nel vault${dupNote}`;
       setLastReply(reply);
       addMessage('nebula', reply);
       // update finance star
       const { buildStar } = await import('../starfield/StarfieldView');
       const star = buildStar('finance', 1, new Date().toISOString());
       const existing = useAlterStore.getState().stars.find(s => s.id === 'finance');
-      upsertStar({ ...star, entryCount: (existing?.entryCount ?? 0) + count, intensity: Math.min(1, (existing?.intensity ?? 0.3) + 0.05 * count), isNew: !existing });
+      upsertStar({ ...star, entryCount: (existing?.entryCount ?? 0) + result.imported, intensity: Math.min(1, (existing?.intensity ?? 0.3) + 0.05 * result.imported), isNew: !existing });
       addKnownCategory('finance');
     } catch {
       const msg = 'Errore durante l\'import CSV.';
@@ -256,12 +300,31 @@ export default function NebulaCore() {
     setProcessing(true);
     setLastReply(null);
 
+    // If answering a pending clarification, merge original phrase + amount
+    let processText = text;
+    if (pendingClarification && overrideText === undefined) {
+      processText = `${pendingClarification.originalText} ${text}`;
+      setPendingClarification(null);
+    }
+
     try {
-      const action = await orchestrate(text, knownCategories);
+      const action = await orchestrate(processText, knownCategories);
 
       if (action.type === 'help') {
         setFocusMode(!focusMode);
-        const msg = focusMode ? 'Modalità focus disattivata.' : 'Le stelle si illuminano.';
+        const focusCtx = focusMode
+          ? 'L\'utente ha appena disattivato la modalità focus — le stelle tornano normali. Dì qualcosa di breve e caldo.'
+          : 'L\'utente ha appena attivato la modalità focus — le stelle si illuminano tutte con le etichette. Dì qualcosa di breve e coinvolgente.';
+        const msg = await aiChat(focusCtx, messages);
+        setLastReply(msg); addMessage('nebula', msg);
+
+      } else if (action.type === 'clarify') {
+        const msg = 'Quanto hai speso?';
+        setPendingClarification({ originalText: action.raw });
+        setLastReply(msg); addMessage('nebula', msg);
+
+      } else if (action.type === 'capability') {
+        const msg = await aiCapability(action.raw, messages);
         setLastReply(msg); addMessage('nebula', msg);
 
       } else if (action.type === 'save') {
@@ -316,14 +379,14 @@ export default function NebulaCore() {
 
           // ── Big Bang: proactive follow-up on first entry ──
           if (!existing) {
-            const BIG_BANG: Record<string, string> = {
-              finance:    'Prima spesa. Vuoi impostare un budget o tracciare un\'abitudine?',
-              health:     'Prima nota salute. Aggiungi peso o ore di sonno?',
-              psychology: 'Prima nota psiche. Vuoi un check-in umore quotidiano?',
-              calendar:   'Primo evento. Vuoi impostare promemoria?',
-            };
-            const bbMsg = BIG_BANG[intent.category] ?? 'Categoria creata. Cosa vuoi aggiungere?';
-            setTimeout(() => { setLastReply(bbMsg); addMessage('nebula', bbMsg); }, 2400);
+            const bigBangPromise = aiChat(
+              `Hai appena visto la prima cosa che l'utente ha registrato in "${meta.label}" (${meta.icon}): ${JSON.stringify(intent.data)}. Reagisci da amico curioso — fai una domanda specifica su quello che hai visto, non generica. 1-2 frasi, tono naturale.`,
+              messages
+            );
+            setTimeout(async () => {
+              const bbMsg = await bigBangPromise;
+              setLastReply(bbMsg); addMessage('nebula', bbMsg);
+            }, 2400);
 
             // ── Void filling: suggest next missing pillar ──
             const VOID_TARGETS: Record<string, string> = {
@@ -358,7 +421,14 @@ export default function NebulaCore() {
         }
 
       } else if (action.type === 'chat') {
-        const reply = await aiChat(text);
+        // Build a compact vault snapshot from current stars so Alter can connect the dots
+        const starsSnapshot = useAlterStore.getState().stars;
+        const hasData = starsSnapshot.length > 0 || knownCategories.filter(c => !['finance','health','psychology','calendar'].includes(c)).length > 0;
+        const vaultContext = starsSnapshot.length > 0
+          ? starsSnapshot.map(s => `${s.icon} ${s.label}: ${s.entryCount} voci, ultima: ${s.lastEntry ? new Date(s.lastEntry).toLocaleDateString('it-IT') : 'n/d'}`).join('\n')
+          : hasData ? '(dati presenti nel vault, stelle ancora in caricamento)' : undefined;
+        const reply = await aiChatStream(text, (chunk) => setStreamingMessage(chunk), messages, vaultContext);
+        setStreamingMessage(null);
         setLastReply(reply.length > 120 ? reply.slice(0, 117) + '…' : reply);
         addMessage('nebula', reply);
 
@@ -395,13 +465,19 @@ export default function NebulaCore() {
             },
           });
         } else if (category && user) {
-          // Delete entire category (star)
-          const ok = await deleteCategory(user.id, category);
-          const msg = ok ? `Stella "${category}" rimossa.` : `Categoria "${category}" non trovata.`;
-          if (ok) removeStar(category);
-          setLastReply(msg); addMessage('nebula', msg);
+          // Delete entire category (star) — ask confirmation first
+          addMessage('nebula', `⚠️ Stai per eliminare tutta la categoria "${category}" e i suoi dati. L'azione è irreversibile. Confermi?`);
+          setPendingDelete({
+            label: `Elimina categoria "${category}"`,
+            onConfirm: async () => {
+              const ok = await deleteCategory(user.id, category);
+              const msg = ok ? `Stella "${category}" rimossa.` : `Categoria "${category}" non trovata.`;
+              if (ok) removeStar(category);
+              setLastReply(msg); addMessage('nebula', msg);
+            },
+          });
         } else {
-          const msg = 'Dimmi cosa eliminare: "cancella spese ultima settimana", "cancella stella [nome]", o "cancella tutto".';
+          const msg = await aiChat(`L'utente ha detto "${text}" ma non è chiaro cosa vuole cancellare. Chiedigli gentilmente cosa intende eliminare — puoi cancellare una categoria intera, un periodo specifico, o tutto.`, messages);
           setLastReply(msg); addMessage('nebula', msg);
         }
 
@@ -477,7 +553,7 @@ export default function NebulaCore() {
         if (!catB) {
           const entries = await getRecentAll(user.id, 60);
           if (entries.length < 3) {
-            const msg = 'Registra più dati per attivare il Nexus. Prova a tracciare umore, sonno e spese.';
+            const msg = await aiChat(`L'utente vuole usare il Nexus (correlazioni tra categorie) ma ha solo ${entries.length} dati nel vault — troppo pochi. Spiegagli in modo caldo cosa deve fare per attivarlo.`, messages);
             setLastReply(msg); addMessage('nebula', msg);
           } else {
             setLastReply('✦ Nexus in analisi...');
@@ -513,7 +589,7 @@ export default function NebulaCore() {
           const mapB  = dayBucket(entriesB, valueKey(b));
           const days  = [...mapA.keys()].filter(d => mapB.has(d)).sort();
           if (days.length < 3) {
-            const msg = `Non abbastanza dati in comune tra ${a} e ${b} (${days.length} giorni).`;
+            const msg = await aiChat(`L'utente vuole vedere la correlazione tra ${a} e ${b} ma ci sono solo ${days.length} giorni in comune — troppo pochi. Spiegagli in modo caldo cosa manca e come rimediare.`, messages);
             setLastReply(msg); addMessage('nebula', msg);
           } else {
             const xs = days.map(d => mapA.get(d)!);
@@ -538,8 +614,12 @@ export default function NebulaCore() {
             setTimeout(() => setNexusBeam(null), 9000);
             const corrPct  = (Math.abs(corr) * 100).toFixed(0);
             const corrSign = corr > 0.25 ? 'positiva' : corr < -0.25 ? 'inversa' : 'debole';
-            const reply    = `Nexus: correlazione ${corrSign} ${corrPct}% (${n} giorni)`;
-            setLastReply(reply); addMessage('nebula', reply);
+            const reply    = await aiChat(
+              `Ho calcolato una correlazione ${corrSign} del ${corrPct}% tra ${metaA.label} e ${metaB.label} su ${n} giorni di dati. Commenta questo risultato in modo caldo e concreto — cosa significa per la vita dell'utente? Max 2 frasi.`,
+              messages
+            );
+            setLastReply(reply.length > 80 ? reply.slice(0, 77) + '…' : reply);
+            addMessage('nebula', reply);
             setActiveWidget({
               category: 'nexus',
               label: `${metaA.icon} ${metaA.label} ↔ ${metaB.icon} ${metaB.label}`,
@@ -556,7 +636,7 @@ export default function NebulaCore() {
         const { getByCategory: getDocs } = await import('../../vault/vaultService');
         const docs = await getDocs(user.id, 'documents', 30);
         if (docs.length === 0) {
-          const msg = 'Nessun documento nel vault. Carica un PDF o un\'immagine con 📎.';
+          const msg = await aiChat('L\'utente chiede i suoi documenti ma il vault è vuoto. Suggeriscigli di caricare un PDF con il tasto 📎 — puoi archiviare buste paga, bollette, fatture, referti. Max 1-2 frasi, tono caldo.', messages);
           setLastReply(msg); addMessage('nebula', msg);
         } else {
           const { inferRenderType } = await import('../widget/PolymorphicWidget');
@@ -577,7 +657,7 @@ export default function NebulaCore() {
         }
         if (docs.length === 0) {
           const yearHint = action.year ? ` del ${action.year}` : '';
-          const msg = `Nessun documento trovato${yearHint}. Carica un PDF con 📎.`;
+          const msg = await aiChat(`L'utente cerca documenti${yearHint} ma non ne ho trovati nel vault. Digli gentilmente che può caricarli con 📎. Max 1 frase.`, messages);
           setLastReply(msg); addMessage('nebula', msg);
         } else {
           const meta = getCategoryMeta('documents');
@@ -603,9 +683,25 @@ export default function NebulaCore() {
         setLastReply(reply.length > 80 ? reply.slice(0, 77) + '…' : reply);
         addMessage('nebula', reply);
 
+      } else if (action.type === 'web_search') {
+        setLastReply('🔎 Cerco online...');
+        const { webSearch } = await import('../../core/webSearch');
+        const webContext = await webSearch(action.query);
+        const reply = await aiChatStream(
+          action.raw,
+          (chunk) => setStreamingMessage(chunk),
+          messages,
+          undefined,
+          webContext ?? undefined,
+        );
+        setStreamingMessage(null);
+        setLastReply(reply.length > 80 ? reply.slice(0, 77) + '…' : reply);
+        addMessage('nebula', reply);
+
       } else {
-        // Chatbot-first: AI replies and optionally extracts data in one call
-        const result = await aiChatAndExtract(text);
+        // Chatbot-first: AI replies and optionally extracts data in one call (streaming)
+        const result = await aiChatAndExtractStream(text, (chunk) => setStreamingMessage(chunk), messages);
+        setStreamingMessage(null);
         const display = result.reply.length > 80 ? result.reply.slice(0, 77) + '…' : result.reply;
         setLastReply(display);
         addMessage('nebula', result.reply);
@@ -650,9 +746,10 @@ export default function NebulaCore() {
           }
         }
       }
+      setStreamingMessage(null);
       setProcessing(false);
     }
-  }, [input, isProcessing, user, knownCategories, focusMode, upsertStar, removeStar, addKnownCategory, setFocusMode, setProcessing, addMessage, setHighlightedStar, setActiveWidget, setNexusBeam, setCurrentSessionId]);
+  }, [input, isProcessing, user, knownCategories, focusMode, upsertStar, removeStar, addKnownCategory, setFocusMode, setProcessing, addMessage, setHighlightedStar, setActiveWidget, setNexusBeam, setCurrentSessionId, pendingClarification, setStreamingMessage]);
 
   // ── Global keypress auto-focus ────────────────────────────
   useEffect(() => {
@@ -936,7 +1033,7 @@ export default function NebulaCore() {
               exit={{ opacity: 0 }}
               style={{
                 width: '100%',
-                background: 'rgba(10,10,18,0.92)',
+                background: 'var(--glass)',
                 border: '1px solid rgba(240,192,64,0.2)',
                 borderRadius: 12,
                 padding: '10px 12px',
@@ -993,15 +1090,30 @@ export default function NebulaCore() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               style={{
-                fontSize: 10.5, color: 'rgba(64,224,208,0.7)',
-                letterSpacing: '0.08em',
-                padding: '5px 14px',
-                background: 'rgba(64,224,208,0.06)',
-                border: '1px solid rgba(64,224,208,0.15)',
-                borderRadius: 12,
+                padding: '12px 14px',
+                background: 'rgba(64,224,208,0.05)',
+                border: '1px solid rgba(64,224,208,0.18)',
+                borderRadius: 14,
+                width: '100%',
+                boxSizing: 'border-box',
               }}
             >
-              ◌ Lettura OCR in corso...
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 }}>
+                <div style={{ fontSize: 10, color: 'rgba(64,224,208,0.75)', letterSpacing: '0.08em' }}>
+                  {ocrElapsed < 4 ? 'Lettura documento…' : ocrElapsed < 10 ? 'Analisi testo…' : 'Elaborazione AI…'}
+                </div>
+                <div style={{ fontSize: 9, color: 'rgba(64,224,208,0.4)', letterSpacing: '0.04em' }}>
+                  {ocrElapsed}s{ocrElapsed < 6 ? '' : ocrElapsed < 15 ? ' · ~15s' : ' · ancora un po\'…'}
+                </div>
+              </div>
+              {/* Indeterminate shimmer bar */}
+              <div style={{ height: 3, borderRadius: 3, background: 'rgba(64,224,208,0.10)', overflow: 'hidden', position: 'relative' }}>
+                <motion.div
+                  animate={{ x: ['-80%', '180%'] }}
+                  transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                  style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '55%', borderRadius: 3, background: 'linear-gradient(90deg, transparent, rgba(64,224,208,0.7), transparent)' }}
+                />
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -1016,7 +1128,7 @@ export default function NebulaCore() {
               exit={{ opacity: 0 }}
               style={{
                 width: '100%',
-                background: 'rgba(10,10,18,0.92)',
+                background: 'var(--glass)',
                 border: '1px solid rgba(64,224,208,0.2)',
                 borderRadius: 12,
                 padding: '10px 12px',
@@ -1070,12 +1182,12 @@ export default function NebulaCore() {
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            background: 'rgba(5,5,12,0.88)',
+            background: 'var(--glass)',
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
             border: isActive
               ? '1px solid rgba(240,192,64,0.18)'
-              : '1px solid rgba(255,255,255,0.065)',
+              : '1px solid var(--border)',
             borderRadius: 16,
             padding: '0 10px 0 16px',
             transition: 'border-color 0.35s',
@@ -1128,11 +1240,11 @@ export default function NebulaCore() {
               flex: 1,
               background: 'transparent',
               border: 'none', outline: 'none',
-              color: 'rgba(255,255,255,0.90)',
+              color: 'var(--text)',
               fontFamily: 'inherit',
               fontSize: 16, fontWeight: 300,
               letterSpacing: '0.02em',
-              caretColor: 'rgba(255,255,255,0.7)',
+              caretColor: 'var(--text)',
               minHeight: 46,
               WebkitAppearance: 'none',
             }}

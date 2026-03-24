@@ -1,10 +1,66 @@
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAlterStore } from '../../store/alterStore';
 
+// Minimal markdown renderer: bold, italic, headers, bullet lists, line breaks
+function renderMarkdown(text: string): React.ReactNode[] {
+  const lines = text.split('\n');
+  return lines.map((line, li) => {
+    // Header
+    const h3 = line.match(/^###\s+(.*)/);
+    if (h3) return <div key={li} style={{ fontWeight: 600, fontSize: 13, color: 'var(--accent)', marginTop: 8, marginBottom: 2 }}>{parseInline(h3[1])}</div>;
+    const h2 = line.match(/^##\s+(.*)/);
+    if (h2) return <div key={li} style={{ fontWeight: 700, fontSize: 14, color: 'var(--accent)', marginTop: 10, marginBottom: 2 }}>{parseInline(h2[1])}</div>;
+    const h1 = line.match(/^#\s+(.*)/);
+    if (h1) return <div key={li} style={{ fontWeight: 700, fontSize: 15, color: 'var(--accent)', marginTop: 12, marginBottom: 4 }}>{parseInline(h1[1])}</div>;
+    // Bullet list
+    const bullet = line.match(/^[\*\-]\s+(.*)/);
+    if (bullet) return <div key={li} style={{ display: 'flex', gap: 6, marginTop: 2 }}><span style={{ color: 'rgba(167,139,250,0.7)', flexShrink: 0 }}>·</span><span>{parseInline(bullet[1])}</span></div>;
+    // Empty line → spacer
+    if (line.trim() === '') return <div key={li} style={{ height: 6 }} />;
+    // Normal line
+    return <div key={li}>{parseInline(line)}</div>;
+  });
+}
+
+function parseInline(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  const re = /(\*\*(.+?)\*\*|\*(.+?)\*)/g;
+  let last = 0, m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    if (m[2] !== undefined) parts.push(<strong key={m.index} style={{ fontWeight: 600, color: 'var(--accent)' }}>{m[2]}</strong>);
+    else if (m[3] !== undefined) parts.push(<em key={m.index} style={{ fontStyle: 'italic' }}>{m[3]}</em>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
+// Blinking cursor appended to streaming text
+function StreamingCursor() {
+  return (
+    <span style={{
+      display: 'inline-block', width: 2, height: '0.85em',
+      background: 'rgba(167,139,250,0.7)',
+      borderRadius: 1, marginLeft: 2, verticalAlign: 'text-bottom',
+      animation: 'blink-cursor 0.9s step-end infinite',
+    }} />
+  );
+}
+
 export default function ChatView() {
-  const { messages } = useAlterStore();
+  const { messages, streamingMessage } = useAlterStore();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+
+  const copyMessage = (text: string, idx: number) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 1500);
+    });
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -19,7 +75,7 @@ export default function ChatView() {
       transition={{ duration: 0.3 }}
       style={{
         position: 'fixed', inset: 0,
-        background: '#050508',
+        background: 'var(--bg)',
         overflowY: 'auto',
         paddingBottom: 'calc(56px + 80px + env(safe-area-inset-bottom, 0px))',
         paddingTop: 24,
@@ -118,11 +174,38 @@ export default function ChatView() {
           </div>
         ) : messages.map((msg, i) => {
           const isUser = msg.role === 'user';
+          const isCopied = copiedIdx === i;
+          const isHovered = hoveredIdx === i;
           return (
             <div key={i} style={{
               display: 'flex',
               justifyContent: isUser ? 'flex-end' : 'flex-start',
-            }}>
+              alignItems: 'flex-end',
+              gap: 6,
+            }}
+              onMouseEnter={() => setHoveredIdx(i)}
+              onMouseLeave={() => setHoveredIdx(null)}
+            >
+              {isUser && (
+                <button
+                  onClick={() => copyMessage(msg.text, i)}
+                  title="Copia messaggio"
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    padding: '4px', borderRadius: 6, flexShrink: 0,
+                    opacity: isHovered ? 1 : 0,
+                    transition: 'opacity 0.2s ease',
+                    color: isCopied ? '#40e0d0' : 'rgba(255,255,255,0.35)',
+                    display: 'flex', alignItems: 'center',
+                    marginBottom: 2,
+                  }}
+                >
+                  {isCopied
+                    ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  }
+                </button>
+              )}
               <div style={{
                 maxWidth: '78%',
                 padding: '10px 14px',
@@ -135,9 +218,11 @@ export default function ChatView() {
                   : '1px solid rgba(255,255,255,0.07)',
                 fontSize: 14,
                 fontWeight: 300,
-                color: isUser ? 'rgba(255,255,255,0.90)' : 'rgba(255,255,255,0.72)',
+                color: isUser ? 'var(--text)' : 'var(--text-dim)',
                 lineHeight: 1.55,
                 letterSpacing: '0.01em',
+                userSelect: 'text',
+                cursor: 'text',
               }}>
                 {!isUser && (
                   <div style={{
@@ -147,12 +232,57 @@ export default function ChatView() {
                     ALTER
                   </div>
                 )}
-                {msg.text}
+                {isUser ? msg.text : renderMarkdown(msg.text)}
               </div>
+              {!isUser && (
+                <button
+                  onClick={() => copyMessage(msg.text, i)}
+                  title="Copia messaggio"
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    padding: '4px', borderRadius: 6, flexShrink: 0,
+                    opacity: isHovered ? 1 : 0,
+                    transition: 'opacity 0.2s ease',
+                    color: isCopied ? '#40e0d0' : 'rgba(255,255,255,0.35)',
+                    display: 'flex', alignItems: 'center',
+                    marginBottom: 2,
+                  }}
+                >
+                  {isCopied
+                    ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  }
+                </button>
+              )}
             </div>
           );
         })}
 
+        {/* Streaming bubble — live text while waiting for full response */}
+        {streamingMessage && (
+          <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'flex-end', gap: 6 }}>
+            <div style={{
+              maxWidth: '78%',
+              padding: '10px 14px',
+              borderRadius: '18px 18px 18px 4px',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(167,139,250,0.18)',
+              fontSize: 14,
+              fontWeight: 300,
+              color: 'var(--text-dim)',
+              lineHeight: 1.55,
+              letterSpacing: '0.01em',
+            }}>
+              <div style={{ fontSize: 9, letterSpacing: '0.12em', color: '#a78bfa', marginBottom: 4, fontWeight: 600 }}>
+                ALTER
+              </div>
+              {renderMarkdown(streamingMessage)}
+              <StreamingCursor />
+            </div>
+          </div>
+        )}
+
+        <style>{`@keyframes blink-cursor { 0%,100% { opacity: 1 } 50% { opacity: 0 } }`}</style>
         <div ref={bottomRef} />
       </div>
     </motion.div>

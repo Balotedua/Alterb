@@ -25,6 +25,7 @@ import DynamicIslandTimer from './components/timer/DynamicIslandTimer';
 export default function App() {
   const [authUser, setAuthUser] = useState<User | null | undefined>(undefined);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const { setUser, setStars, upsertStar, removeStar, addKnownCategory, setAlertEvent, alertEvent, activeWidget, viewMode, theme, activeDataCategory, setShowBugReport, setShowChatSidebar, setPendingGreeting } = useAlterStore();
 
   // Apply theme to document root
@@ -54,7 +55,8 @@ export default function App() {
       setAuthUser(data.session?.user ?? null);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') setIsPasswordRecovery(true);
       setAuthUser(session?.user ?? null);
     });
     return () => subscription.unsubscribe();
@@ -148,6 +150,7 @@ export default function App() {
         filter: `user_id=eq.${authUser.id}`,
       }, (payload) => {
         const { category, created_at } = payload.new as { category: string; created_at: string };
+        if (category === 'chat') return; // skip chat sessions — not a star
         const existing = useAlterStore.getState().stars.find(s => s.id === category);
         const star = buildStar(category, (existing?.entryCount ?? 0) + 1, created_at);
         upsertStar({ ...star, isNew: !existing });
@@ -167,7 +170,13 @@ export default function App() {
     );
   }
 
-  if (!authUser) return <LoginScreen initialError={authError} />;
+  if (!authUser || isPasswordRecovery) return (
+    <LoginScreen
+      initialError={authError}
+      initialMode={isPasswordRecovery ? 'reset' : 'login'}
+      onPasswordReset={() => setIsPasswordRecovery(false)}
+    />
+  );
 
   return (
     <>

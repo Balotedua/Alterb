@@ -6,6 +6,7 @@ import { getCategorySummaries, deleteCategory, deleteAllUserData } from '../../v
 import { updateDisplayName } from '../../social/nexusService';
 import type { CategorySummary } from '../../vault/vaultService';
 import AdminPopup from '../admin/AdminPopup';
+import { supabase } from '../../config/supabase';
 import { isGoogleFitConnected, connectGoogleFit, disconnectGoogleFit } from '../../core/wearableSync';
 
 const THEMES: { id: Theme; label: string; desc: string; preview: string[] }[] = [
@@ -150,6 +151,33 @@ export default function SettingsPanel() {
                   {nameSaved ? '✓' : 'Salva'}
                 </button>
               </div>
+              <button
+                onClick={() => supabase.auth.signOut()}
+                style={{
+                  marginTop: 10,
+                  width: '100%',
+                  background: 'none',
+                  border: '1px solid rgba(248,113,113,0.18)',
+                  borderRadius: 10,
+                  padding: '9px 14px',
+                  cursor: 'pointer',
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  letterSpacing: '0.06em',
+                  color: 'rgba(248,113,113,0.55)',
+                  transition: 'border-color 0.2s, color 0.2s',
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(248,113,113,0.4)';
+                  (e.currentTarget as HTMLButtonElement).style.color = '#f87171';
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(248,113,113,0.18)';
+                  (e.currentTarget as HTMLButtonElement).style.color = 'rgba(248,113,113,0.55)';
+                }}
+              >
+                Esci dall'account
+              </button>
             </Section>
 
             {/* Theme section */}
@@ -172,16 +200,6 @@ export default function SettingsPanel() {
             {/* Wearables section */}
             <WearableSection />
 
-            {/* Placeholder for future features */}
-            <Section label="PROSSIMAMENTE">
-              <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.7 }}>
-                🔔 Notifiche Sentinel<br />
-                🎵 Suoni ambientali<br />
-                🌍 Lingua interfaccia<br />
-                📤 Esporta dati vault
-              </div>
-            </Section>
-
             {/* Admin section */}
             <AdminSection />
           </motion.div>
@@ -192,6 +210,7 @@ export default function SettingsPanel() {
 }
 
 function DataSection({ userId }: { userId: string | null }) {
+  const [open,         setOpen]         = useState(false);
   const [summaries,    setSummaries]    = useState<CategorySummary[]>([]);
   const [confirmCat,   setConfirmCat]   = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -199,9 +218,9 @@ function DataSection({ userId }: { userId: string | null }) {
   const [busy,         setBusy]         = useState(false);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!open || !userId) return;
     getCategorySummaries(userId).then(setSummaries);
-  }, [userId]);
+  }, [open, userId]);
 
   async function handleDeleteCategory(cat: string) {
     if (!userId) return;
@@ -225,7 +244,35 @@ function DataSection({ userId }: { userId: string | null }) {
   if (!userId) return null;
 
   return (
-    <Section label="GESTISCI DATI">
+    <div style={{ marginBottom: 20 }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          width: '100%', background: 'none', border: 'none',
+          cursor: 'pointer', display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', padding: 0, marginBottom: open ? 10 : 0,
+        }}
+      >
+        <div style={{
+          fontSize: 9.5, fontWeight: 600, letterSpacing: '0.14em',
+          color: 'var(--text-dim)',
+        }}>
+          GESTISCI DATI
+        </div>
+        <span style={{ fontSize: 11, color: 'var(--text-dim)', transition: 'transform 0.2s', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block' }}>
+          ▾
+        </span>
+      </button>
+      <AnimatePresence initial={false}>
+      {open && (
+      <motion.div
+        key="data-content"
+        initial={{ opacity: 0, height: 0 }}
+        animate={{ opacity: 1, height: 'auto' }}
+        exit={{ opacity: 0, height: 0 }}
+        transition={{ duration: 0.2 }}
+        style={{ overflow: 'hidden' }}
+      >
       {summaries.length === 0 ? (
         <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Nessun dato nel vault.</div>
       ) : (
@@ -338,7 +385,10 @@ function DataSection({ userId }: { userId: string | null }) {
           </button>
         )}
       </div>
-    </Section>
+      </motion.div>
+      )}
+      </AnimatePresence>
+    </div>
   );
 }
 

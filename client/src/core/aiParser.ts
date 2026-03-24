@@ -1,4 +1,140 @@
 import type { CategoryMeta, ParsedIntent } from '../types';
+import { supabase } from '../config/supabase';
+
+// ─── Global rate limiter (Supabase-backed) ────────────────────
+const GEMINI_RPM_LIMIT = 14; // margine di sicurezza sotto 15
+
+async function canUseGemini(): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('ai_rate_limit')
+      .select('count, window_start')
+      .eq('id', 1)
+      .single();
+    if (error || !data) return false;
+
+    const windowStart = new Date(data.window_start as string).getTime();
+    const now = Date.now();
+
+    if (now - windowStart > 60_000) {
+      // Finestra scaduta — reset
+      await supabase
+        .from('ai_rate_limit')
+        .update({ count: 1, window_start: new Date().toISOString() })
+        .eq('id', 1);
+      return true;
+    }
+
+    if ((data.count as number) < GEMINI_RPM_LIMIT) {
+      await supabase
+        .from('ai_rate_limit')
+        .update({ count: (data.count as number) + 1 })
+        .eq('id', 1);
+      return true;
+    }
+
+    return false; // rate limit raggiunto → usa DeepSeek
+  } catch {
+    return false;
+  }
+}
+
+// ─── Gemini Flash ─────────────────────────────────────────────
+async function geminiChat(messages: { role: string; content: string }[], maxTokens = 256): Promise<string | null> {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+  if (!apiKey) return null;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    // Converti formato OpenAI → Google (system va nel primo user turn)
+    const system = messages.find(m => m.role === 'system')?.content ?? '';
+    const turns = messages.filter(m => m.role !== 'system');
+    const contents = turns.map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    }));
+    if (system && contents.length > 0) {
+      contents[0].parts[0].text = `${system}\n\n${contents[0].parts[0].text}`;
+    }
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: maxTokens, temperature: 0.4 } }),
+        signal: controller.signal,
+      }
+    );
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(`Gemini ${res.status}`);
+    const json = await res.json();
+    return (json.candidates?.[0]?.content?.parts?.[0]?.text as string) ?? null;
+  } catch (e) {
+    console.error('[geminiChat]', e);
+    return null;
+  }
+}
+
+// ─── Gemini SSE streaming ──────────────────────────────────────
+async function geminiChatStream(
+  messages: { role: string; content: string }[],
+  onChunk: (accumulated: string) => void,
+  maxTokens = 700
+): Promise<string | null> {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+  if (!apiKey) return null;
+  try {
+    const system = messages.find(m => m.role === 'system')?.content ?? '';
+    const turns = messages.filter(m => m.role !== 'system');
+    const contents = turns.map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    }));
+    if (system && contents.length > 0) {
+      contents[0].parts[0].text = `${system}\n\n${contents[0].parts[0].text}`;
+    }
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: maxTokens, temperature: 0.4 } }),
+      }
+    );
+    if (!res.ok || !res.body) return null;
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let full = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const raw = decoder.decode(value, { stream: true });
+      for (const line of raw.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data: ')) continue;
+        const data = trimmed.slice(6);
+        try {
+          const delta = (JSON.parse(data).candidates?.[0]?.content?.parts?.[0]?.text ?? '') as string;
+          if (delta) { full += delta; onChunk(full); }
+        } catch { /* malformed chunk — skip */ }
+      }
+    }
+    return full || null;
+  } catch (e) {
+    console.error('[geminiChatStream]', e);
+    return null;
+  }
+}
+
+// ─── Router: Gemini se sotto rate limit, DeepSeek come fallback ─
+async function aiChat_router(messages: { role: string; content: string }[], maxTokens = 256): Promise<string | null> {
+  const useGemini = await canUseGemini();
+  if (useGemini) {
+    const result = await geminiChat(messages, maxTokens);
+    if (result !== null) return result;
+  }
+  return deepseekChat(messages, maxTokens);
+}
 
 const SYSTEM = `Sei il cervello di "Alter", un OS personale liquido.
 L'utente ti manda un testo in italiano (o misto). Il tuo compito:
@@ -62,6 +198,159 @@ async function deepseekChat(messages: { role: string; content: string }[], maxTo
     console.error('[deepseekChat]', e);
     return null;
   }
+}
+
+// ─── DeepSeek SSE streaming ────────────────────────────────────
+async function deepseekChatStream(
+  messages: { role: string; content: string }[],
+  onChunk: (accumulated: string) => void,
+  maxTokens = 700
+): Promise<string | null> {
+  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
+  if (!apiKey) return null;
+  try {
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'deepseek-chat', messages, temperature: 0.4, max_tokens: maxTokens, stream: true }),
+    });
+    if (!res.ok || !res.body) return null;
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let full = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const raw = decoder.decode(value, { stream: true });
+      for (const line of raw.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data: ')) continue;
+        const data = trimmed.slice(6);
+        if (data === '[DONE]') continue;
+        try {
+          const delta = (JSON.parse(data).choices?.[0]?.delta?.content ?? '') as string;
+          if (delta) { full += delta; onChunk(full); }
+        } catch { /* malformed chunk — skip */ }
+      }
+    }
+    return full || null;
+  } catch (e) {
+    console.error('[deepseekChatStream]', e);
+    return null;
+  }
+}
+
+// Extract the "reply" field value from a partially-streamed JSON string
+function extractReplyFromPartialJson(json: string): string {
+  const complete = json.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (complete) return complete[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  const partial = json.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)/);
+  if (partial) return partial[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  return '';
+}
+
+// ─── Streaming aiChat ─────────────────────────────────────────
+export async function aiChatStream(
+  text: string,
+  onChunk: (text: string) => void,
+  history: ChatHistoryEntry[] = [],
+  vaultContext?: string,
+  webContext?: string
+): Promise<string> {
+  const systemBase = `Sei Nebula, il compagno digitale di Alter OS. Hai la personalità di un amico autentico: curioso, caldo, diretto. Mai banale, mai formale.
+
+Quando l'utente condivide qualcosa o fa una domanda, rispondi come farebbe un amico che ci tiene davvero — non come un assistente virtuale. Sii spontaneo, reattivo, presente.
+
+Regola fondamentale sul vault: usa i dati personali SOLO se sono direttamente pertinenti. Se parla di argomenti esterni — rispondi da amico curioso, non da analista.
+
+Regole:
+- Rispondi in italiano, tono da amico — non da chatbot
+- Mai iniziare con "Certo!", "Perfetto!", "Ottimo!" da soli — sono vuoti
+- 2-4 frasi: sii presente senza essere prolisso
+- Se l'utente fa una domanda generica su sé stesso (es. "tu che mi dici di me?", "come sto?") e hai il contesto vault — usalo subito per dire qualcosa di concreto e personale, non restare vago`;
+
+  let systemContent = vaultContext
+    ? `${systemBase}\n\nIMPORTANTE: Sei un amico di lunga data, non al primo incontro. Mai frasi come "benvenuto", "sono Nebula". Conosci già questa persona.\n\nSe ti chiede qualcosa su di sé in modo generico, DEVI usare il contesto sotto per rispondere in modo personale e specifico — cita categorie reali, date, conteggi. Non essere vago quando hai informazioni.\n\n⚠️ ANTI-ALLUCINAZIONE: Il contesto mostra SOLO categorie, conteggi e date — NON il contenuto delle singole voci. Non inventare importi, note o eventi specifici. Per dati dettagliati suggerisci "mostrami [categoria]".\n\n📊 Galassia personale:\n${vaultContext}`
+    : systemBase;
+
+  if (webContext) {
+    const today = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' });
+    systemContent += `\n\n🌐 DATI WEB AGGIORNATI (${today}):\n${webContext}\n\nUsa questi dati per rispondere. Se disponibili, cita la fonte. Non affermare limiti di conoscenza — hai i dati qui sopra.`;
+  }
+
+  const msgs = [{ role: 'system', content: systemContent }, ...buildHistory(history), { role: 'user', content: text }];
+
+  const useGemini = await canUseGemini();
+  if (useGemini) {
+    let finalGemini = '';
+    const result = await geminiChatStream(msgs, (acc) => { finalGemini = acc; onChunk(acc); }, 700);
+    if (result !== null) return result ?? finalGemini;
+  }
+
+  // DeepSeek SSE fallback
+  let finalText = '';
+  const result = await deepseekChatStream(msgs, (acc) => { finalText = acc; onChunk(acc); }, 700);
+  return result ?? finalText ?? 'Ci sono. Dimmi pure.';
+}
+
+// ─── Streaming aiChatAndExtract ───────────────────────────────
+export async function aiChatAndExtractStream(
+  text: string,
+  onReplyChunk: (replyText: string) => void,
+  history: ChatHistoryEntry[] = []
+): Promise<ChatAndExtractResult> {
+  const fallback = (): ChatAndExtractResult => ({ reply: 'Sono qui. Dimmi pure.', extractions: [] });
+  const msgs = [{ role: 'system', content: SYSTEM_COMBINED }, ...buildHistory(history), { role: 'user', content: text }];
+
+  // Try Gemini first with streaming
+  const useGemini = await canUseGemini();
+  if (useGemini) {
+    let rawGemini = '';
+    const result = await geminiChatStream(
+      msgs,
+      (acc) => {
+        rawGemini = acc;
+        const replyText = extractReplyFromPartialJson(acc);
+        if (replyText) onReplyChunk(replyText);
+      },
+      900
+    );
+    if (result !== null) {
+      const full = result ?? rawGemini;
+      try {
+        const jsonMatch = full.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) return fallback();
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          reply: typeof parsed.reply === 'string' ? parsed.reply : 'Compreso.',
+          extractions: Array.isArray(parsed.extractions) ? parsed.extractions : [],
+        };
+      } catch { return fallback(); }
+    }
+  }
+
+  // DeepSeek SSE: stream reply field progressively
+  let rawFull = '';
+  await deepseekChatStream(
+    msgs,
+    (acc) => {
+      rawFull = acc;
+      const replyText = extractReplyFromPartialJson(acc);
+      if (replyText) onReplyChunk(replyText);
+    },
+    900
+  );
+
+  if (!rawFull) return fallback();
+  try {
+    const jsonMatch = rawFull.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return fallback();
+    const parsed = JSON.parse(jsonMatch[0]);
+    return {
+      reply: typeof parsed.reply === 'string' ? parsed.reply : 'Compreso.',
+      extractions: Array.isArray(parsed.extractions) ? parsed.extractions : [],
+    };
+  } catch { return fallback(); }
 }
 
 // ─── Universal document classifier ───────────────────────────
@@ -148,35 +437,82 @@ export async function classifyDocument(text: string): Promise<DocumentClassifica
   }
 }
 
-// ─── Chat: conversational reply (no data saved) ───────────────
-export async function aiChat(text: string): Promise<string> {
-  const reply = await deepseekChat([
-    { role: 'system', content: `Sei Nebula, il compagno digitale di Alter OS. Hai la personalità di un amico autentico: curioso, caldo, diretto. Mai banale, mai formale.
+type ChatHistoryEntry = { role: 'user' | 'nebula'; text: string };
 
-Quando l'utente condivide qualcosa — un allenamento, una spesa, un umore, qualsiasi cosa — reagisci come farebbe un amico che ci tiene davvero. Commenta il dettaglio specifico di ciò che ha detto, non generici "bravo!". Puoi fare una domanda curiosa, dare un incoraggiamento concreto, o semplicemente rispecchiare l'emozione.
+function buildHistory(history: ChatHistoryEntry[], maxTurns = 4): { role: string; content: string }[] {
+  return history.slice(-maxTurns).map(m => ({
+    role: m.role === 'user' ? 'user' : 'assistant',
+    content: m.text,
+  }));
+}
+
+// ─── Capability: spiega cosa sa fare Alter in modo caldo ──────
+export async function aiCapability(text: string, history: ChatHistoryEntry[] = []): Promise<string> {
+  const reply = await aiChat_router([
+    { role: 'system', content: `Sei Alter, un OS personale liquido. L'utente sta chiedendo come funzioni o cosa puoi fare. Rispondi come un amico che spiega le sue capacità — caldo, diretto, senza elenchi robotici.
+
+Quello che sai fare:
+- Salvare qualsiasi cosa in linguaggio naturale: spese, salute (peso, sonno, sport), umore, appuntamenti, note, abitudini, letture
+- Importare estratti conto (CSV/XLSX) e analizzarli automaticamente
+- Archiviare documenti PDF via OCR: buste paga, bollette, fatture, referti medici, contratti
+- Rispondere a domande sui dati: "quanto ho speso questo mese?", "com'era il mio sonno la scorsa settimana?"
+- Trovare correlazioni tra categorie con il Nexus (es. umore e spese, sonno e produttività)
+- Analisi periodiche automatiche, insight cross-categoria
+- Promemoria e countdown live per eventi imminenti
+
+Adatta la risposta a quello che l'utente ha chiesto nello specifico. Rispondi in italiano. Se ha chiesto "cosa sai fare" in modo vago, dagli un assaggio concreto e coinvolgente — puoi usare 3-5 frasi e citare esempi reali.` },
+    ...buildHistory(history),
+    { role: 'user', content: text },
+  ], 700);
+  return reply ?? 'Dimmi pure cosa vuoi fare, ci penso io.';
+}
+
+// ─── Chat: conversational reply (no data saved) ───────────────
+export async function aiChat(text: string, history: ChatHistoryEntry[] = [], vaultContext?: string): Promise<string> {
+  const systemBase = `Sei Nebula, il compagno digitale di Alter OS. Hai la personalità di un amico autentico: curioso, caldo, diretto. Mai banale, mai formale.
+
+Quando l'utente condivide qualcosa o fa una domanda, rispondi come farebbe un amico che ci tiene davvero — non come un assistente virtuale. Sii spontaneo, reattivo, presente.
+
+Regola fondamentale sul vault: usa i dati personali SOLO se sono direttamente pertinenti. Se parla di argomenti esterni — rispondi da amico curioso, non da analista.
 
 Regole:
-- Rispondi in italiano, max 2 frasi scorrevoli
-- Sii specifico su ciò che l'utente ha condiviso (cita il dato: i minuti, i km, l'importo, ecc.)
-- Mai iniziare con "Certo!", "Perfetto!", "Ottimo lavoro!" da soli — sono vuoti
-- Tono: da amico, non da bot di fitness o app bancaria` },
+- Rispondi in italiano, tono da amico — non da chatbot
+- Mai iniziare con "Certo!", "Perfetto!", "Ottimo!" da soli — sono vuoti
+- 2-4 frasi: sii presente senza essere prolisso
+- Se l'utente fa una domanda generica su sé stesso (es. "tu che mi dici di me?", "come sto?") e hai il contesto vault — usalo subito per dire qualcosa di concreto e personale, non restare vago`;
+
+  const systemContent = vaultContext
+    ? `${systemBase}\n\nIMPORTANTE: Sei un amico di lunga data, non al primo incontro. Mai frasi come "benvenuto", "sono Nebula". Conosci già questa persona.\n\nSe ti chiede qualcosa su di sé in modo generico, DEVI usare il contesto sotto per rispondere in modo personale e specifico — cita categorie reali, date, conteggi. Non essere vago quando hai informazioni.\n\n⚠️ ANTI-ALLUCINAZIONE: Il contesto mostra SOLO categorie, conteggi e date — NON il contenuto delle singole voci. Non inventare importi, note o eventi specifici. Per dati dettagliati suggerisci "mostrami [categoria]".\n\n📊 Galassia personale:\n${vaultContext}`
+    : systemBase;
+
+  const reply = await aiChat_router([
+    { role: 'system', content: systemContent },
+    ...buildHistory(history),
     { role: 'user', content: text },
-  ], 150);
+  ], 700);
   return reply ?? 'Ci sono. Dimmi pure.';
 }
 
 // ─── Query: answer a question using vault entries as context ──
 export async function aiQuery(question: string, entries: import('../types').VaultEntry[]): Promise<string> {
-  const context = entries.slice(0, 20).map(e =>
+  const context = entries.slice(0, 30).map(e =>
     `[${new Date(e.created_at).toLocaleDateString('it-IT')} · ${e.category}] ${JSON.stringify(e.data)}`
   ).join('\n');
 
-  const reply = await deepseekChat([
-    { role: 'system', content: `Sei Nebula, l'assistente di Alter OS. Rispondi in italiano in modo conciso (max 3 righe) usando SOLO i dati forniti. Se non ci sono dati pertinenti, dillo chiaramente. Non inventare.` },
-    { role: 'user', content: `Dati disponibili:\n${context || '(nessun dato)'}\n\nDomanda: ${question}` },
-  ], 200);
+  const reply = await aiChat_router([
+    { role: 'system', content: `Sei Nebula, il compagno digitale di Alter OS. L'utente ti fa una domanda sui suoi dati. Rispondi come un amico diretto e attento — non come un database.
 
-  return reply ?? 'Nessun dato trovato per questa query.';
+Regole:
+- Prima dai la risposta principale in modo diretto e conversazionale (es. "Hai speso 35€ ieri, per la pizza"), poi aggiungi dettagli utili se ce ne sono
+- Non fare liste numerate per risposte semplici — usa prosa naturale
+- Se hai 3+ voci, puoi usare un elenco informale con "·" ma tieni il tono caldo
+- Cita cifre e date in modo naturale, non da tabella
+- Se i dati sono scarsi o mancanti, dillo in modo umano e suggerisci cosa potrebbe fare
+- Rispondi in italiano, mai formale` },
+    { role: 'user', content: `Dati disponibili:\n${context || '(nessun dato)'}\n\nDomanda: ${question}` },
+  ], 800);
+
+  return reply ?? 'Non ho trovato dati su questo. Prova a registrare qualcosa prima!';
 }
 
 // ─── Analyse: cross-category insight ──────────────────────────
@@ -185,10 +521,18 @@ export async function analyzeGalaxy(entries: import('../types').VaultEntry[]): P
     `[${new Date(e.created_at).toLocaleDateString('it-IT')} · ${e.category}] ${JSON.stringify(e.data)}`
   ).join('\n');
 
-  const reply = await deepseekChat([
-    { role: 'system', content: `Sei Nebula, l'analista di Alter OS. Analizza i dati dell'utente e trova correlazioni tra salute, finanze e umore. Rispondi in italiano con 2-4 bullet points insights concreti. Sii diretto e utile.` },
+  const reply = await aiChat_router([
+    { role: 'system', content: `Sei Nebula, il compagno digitale di Alter OS. L'utente vuole capire qualcosa di sé attraverso i propri dati. Rispondi come un amico attento che ha osservato la sua vita negli ultimi giorni — non come un analista che genera un report.
+
+Stile:
+- Inizia con l'osservazione più interessante o sorprendente, espressa in modo diretto
+- Usa un tono narrativo e caldo — racconta una storia, non un elenco di fatti
+- Cita dati reali (cifre, date) in modo naturale nel testo, non come lista
+- Se trovi una correlazione tra categorie, descrivila come se avessi appena notato qualcosa di curioso
+- Se i dati sono pochi, dì cosa vedi e cosa manca per capire di più
+- Rispondi in italiano, max 150 parole, tono da amico curioso` },
     { role: 'user', content: `Ultimi dati:\n${context || '(nessun dato)'}` },
-  ], 400);
+  ], 1200);
 
   return reply ?? 'Dati insufficienti per un\'analisi significativa.';
 }
@@ -207,16 +551,15 @@ export async function aiDocumentQuery(question: string, docs: import('../types')
     const value    = typeof d.value === 'number' ? `€${d.value}` : '';
     const summary  = (d.summary as string) ?? '';
     const tags     = Array.isArray(d.tags) ? (d.tags as string[]).join(', ') : '';
-    // Use AI-generated summary when available, otherwise fall back to raw text
-    const snippet  = summary || ((d.extractedText as string) ?? '').slice(0, 600);
+    const snippet  = summary || ((d.extractedText as string) ?? '').slice(0, 800);
     const meta = [subject, docDate, value, tags].filter(Boolean).join(' · ');
     return `[${date} · ${label}${name ? ' · ' + name : ''}${meta ? ' | ' + meta : ''}]\n${snippet}`;
   }).join('\n\n---\n\n');
 
-  const reply = await deepseekChat([
-    { role: 'system', content: `Sei Nebula, l'assistente di Alter OS. Rispondi in italiano in modo conciso (max 4 righe) basandoti SOLO sui documenti forniti. Se trovi importi, date o nomi rilevanti, citali esplicitamente. Non inventare nulla che non sia nel testo.` },
+  const reply = await aiChat_router([
+    { role: 'system', content: `Sei Nebula, l'assistente di Alter OS. Rispondi in italiano basandoti SOLO sui documenti forniti. Cita importi, date e nomi rilevanti. Se la domanda richiede una risposta strutturata, usala. Non inventare nulla che non sia nei documenti.` },
     { role: 'user',   content: `Documenti:\n${context}\n\nDomanda: ${question}` },
-  ], 300);
+  ], 900);
 
   return reply ?? 'Non riesco a rispondere con i documenti disponibili.';
 }
@@ -226,14 +569,21 @@ export async function aiNexusNarrative(
   question: string,
   entries: import('../types').VaultEntry[]
 ): Promise<string> {
-  const context = entries.slice(0, 50).map(e =>
+  const context = entries.slice(0, 60).map(e =>
     `[${new Date(e.created_at).toLocaleDateString('it-IT')} · ${e.category}] ${JSON.stringify(e.data)}`
   ).join('\n');
 
-  const reply = await deepseekChat([
-    { role: 'system', content: `Sei Nebula, l'analista di Alter OS. L'utente fa una domanda sul proprio benessere o su pattern di vita. Analizza i dati vault cercando correlazioni temporali tra categorie diverse (salute, umore, finanze, sonno, sport, ecc.). Rispondi in italiano con 2-4 bullet points concreti che citano dati reali (date, valori). Sii scientifico ma caldo ed empatico. Se non ci sono abbastanza dati, dillo chiaramente.` },
+  const reply = await aiChat_router([
+    { role: 'system', content: `Sei Nebula, il compagno digitale di Alter OS. L'utente ti fa una domanda su sé stesso — vuole capire qualcosa dei propri pattern. Rispondi come un amico attento che ha osservato la sua vita dall'esterno.
+
+Stile:
+- Inizia con l'osservazione più concreta che hai, in modo diretto
+- Usa prosa narrativa, non liste — racconta quello che vedi
+- Cita dati reali (date, valori) in modo naturale, non da tabella
+- Se trovi una connessione tra categorie, descrivila come una scoperta curiosa
+- Rispondi in italiano, 2-4 frasi, tono caldo e diretto` },
     { role: 'user', content: `Domanda: ${question}\n\nDati vault:\n${context || '(nessun dato)'}` },
-  ], 450);
+  ], 1200);
 
   return reply ?? 'Non ho abbastanza dati per rispondere a questa domanda.';
 }
@@ -252,8 +602,17 @@ const SYSTEM_COMBINED = `Sei Nebula, il compagno digitale di Alter OS — un sis
 
 Hai la personalità di un amico autentico: curioso, caldo, diretto. Mai banale, mai formale. Parli in italiano.
 
+Capacità di Alter OS (usale se l'utente fa domande sul funzionamento):
+- Traccia vita in linguaggio naturale: finanze, salute, psiche, calendario, note, routine, interessi, carriera
+- Carica documenti PDF: buste paga, bollette, estratti conto, fatture, referti medici, contratti, polizze, multe, F24, 730 — vengono letti e salvati nel vault
+- Importa CSV/XLSX di estratti conto bancari con parsing automatico dei movimenti
+- Risponde a domande sui dati salvati e sui documenti caricati
+- Analisi cross-categoria e correlazioni tra salute, finanze, umore
+- Input vocale disponibile (microfono)
+- Comandi: "mostrami documenti", "analizza", "correlazione tra X e Y", "cancella X"
+
 Per ogni messaggio fai DUE cose contemporaneamente:
-1. RISPOSTA DA AMICO: reagisci in modo genuino a ciò che l'utente ha condiviso. Cita il dato specifico (minuti, euro, km, umore), commenta, fai una domanda curiosa se ha senso. Max 2 frasi scorrevoli. Non iniziare con "Certo!", "Perfetto!" da soli.
+1. RISPOSTA DA AMICO: reagisci in modo genuino a ciò che l'utente ha condiviso. Se parla di vita sua (spese, sport, umore), cita il dato specifico. Se parla di argomenti esterni (notizie, politica, opinioni, cultura), rispondi da amico curioso e coinvolgente — NON tirare in ballo i suoi dati personali quando non c'entrano nulla. Puoi usare 2-4 frasi. Non iniziare con "Certo!", "Perfetto!" da soli.
 2. ESTRAZIONE DATI: analizza se il testo contiene informazioni da archiviare. Un messaggio può generare estrazioni in PIÙ categorie simultaneamente.
 
 Galassie disponibili:
@@ -267,6 +626,8 @@ Galassie disponibili:
 
 Se non ci sono dati da archiviare, "extractions" deve essere [].
 
+REGOLA CRITICA: estrai dati SOLO dal messaggio CORRENTE dell'utente. NON ri-estrarre informazioni già menzionate nei messaggi precedenti della conversazione. Se l'utente sta solo rispondendo a una domanda o continuando una conversazione senza aggiungere nuovi dati, "extractions" deve essere [].
+
 Rispondi SOLO con JSON valido:
 {
   "reply": "risposta empatica in italiano",
@@ -279,12 +640,13 @@ Rispondi SOLO con JSON valido:
   ]
 }`;
 
-export async function aiChatAndExtract(text: string): Promise<ChatAndExtractResult> {
+export async function aiChatAndExtract(text: string, history: ChatHistoryEntry[] = []): Promise<ChatAndExtractResult> {
   const fallback = (): ChatAndExtractResult => ({ reply: 'Sono qui. Dimmi pure.', extractions: [] });
-  const raw = await deepseekChat([
+  const raw = await aiChat_router([
     { role: 'system', content: SYSTEM_COMBINED },
+    ...buildHistory(history),
     { role: 'user',   content: text },
-  ], 500);
+  ], 900);
   if (!raw) return fallback();
   try {
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
@@ -319,8 +681,12 @@ export async function aiParse(text: string): Promise<Omit<ParsedIntent, 'source'
       }),
     });
     if (!res.ok) throw new Error(`DeepSeek ${res.status}`);
-    localStorage.setItem('_alter_ai_calls', String(parseInt(localStorage.getItem('_alter_ai_calls') ?? '0', 10) + 1));
     const json = await res.json();
+    localStorage.setItem('_alter_ai_calls', String(parseInt(localStorage.getItem('_alter_ai_calls') ?? '0', 10) + 1));
+    const tokIn  = (json.usage?.prompt_tokens     ?? 0) as number;
+    const tokOut = (json.usage?.completion_tokens ?? 0) as number;
+    localStorage.setItem('_alter_ai_tokens_in',  String(parseInt(localStorage.getItem('_alter_ai_tokens_in')  ?? '0', 10) + tokIn));
+    localStorage.setItem('_alter_ai_tokens_out', String(parseInt(localStorage.getItem('_alter_ai_tokens_out') ?? '0', 10) + tokOut));
     const parsed: AiResult = JSON.parse(json.choices[0].message.content);
     return { category: parsed.category, data: parsed.data, categoryMeta: parsed.meta };
   } catch (e) {

@@ -2,11 +2,19 @@ import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import './LoginScreen.css';
 
-type Tab = 'login' | 'register';
+type Tab = 'login' | 'register' | 'forgot' | 'reset';
 
-export default function LoginScreen({ initialError }: { initialError?: string | null }) {
-  const { login, register } = useAuth();
-  const [tab, setTab] = useState<Tab>('login');
+export default function LoginScreen({
+  initialError,
+  initialMode = 'login',
+  onPasswordReset,
+}: {
+  initialError?: string | null;
+  initialMode?: Tab;
+  onPasswordReset?: () => void;
+}) {
+  const { login, register, sendPasswordReset, updatePassword } = useAuth();
+  const [tab, setTab] = useState<Tab>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -43,11 +51,16 @@ export default function LoginScreen({ initialError }: { initialError?: string | 
       }
     }
 
+    if (tab === 'reset' && password !== confirm) {
+      setError('Le password non coincidono');
+      return;
+    }
+
     setLoading(true);
     try {
       if (tab === 'login') {
         await login(email, password);
-      } else {
+      } else if (tab === 'register') {
         await register(email, password, {
           first_name: firstName.trim(),
           last_name: lastName.trim(),
@@ -55,9 +68,18 @@ export default function LoginScreen({ initialError }: { initialError?: string | 
           avatar_url: null,
         });
         setSuccess('Controlla la tua email per confermare la registrazione.');
+      } else if (tab === 'forgot') {
+        await sendPasswordReset(email);
+        setSuccess('Link inviato. Controlla la tua email.');
+      } else if (tab === 'reset') {
+        await updatePassword(password);
+        onPasswordReset?.();
       }
     } catch {
-      setError(tab === 'login' ? 'Email o password errati' : 'Registrazione fallita. Riprova.');
+      if (tab === 'login') setError('Email o password errati');
+      else if (tab === 'register') setError('Registrazione fallita. Riprova.');
+      else if (tab === 'forgot') setError('Email non trovata o errore. Riprova.');
+      else if (tab === 'reset') setError('Errore nel salvataggio. Riprova.');
     } finally {
       setLoading(false);
     }
@@ -104,37 +126,43 @@ export default function LoginScreen({ initialError }: { initialError?: string | 
           <span className="lp-tagline">Il tuo universo personale</span>
         </div>
 
-        {/* tabs */}
-        <div className="lp-tabs">
-          <button
-            className={`lp-tab ${tab === 'login' ? 'lp-tab--active' : ''}`}
-            onClick={() => switchTab('login')}
-            type="button"
-          >
-            Accedi
-          </button>
-          <button
-            className={`lp-tab ${tab === 'register' ? 'lp-tab--active' : ''}`}
-            onClick={() => switchTab('register')}
-            type="button"
-          >
-            Registrati
-          </button>
-          <span
-            className="lp-tab-indicator"
-            style={{ transform: `translateX(${tab === 'login' ? '0%' : '100%'})` }}
-          />
-        </div>
+        {/* tabs — solo in login/register */}
+        {(tab === 'login' || tab === 'register') && (
+          <div className="lp-tabs">
+            <button
+              className={`lp-tab ${tab === 'login' ? 'lp-tab--active' : ''}`}
+              onClick={() => switchTab('login')}
+              type="button"
+            >
+              Accedi
+            </button>
+            <button
+              className={`lp-tab ${tab === 'register' ? 'lp-tab--active' : ''}`}
+              onClick={() => switchTab('register')}
+              type="button"
+            >
+              Registrati
+            </button>
+            <span
+              className="lp-tab-indicator"
+              style={{ transform: `translateX(${tab === 'login' ? '0%' : '100%'})` }}
+            />
+          </div>
+        )}
 
         {/* header */}
         <div className="lp-form-header">
           <h2 className="lp-form-title">
-            {tab === 'login' ? 'Bentornato' : 'Crea account'}
+            {tab === 'login' && 'Bentornato'}
+            {tab === 'register' && 'Crea account'}
+            {tab === 'forgot' && 'Password dimenticata'}
+            {tab === 'reset' && 'Nuova password'}
           </h2>
           <p className="lp-form-sub">
-            {tab === 'login'
-              ? 'Inserisci le tue credenziali per accedere'
-              : 'Inizia il tuo percorso con Alter'}
+            {tab === 'login' && 'Inserisci le tue credenziali per accedere'}
+            {tab === 'register' && 'Inizia il tuo percorso con Alter'}
+            {tab === 'forgot' && 'Ti inviamo un link per reimpostare la password'}
+            {tab === 'reset' && 'Scegli una nuova password per il tuo account'}
           </p>
         </div>
 
@@ -172,35 +200,53 @@ export default function LoginScreen({ initialError }: { initialError?: string | 
             </div>
           )}
 
-          <div className="lp-field">
-            <label className="lp-label" htmlFor="lp-email">Email</label>
-            <input
-              id="lp-email"
-              className="lp-input"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="nome@email.com"
-              required
-              autoComplete="email"
-            />
-          </div>
+          {(tab === 'login' || tab === 'register' || tab === 'forgot') && (
+            <div className="lp-field">
+              <label className="lp-label" htmlFor="lp-email">Email</label>
+              <input
+                id="lp-email"
+                className="lp-input"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="nome@email.com"
+                required
+                autoComplete="email"
+              />
+            </div>
+          )}
 
-          <div className="lp-field">
-            <label className="lp-label" htmlFor="lp-password">Password</label>
-            <input
-              id="lp-password"
-              className="lp-input"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-              autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
-            />
-          </div>
+          {(tab === 'login' || tab === 'register' || tab === 'reset') && (
+            <div className="lp-field">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label className="lp-label" htmlFor="lp-password">
+                  {tab === 'reset' ? 'Nuova password' : 'Password'}
+                </label>
+                {tab === 'login' && (
+                  <button
+                    type="button"
+                    className="lp-switch__link"
+                    style={{ fontSize: '9px', letterSpacing: '0.05em' }}
+                    onClick={() => switchTab('forgot')}
+                  >
+                    Dimenticata?
+                  </button>
+                )}
+              </div>
+              <input
+                id="lp-password"
+                className="lp-input"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
+              />
+            </div>
+          )}
 
-          {tab === 'register' && (
+          {(tab === 'register' || tab === 'reset') && (
             <div className="lp-field lp-field--anim">
               <label className="lp-label" htmlFor="lp-confirm">Conferma password</label>
               <input
@@ -219,24 +265,43 @@ export default function LoginScreen({ initialError }: { initialError?: string | 
           {error && <div className="lp-msg lp-msg--error">{error}</div>}
           {success && <div className="lp-msg lp-msg--success">{success}</div>}
 
-          <button type="submit" className="lp-btn" disabled={loading}>
-            {loading
-              ? <span className="lp-btn__spinner" />
-              : tab === 'login' ? 'Accedi' : 'Crea account'}
-          </button>
+          {!success && (
+            <button type="submit" className="lp-btn" disabled={loading}>
+              {loading ? <span className="lp-btn__spinner" /> : (
+                <>
+                  {tab === 'login' && 'Accedi'}
+                  {tab === 'register' && 'Crea account'}
+                  {tab === 'forgot' && 'Invia link'}
+                  {tab === 'reset' && 'Salva password'}
+                </>
+              )}
+            </button>
+          )}
 
         </form>
 
         <p className="lp-switch">
-          {tab === 'login' ? 'Non hai un account?' : 'Hai già un account?'}
-          {' '}
-          <button
-            type="button"
-            className="lp-switch__link"
-            onClick={() => switchTab(tab === 'login' ? 'register' : 'login')}
-          >
-            {tab === 'login' ? 'Registrati' : 'Accedi'}
-          </button>
+          {(tab === 'login' || tab === 'forgot') && (
+            <>
+              {tab === 'login' ? 'Non hai un account?' : 'Ricordi la password?'}
+              {' '}
+              <button
+                type="button"
+                className="lp-switch__link"
+                onClick={() => switchTab('login')}
+              >
+                {tab === 'login' ? 'Registrati' : 'Accedi'}
+              </button>
+            </>
+          )}
+          {tab === 'register' && (
+            <>
+              Hai già un account?{' '}
+              <button type="button" className="lp-switch__link" onClick={() => switchTab('login')}>
+                Accedi
+              </button>
+            </>
+          )}
         </p>
 
       </div>

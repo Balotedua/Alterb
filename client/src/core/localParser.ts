@@ -9,6 +9,8 @@ const SPORT_KW     = ['km','corsa','palestra','allenamento','bici','nuoto','camm
 const MOOD_KW      = ['umore','mood','felice','triste','stressato','stress','ansioso','ansia','calmo','depresso','su di giri','giù','ottimo','pessimo','sento','sto bene','sto male'];
 const INCOME_KW    = ['guadagnato','entrata','stipendio','fattura','incassato','ricevuto','bonifico','rimborso'];
 const CALENDAR_KW  = ['appuntamento','riunione','meeting','promemoria','ricordami','evento','visita','colloquio','call','conferenza','scadenza','appuntam'];
+const RECURRING_KW = ['ogni giorno','tutti i giorni','tutte le mattine','tutte le sere','ogni mattina','ogni sera','ogni settimana','ricordami ogni'];
+const ROUTINE_KW   = ['routine','imposta routine','orario giornaliero'];
 
 function extractNumber(text: string): number | null {
   const m = text.match(/(\d+([.,]\d+)?)/);
@@ -17,6 +19,15 @@ function extractNumber(text: string): number | null {
 
 function stripNumber(text: string): string {
   return text.replace(/(\d+([.,]\d+)?)\s*[€]?/g, '').replace(/[€]/g, '').trim();
+}
+
+function cleanFinanceLabel(text: string): string {
+  let s = stripNumber(text);
+  // Rimuove verbi spesa/entrata comuni
+  s = s.replace(/^(ho\s+)?(speso|pagato|comprato|costato|costa|costo|spendo|spendi|guadagnato|ricevuto|preso)\s*/i, '');
+  // Rimuove preposizioni iniziali
+  s = s.replace(/^(per|al|alla|agli|alle|ai|dal|dalla|allo|dell[aeo']?|un[ao]?|il|lo|la|gli|le|i|in|da)\s+/i, '');
+  return s.trim();
 }
 
 function extractScheduledDate(text: string): string | null {
@@ -85,7 +96,7 @@ export function localParse(
       if (lower.includes(cat.toLowerCase()) && num !== null) {
         return {
           category: cat,
-          data: { value: num, label: stripNumber(lower), raw: text },
+          data: { value: num, label: stripNumber(lower), raw: text, renderType: 'numeric' },
         };
       }
     }
@@ -93,19 +104,19 @@ export function localParse(
 
   // ── 1. Finance: income ─────────────────────────────────────
   if (INCOME_KW.some(k => lower.includes(k)) && num !== null) {
-    const label = stripNumber(lower);
+    const label = cleanFinanceLabel(lower);
     return {
       category: 'finance',
-      data: { type: 'income', amount: num, label: label || 'entrata', raw: text },
+      data: { type: 'income', amount: num, label: label || 'entrata', raw: text, renderType: 'finance' },
     };
   }
 
   // ── 2. Finance: expense  ───────────────────────────────────
   if (FINANCE_KW.some(k => lower.includes(k)) && num !== null) {
-    const label = stripNumber(lower);
+    const label = cleanFinanceLabel(lower);
     return {
       category: 'finance',
-      data: { type: 'expense', amount: num, label: label || 'spesa', raw: text },
+      data: { type: 'expense', amount: num, label: label || 'spesa', raw: text, renderType: 'finance' },
     };
   }
 
@@ -117,7 +128,7 @@ export function localParse(
     if (notHealth) {
       return {
         category: 'finance',
-        data: { type: 'expense', amount: num, label, raw: text },
+        data: { type: 'expense', amount: num, label, raw: text, renderType: 'finance' },
       };
     }
   }
@@ -126,7 +137,7 @@ export function localParse(
   if (WEIGHT_KW.some(k => lower.includes(k)) && num !== null) {
     return {
       category: 'health',
-      data: { type: 'weight', value: num, unit: 'kg', raw: text },
+      data: { type: 'weight', value: num, unit: 'kg', raw: text, renderType: 'chart' },
     };
   }
 
@@ -134,7 +145,7 @@ export function localParse(
   if (SLEEP_KW.some(k => lower.includes(k)) && num !== null) {
     return {
       category: 'health',
-      data: { type: 'sleep', hours: num, raw: text },
+      data: { type: 'sleep', hours: num, raw: text, renderType: 'chart' },
     };
   }
 
@@ -142,7 +153,7 @@ export function localParse(
   if (WATER_KW.some(k => lower.includes(k)) && num !== null) {
     return {
       category: 'health',
-      data: { type: 'water', liters: num, raw: text },
+      data: { type: 'water', liters: num, raw: text, renderType: 'chart' },
     };
   }
 
@@ -150,7 +161,7 @@ export function localParse(
   if (SPORT_KW.some(k => lower.includes(k))) {
     return {
       category: 'health',
-      data: { type: 'activity', value: num, label: lower, raw: text },
+      data: { type: 'activity', value: num, label: lower, raw: text, renderType: 'workout' },
     };
   }
 
@@ -158,7 +169,7 @@ export function localParse(
   if (MOOD_KW.some(k => lower.includes(k))) {
     return {
       category: 'psychology',
-      data: { type: 'mood', score: num, note: text, raw: text },
+      data: { type: 'mood', score: num, note: text, raw: text, renderType: 'mood' },
     };
   }
 
@@ -168,7 +179,7 @@ export function localParse(
     const title = text.replace(/^(appuntamento|riunione|meeting|promemoria|ricordami|evento|visita|colloquio|call|conferenza|scadenza)\s*/i, '').trim() || text;
     return {
       category: 'calendar',
-      data: { is_event: true, scheduled_at: scheduledAt, title, raw: text },
+      data: { is_event: true, scheduled_at: scheduledAt, title, raw: text, renderType: 'timeline' },
     };
   }
 

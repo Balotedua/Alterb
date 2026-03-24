@@ -19,6 +19,7 @@ export const CATEGORY_META: Record<string, { label: string; color: string; icon:
   career:       { label: 'Carriera',         color: '#818cf8', icon: '🚀' },
   badges:       { label: 'Badge',            color: '#fbbf24', icon: '🏆' },
   insight:      { label: 'Insight',          color: '#fcd34d', icon: '✨' },
+  documents:    { label: 'Documenti',        color: '#38bdf8', icon: '📄' },
 };
 
 export function getCategoryMeta(cat: string) {
@@ -34,30 +35,39 @@ export function getCategoryMeta(cat: string) {
 
 // ─── Subcategory constellation map (L1 zoom) ─────────────────
 export const SUBCATEGORY_MAP: Record<string, Array<{ id: string; label: string; icon: string }>> = {
-  finance:      [{ id: 'transazioni', label: 'Transazioni', icon: '💳' }, { id: 'cashflow', label: 'Cashflow', icon: '📊' }, { id: 'aggiungi', label: 'Aggiungi', icon: '➕' }, { id: 'budget', label: 'Budget', icon: '🎯' }, { id: 'ricorrenti', label: 'Ricorrenti', icon: '🔄' }, { id: 'analisi', label: 'Analisi', icon: '🔥' }],
+  finance:      [{ id: 'transazioni', label: 'Transazioni', icon: '💳' }, { id: 'associa', label: 'Da Associare', icon: '🔗' }, { id: 'cashflow', label: 'Cashflow', icon: '📊' }, { id: 'budget', label: 'Budget', icon: '🎯' }, { id: 'ricorrenti', label: 'Ricorrenti', icon: '🔄' }, { id: 'analisi', label: 'Analisi', icon: '🔥' }],
   health:       [{ id: 'peso', label: 'Peso', icon: '⚖️' }, { id: 'allenamento', label: 'Allenamento', icon: '🏋️' }, { id: 'sonno', label: 'Sonno', icon: '😴' }, { id: 'nutrizione', label: 'Nutrizione', icon: '🥗' }],
   psychology:   [{ id: 'umore', label: 'Umore', icon: '🎭' }, { id: 'stress', label: 'Stress', icon: '💆' }, { id: 'gratitudine', label: 'Gratitudine', icon: '✨' }, { id: 'riflessioni', label: 'Riflessioni', icon: '📝' }],
   mental_health:[{ id: 'umore', label: 'Umore', icon: '🎭' }, { id: 'stress', label: 'Stress', icon: '💆' }, { id: 'gratitudine', label: 'Gratitudine', icon: '✨' }, { id: 'riflessioni', label: 'Riflessioni', icon: '📝' }],
-  calendar:     [{ id: 'eventi', label: 'Eventi', icon: '📅' }, { id: 'promemoria', label: 'Promemoria', icon: '🔔' }, { id: 'routine', label: 'Routine', icon: '⏳' }],
   career:       [{ id: 'obiettivi', label: 'Obiettivi', icon: '🎯' }, { id: 'skills', label: 'Skills', icon: '🚀' }, { id: 'log', label: 'Work Log', icon: '📋' }],
   notes:        [{ id: 'note', label: 'Note', icon: '📓' }, { id: 'idee', label: 'Idee', icon: '💡' }],
   interests:    [{ id: 'hobby', label: 'Hobby', icon: '🌍' }, { id: 'letture', label: 'Letture', icon: '📚' }, { id: 'musica', label: 'Musica', icon: '🎵' }],
-  routine:      [{ id: 'mattina', label: 'Mattina', icon: '☀️' }, { id: 'sera', label: 'Sera', icon: '🌙' }, { id: 'abitudini', label: 'Abitudini', icon: '✅' }],
+  routine:      [{ id: 'mattina', label: 'Mattina', icon: '☀️' }, { id: 'sera', label: 'Sera', icon: '🌙' }, { id: 'abitudini', label: 'Abitudini', icon: '✅' }, { id: 'calendario', label: 'Calendario', icon: '📅' }, { id: 'agenda', label: 'Agenda', icon: '📋' }],
+  documents:    [{ id: 'bollette', label: 'Bollette', icon: '⚡' }, { id: 'buste_paga', label: 'Buste paga', icon: '💼' }, { id: 'contratti', label: 'Contratti', icon: '📝' }, { id: 'fatture', label: 'Fatture', icon: '📄' }],
+};
+
+// ─── Stars absorbed into other planets (not rendered as planets) ──
+const HIDDEN_STARS = new Set(['calendar']);
+
+// ─── Sub-star data overrides: click loads a different category ─
+const SUBSTAR_OVERRIDES: Record<string, { category: string; subTab?: string }> = {
+  'routine:calendario': { category: 'calendar', subTab: 'Calendario' },
+  'routine:agenda':     { category: 'calendar', subTab: 'Agenda' },
 };
 
 // ─── Fixed positions for known categories (well-distributed) ─
 const FIXED_STAR_POSITIONS: Record<string, { x: number; y: number }> = {
-  finance:      { x: 0.22, y: 0.28 },
-  health:       { x: 0.72, y: 0.24 },
-  psychology:   { x: 0.82, y: 0.62 },
-  mental_health:{ x: 0.82, y: 0.62 },
-  calendar:     { x: 0.30, y: 0.72 },
-  routine:      { x: 0.60, y: 0.74 },
-  notes:        { x: 0.14, y: 0.56 },
-  interests:    { x: 0.50, y: 0.20 },
-  career:       { x: 0.80, y: 0.38 },
-  badges:       { x: 0.48, y: 0.68 },
-  insight:      { x: 0.35, y: 0.40 },
+  finance:      { x: 0.18, y: 0.22 },
+  interests:    { x: 0.50, y: 0.12 },
+  health:       { x: 0.80, y: 0.20 },
+  notes:        { x: 0.10, y: 0.50 },
+  insight:      { x: 0.34, y: 0.44 },
+  documents:    { x: 0.64, y: 0.44 },
+  career:       { x: 0.86, y: 0.44 },
+  badges:       { x: 0.42, y: 0.84 },
+  routine:      { x: 0.50, y: 0.80 },
+  psychology:   { x: 0.86, y: 0.70 },
+  mental_health:{ x: 0.86, y: 0.70 },
 };
 
 // ─── Deterministic star position ─────────────────────────────
@@ -131,6 +141,8 @@ interface CanvasState {
   velY: number;
   scale: number;
   targetScale: number; // smooth zoom target
+  zoomAnchorCx: number; // wheel zoom anchor (canvas px from center)
+  zoomAnchorCy: number;
   dragging: boolean;
   dragX: number;
   dragY: number;
@@ -152,7 +164,7 @@ export default function StarfieldView() {
   const stateRef = useRef<CanvasState>({
     particles: initParticles(isMobile ? 26 : 48),
     raf: 0, hovered: null, t: 0,
-    panX: 0, panY: 0, velX: 0, velY: 0, scale: 1, targetScale: 1,
+    panX: 0, panY: 0, velX: 0, velY: 0, scale: 1, targetScale: 1, zoomAnchorCx: 0, zoomAnchorCy: 0,
     dragging: false, dragX: 0, dragY: 0, didDrag: false,
     pinchDist: -1, pinchMidX: 0, pinchMidY: 0, pinching: false,
     touchStartX: 0, touchStartY: 0,
@@ -196,10 +208,19 @@ export default function StarfieldView() {
     state.t += 0.007;
 
     // Smooth zoom: snap during pinch (no lag), lerp otherwise
+    // Apply pan anchor correction incrementally as scale lerps (fixes wheel zoom jitter)
+    const prevScale = state.scale;
     if (state.pinching || Math.abs(state.scale - state.targetScale) <= 0.0005) {
       state.scale = state.targetScale;
     } else {
       state.scale += (state.targetScale - state.scale) * 0.14;
+    }
+    if (!state.pinching && state.scale !== prevScale && prevScale > 0) {
+      const r = state.scale / prevScale;
+      state.panX = state.zoomAnchorCx + (state.panX - state.zoomAnchorCx) * r;
+      state.panY = state.zoomAnchorCy + (state.panY - state.zoomAnchorCy) * r;
+      if (nebulaCameraRef.el) nebulaCameraRef.el.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
+      if (nebulaCameraRef.nebula) nebulaCameraRef.nebula.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
     }
 
     // Pan inertia: apply velocity when not dragging
@@ -327,17 +348,23 @@ export default function StarfieldView() {
     }
 
     // ── Category stars — minimal luminous dots ──
-    starsNow.forEach((star) => {
+    starsNow.filter(s => !HIDDEN_STARS.has(s.id)).forEach((star) => {
       const { sx: px, sy: py } = toScreen(star.x, star.y, W, H);
       if (px < -80 || px > W + 80 || py < -80 || py > H + 80) return;
 
       const isHov     = hov === star.id;
       const isHighlit = highlightedId === star.id;
-      const isAlert   = alertEvt != null && star.id === 'calendar';
+      const isAlert   = alertEvt != null && star.id === 'routine';
       const isInsight = star.isInsight ?? false;
       const [r, g, b] = isAlert ? [255, 80, 80] : isInsight ? [240, 192, 64] : hexToRgb(star.color);
       const { intensity } = star;
       const isEphemeral = star.ephemeral ?? false;
+      // Wither: 1=full color, 0=fully gray after ~18 days inactivity
+      const wf = star.witherFactor ?? 1;
+      const WITHER_GRAY = 115; // neutral gray target
+      const wr = Math.round(r * wf + WITHER_GRAY * (1 - wf));
+      const wg = Math.round(g * wf + WITHER_GRAY * (1 - wf));
+      const wb = Math.round(b * wf + WITHER_GRAY * (1 - wf));
 
       // Very slow, smooth twinkle — almost imperceptible
       const twinkle = Math.sin(state.t * (0.55 + star.x * 1.4) + star.y * 3.8) * 0.05 + 0.95;
@@ -346,7 +373,9 @@ export default function StarfieldView() {
         : isAlert   ? Math.sin(state.t * 3)   * 0.18 + 0.88
         : isInsight ? Math.sin(state.t * 1.8) * 0.20 + 0.92
         : twinkle;
-      const alpha   = (isEphemeral ? 0.35 : 0.45) + (intensity * (isEphemeral ? 0.35 : 0.55));
+      // Wither also dims alpha: min 25% even when fully withered (still visible but dull)
+      const witherAlphaFactor = 0.25 + wf * 0.75;
+      const alpha   = ((isEphemeral ? 0.35 : 0.45) + (intensity * (isEphemeral ? 0.35 : 0.55))) * witherAlphaFactor;
       const a       = alpha * pulse;
 
       // Planet vs star: main CATEGORY_META entries are planets
@@ -356,19 +385,19 @@ export default function StarfieldView() {
         ? (isHov ? 68 : 38 + intensity * 28) * s
         : (isHov ? 40 : 18 + intensity * 24) * s;
       const glowGrd = ctx.createRadialGradient(px, py, 0, px, py, glowR);
-      glowGrd.addColorStop(0,    `rgba(${r},${g},${b},${a * 0.55})`);
-      glowGrd.addColorStop(0.18, `rgba(${r},${g},${b},${a * 0.22})`);
-      glowGrd.addColorStop(0.50, `rgba(${r},${g},${b},${a * 0.06})`);
-      glowGrd.addColorStop(1,    `rgba(${r},${g},${b},0)`);
+      glowGrd.addColorStop(0,    `rgba(${wr},${wg},${wb},${a * 0.55})`);
+      glowGrd.addColorStop(0.18, `rgba(${wr},${wg},${wb},${a * 0.22})`);
+      glowGrd.addColorStop(0.50, `rgba(${wr},${wg},${wb},${a * 0.06})`);
+      glowGrd.addColorStop(1,    `rgba(${wr},${wg},${wb},0)`);
       ctx.beginPath(); ctx.arc(px, py, glowR, 0, Math.PI * 2);
       ctx.fillStyle = glowGrd; ctx.fill();
 
       // Wide secondary bloom (OLED bleed) — restrained
       const bloomR = glowR * 1.7;
       const bloomGrd = ctx.createRadialGradient(px, py, 0, px, py, bloomR);
-      bloomGrd.addColorStop(0,   `rgba(${r},${g},${b},${a * 0.09})`);
-      bloomGrd.addColorStop(0.4, `rgba(${r},${g},${b},${a * 0.025})`);
-      bloomGrd.addColorStop(1,   `rgba(${r},${g},${b},0)`);
+      bloomGrd.addColorStop(0,   `rgba(${wr},${wg},${wb},${a * 0.09})`);
+      bloomGrd.addColorStop(0.4, `rgba(${wr},${wg},${wb},${a * 0.025})`);
+      bloomGrd.addColorStop(1,   `rgba(${wr},${wg},${wb},0)`);
       ctx.beginPath(); ctx.arc(px, py, bloomR, 0, Math.PI * 2);
       ctx.fillStyle = bloomGrd; ctx.fill();
 
@@ -381,20 +410,24 @@ export default function StarfieldView() {
         ? ctx.createRadialGradient(px - coreR * 0.30, py - coreR * 0.30, 0, px, py, coreR)
         : ctx.createRadialGradient(px, py, 0, px, py, coreR);
       if (isPlanet) {
-        coreGrd.addColorStop(0,    `rgba(255,255,255,${a * 0.96 * efa})`);
-        coreGrd.addColorStop(0.16, `rgba(255,255,255,${a * 0.55 * efa})`);
-        coreGrd.addColorStop(0.42, `rgba(${r},${g},${b},${a * efa})`);
-        coreGrd.addColorStop(0.74, `rgba(${Math.max(0,r-70)},${Math.max(0,g-70)},${Math.max(0,b-70)},${a * 0.80 * efa})`);
+        // When withered, white highlight fades toward gray
+        const wHiR = Math.round(255 * wf + WITHER_GRAY * (1 - wf));
+        const wHiG = Math.round(255 * wf + WITHER_GRAY * (1 - wf));
+        const wHiB = Math.round(255 * wf + WITHER_GRAY * (1 - wf));
+        coreGrd.addColorStop(0,    `rgba(${wHiR},${wHiG},${wHiB},${a * 0.96 * efa})`);
+        coreGrd.addColorStop(0.16, `rgba(${wHiR},${wHiG},${wHiB},${a * 0.55 * efa})`);
+        coreGrd.addColorStop(0.42, `rgba(${wr},${wg},${wb},${a * efa})`);
+        coreGrd.addColorStop(0.74, `rgba(${Math.max(0,wr-70)},${Math.max(0,wg-70)},${Math.max(0,wb-70)},${a * 0.80 * efa})`);
         coreGrd.addColorStop(1,    `rgba(0,0,0,${a * 0.94 * efa})`);
       } else {
         coreGrd.addColorStop(0,    `rgba(255,255,255,${a * efa})`);
-        coreGrd.addColorStop(0.35, `rgba(${r},${g},${b},${a * efa})`);
-        coreGrd.addColorStop(1,    `rgba(${r},${g},${b},${a * 0.55 * efa})`);
+        coreGrd.addColorStop(0.35, `rgba(${wr},${wg},${wb},${a * efa})`);
+        coreGrd.addColorStop(1,    `rgba(${wr},${wg},${wb},${a * 0.55 * efa})`);
       }
       ctx.beginPath(); ctx.arc(px, py, coreR, 0, Math.PI * 2);
       ctx.fillStyle = coreGrd;
-      ctx.shadowBlur  = isHov ? 38 : (isPlanet ? 30 + intensity * 22 : 16 + intensity * 24) * s;
-      ctx.shadowColor = `rgba(${r},${g},${b},0.95)`;
+      ctx.shadowBlur  = (isHov ? 38 : (isPlanet ? 30 + intensity * 22 : 16 + intensity * 24) * s) * (0.3 + wf * 0.7);
+      ctx.shadowColor = `rgba(${wr},${wg},${wb},0.95)`;
       ctx.fill();
       ctx.shadowBlur = 0;
 
@@ -406,15 +439,15 @@ export default function StarfieldView() {
         // Inner ring — precise hairline
         ctx.beginPath();
         ctx.ellipse(0, 0, coreR * 1.60, coreR * 0.36, 0, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(${r},${g},${b},${a * 0.42})`;
+        ctx.strokeStyle = `rgba(${wr},${wg},${wb},${a * 0.42})`;
         ctx.lineWidth = 0.85 * s;
-        ctx.shadowBlur = 5;
-        ctx.shadowColor = `rgba(${r},${g},${b},0.55)`;
+        ctx.shadowBlur = 5 * wf;
+        ctx.shadowColor = `rgba(${wr},${wg},${wb},0.55)`;
         ctx.stroke();
         // Outer ghost ring
         ctx.beginPath();
         ctx.ellipse(0, 0, coreR * 2.15, coreR * 0.50, 0, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(${r},${g},${b},${a * 0.09})`;
+        ctx.strokeStyle = `rgba(${wr},${wg},${wb},${a * 0.09})`;
         ctx.lineWidth = 0.45 * s;
         ctx.shadowBlur = 0;
         ctx.stroke();
@@ -424,7 +457,7 @@ export default function StarfieldView() {
         ctx.font = `${Math.round(coreR * 0.80)}px system-ui`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.globalAlpha = isHov ? 0.88 : 0.68;
+        ctx.globalAlpha = (isHov ? 0.88 : 0.68) * (0.3 + wf * 0.7);
         ctx.fillText(pmeta.icon, px, py);
         ctx.restore();
       }
@@ -435,9 +468,9 @@ export default function StarfieldView() {
         ? `300 ${Math.round(8.5 * Math.max(s, 1))}px -apple-system, "SF Pro Display", system-ui, sans-serif`
         : `300 8px -apple-system, "SF Pro Display", system-ui, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillStyle = `rgba(${r},${g},${b},${isHov ? 0.95 : isPlanet ? 0.68 : 0.44})`;
-      ctx.shadowBlur  = isHov ? 10 : isPlanet ? 7 : 3;
-      ctx.shadowColor = `rgba(${r},${g},${b},${isPlanet ? 0.50 : 0.35})`;
+      ctx.fillStyle = `rgba(${wr},${wg},${wb},${isHov ? 0.95 : isPlanet ? 0.68 : 0.44})`;
+      ctx.shadowBlur  = (isHov ? 10 : isPlanet ? 7 : 3) * (0.2 + wf * 0.8);
+      ctx.shadowColor = `rgba(${wr},${wg},${wb},${isPlanet ? 0.50 : 0.35})`;
       ctx.fillText(star.label.toUpperCase(), px, py + coreR + (isPlanet ? 22 : 16) * s);
       ctx.shadowBlur = 0;
       ctx.restore();
@@ -445,44 +478,50 @@ export default function StarfieldView() {
     });
 
     // ── Subcategory stars — colored pixels near each planet ──
-    starsNow.forEach((pStar) => {
+    starsNow.filter(s => !HIDDEN_STARS.has(s.id)).forEach((pStar) => {
       const subs = SUBCATEGORY_MAP[pStar.id] ?? [];
       if (!subs.length) return;
       const [sr, sg, sb] = hexToRgb(pStar.color);
+      const pWf = pStar.witherFactor ?? 1;
+      const WGRAY = 115;
+      const swr = Math.round(sr * pWf + WGRAY * (1 - pWf));
+      const swg = Math.round(sg * pWf + WGRAY * (1 - pWf));
+      const swb = Math.round(sb * pWf + WGRAY * (1 - pWf));
+      const subAlphaFactor = 0.25 + pWf * 0.75;
       subs.forEach((sub, i) => {
         const pos = substarPos(pStar.x, pStar.y, sub.id, i, subs.length);
         const { sx: spx, sy: spy } = toScreen(pos.x, pos.y, W, H);
         if (spx < -40 || spx > W + 40 || spy < -40 || spy > H + 40) return;
         const isSubHov = hov === `sub:${pStar.id}:${sub.id}`;
-        const twinkle  = 0.60 + Math.sin(state.t * (0.50 + pos.x * 1.7) + pos.y * 4.0 + i * 1.3) * 0.40;
+        const twinkle  = (0.60 + Math.sin(state.t * (0.50 + pos.x * 1.7) + pos.y * 4.0 + i * 1.3) * 0.40) * subAlphaFactor;
         // Soft glow
         const subGlowR = (isSubHov ? 18 : 5 + scale * 1.8) * s;
         const subGlowGrd = ctx.createRadialGradient(spx, spy, 0, spx, spy, subGlowR);
-        subGlowGrd.addColorStop(0, `rgba(${sr},${sg},${sb},${twinkle * 0.28})`);
-        subGlowGrd.addColorStop(1, `rgba(${sr},${sg},${sb},0)`);
+        subGlowGrd.addColorStop(0, `rgba(${swr},${swg},${swb},${twinkle * 0.28})`);
+        subGlowGrd.addColorStop(1, `rgba(${swr},${swg},${swb},0)`);
         ctx.beginPath(); ctx.arc(spx, spy, subGlowR, 0, Math.PI * 2);
         ctx.fillStyle = subGlowGrd; ctx.fill();
         // Pixel core
         const subCoreR = Math.min((1.3 + Math.min(scale - 1, 2.8) * 0.60) * s, 6 * s);
         const subCoreGrd = ctx.createRadialGradient(spx, spy, 0, spx, spy, subCoreR);
         subCoreGrd.addColorStop(0,   `rgba(255,255,255,${twinkle * (isSubHov ? 1 : 0.92)})`);
-        subCoreGrd.addColorStop(0.4, `rgba(${sr},${sg},${sb},${twinkle * 0.9})`);
-        subCoreGrd.addColorStop(1,   `rgba(${sr},${sg},${sb},0)`);
+        subCoreGrd.addColorStop(0.4, `rgba(${swr},${swg},${swb},${twinkle * 0.9})`);
+        subCoreGrd.addColorStop(1,   `rgba(${swr},${swg},${swb},0)`);
         ctx.beginPath(); ctx.arc(spx, spy, subCoreR, 0, Math.PI * 2);
         ctx.fillStyle = subCoreGrd;
-        ctx.shadowBlur  = isSubHov ? 16 : 4;
-        ctx.shadowColor = `rgba(${sr},${sg},${sb},0.95)`;
+        ctx.shadowBlur  = (isSubHov ? 16 : 4) * (0.2 + pWf * 0.8);
+        ctx.shadowColor = `rgba(${swr},${swg},${swb},0.95)`;
         ctx.fill();
         ctx.shadowBlur = 0;
         // Label — fades in when zoomed in (scale > 1.8)
-        const labelAlpha = isSubHov ? 1 : Math.max(0, Math.min(1, (scale - 1.8) / 0.6));
+        const labelAlpha = (isSubHov ? 1 : Math.max(0, Math.min(1, (scale - 1.8) / 0.6))) * subAlphaFactor;
         if (labelAlpha > 0.02) {
           ctx.save();
           ctx.font = `400 ${Math.round(8 * Math.max(s, 1))}px -apple-system, "SF Pro Display", system-ui, sans-serif`;
           ctx.textAlign = 'center';
-          ctx.fillStyle = `rgba(${sr},${sg},${sb},${labelAlpha * 0.82})`;
-          ctx.shadowBlur  = 5;
-          ctx.shadowColor = `rgba(${sr},${sg},${sb},${labelAlpha * 0.6})`;
+          ctx.fillStyle = `rgba(${swr},${swg},${swb},${labelAlpha * 0.82})`;
+          ctx.shadowBlur  = 5 * pWf;
+          ctx.shadowColor = `rgba(${swr},${swg},${swb},${labelAlpha * 0.6})`;
           ctx.fillText(sub.label.toUpperCase(), spx, spy + subCoreR + 10 * Math.max(s, 1));
           ctx.shadowBlur = 0;
           ctx.restore();
@@ -491,7 +530,7 @@ export default function StarfieldView() {
     });
 
     // ── Ghost Stars: missing pillar categories ──
-    const PILLARS = ['finance', 'health', 'psychology', 'calendar'] as const;
+    const PILLARS = ['finance', 'health', 'psychology'] as const;
     PILLARS.forEach((cat) => {
       if (starsNow.some(st => st.id === cat)) return;
       const pos = starPosition(cat);
@@ -590,6 +629,31 @@ export default function StarfieldView() {
     state.raf = requestAnimationFrame(draw);
   }, [toScreen]);
 
+  const handleWheelNative = useCallback((e: WheelEvent) => {
+    e.preventDefault();
+    const state  = stateRef.current;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const W = canvas.width, H = canvas.height;
+    const rect = canvas.getBoundingClientRect();
+
+    // Normalize deltaY across deltaMode (pixel / line / page)
+    let delta = e.deltaY;
+    if (e.deltaMode === 1) delta *= 16;
+    if (e.deltaMode === 2) delta *= 400;
+
+    // Trackpad pinch fires wheel with ctrlKey — use finer sensitivity
+    const sensitivity = e.ctrlKey ? 0.008 : 0.0018;
+    const factor = Math.exp(-delta * sensitivity);
+    const newTarget = Math.max(0.35, Math.min(4, state.targetScale * factor));
+    if (newTarget === state.targetScale) return;
+
+    // Store anchor — pan correction applied incrementally in draw loop
+    state.zoomAnchorCx = (e.clientX - rect.left) * (W / rect.width) - W / 2;
+    state.zoomAnchorCy = (e.clientY - rect.top)  * (H / rect.height) - H / 2;
+    state.targetScale = newTarget;
+  }, []);
+
   // ── Canvas setup ───────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -600,12 +664,15 @@ export default function StarfieldView() {
     };
     resize();
     window.addEventListener('resize', resize);
+    // Non-passive wheel listener so e.preventDefault() actually works
+    canvas.addEventListener('wheel', handleWheelNative, { passive: false });
     stateRef.current.raf = requestAnimationFrame(draw);
     return () => {
       window.removeEventListener('resize', resize);
+      canvas.removeEventListener('wheel', handleWheelNative);
       cancelAnimationFrame(stateRef.current.raf);
     };
-  }, [draw]);
+  }, [draw, handleWheelNative]);
 
   // ── Mouse: hover + drag ────────────────────────────────────
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -647,7 +714,7 @@ export default function StarfieldView() {
       }
     }
     if (!found) {
-      const PILLARS = ['finance', 'health', 'psychology', 'calendar'];
+      const PILLARS = ['finance', 'health', 'psychology'];
       for (const cat of PILLARS) {
         if (starsNow.some(s => s.id === cat)) continue;
         const pos = starPosition(cat);
@@ -673,36 +740,6 @@ export default function StarfieldView() {
     if (canvas) canvas.style.cursor = 'grab';
   }, []);
 
-  const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    const state  = stateRef.current;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const W = canvas.width, H = canvas.height;
-    const rect = canvas.getBoundingClientRect();
-
-    // Normalize deltaY across deltaMode (pixel / line / page)
-    let delta = e.deltaY;
-    if (e.deltaMode === 1) delta *= 16;   // line mode → pixels
-    if (e.deltaMode === 2) delta *= 400;  // page mode → pixels
-
-    // Trackpad pinch fires wheel with ctrlKey — use finer sensitivity
-    const sensitivity = e.ctrlKey ? 0.008 : 0.0018;
-    const factor = Math.exp(-delta * sensitivity);
-    const newTarget = Math.max(0.35, Math.min(4, state.targetScale * factor));
-    if (newTarget === state.targetScale) return;
-
-    // Anchor zoom at cursor position (relative to canvas center)
-    const cx = (e.clientX - rect.left) * (W / rect.width) - W / 2;
-    const cy = (e.clientY - rect.top)  * (H / rect.height) - H / 2;
-    const ratio = newTarget / state.targetScale;
-    state.panX = cx + (state.panX - cx) * ratio;
-    state.panY = cy + (state.panY - cy) * ratio;
-    state.targetScale = newTarget;
-    if (nebulaCameraRef.el) nebulaCameraRef.el.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
-    if (nebulaCameraRef.nebula) nebulaCameraRef.nebula.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
-  }, []);
-
   const openWidget = useCallback(async (star: { id: string; label: string; color: string }, subTab?: string) => {
     if (!user) return;
     const entries = await getByCategory(user.id, star.id);
@@ -710,6 +747,20 @@ export default function StarfieldView() {
     setActiveWidget({ category: star.id, label: star.label, color: star.color, entries, renderType, subTab });
     markStarSeen(star.id);
   }, [user, setActiveWidget, markStarSeen]);
+
+  const openSubWidget = useCallback(async (star: Star, subId: string) => {
+    if (!user) return;
+    const overrideKey = `${star.id}:${subId}`;
+    const override = SUBSTAR_OVERRIDES[overrideKey];
+    if (override) {
+      const entries = await getByCategory(user.id, override.category);
+      const meta = getCategoryMeta(override.category);
+      const renderType = inferRenderType(entries, override.category);
+      setActiveWidget({ category: override.category, label: meta.label, color: meta.color, entries, renderType, subTab: override.subTab });
+    } else {
+      openWidget(star, subId);
+    }
+  }, [user, openWidget, setActiveWidget]);
 
   const handleClick = useCallback(async (e: React.MouseEvent<HTMLCanvasElement>) => {
     const state = stateRef.current;
@@ -721,7 +772,7 @@ export default function StarfieldView() {
     const starsNow = useAlterStore.getState().stars;
 
     // Planet click
-    for (const star of starsNow) {
+    for (const star of starsNow.filter(s => !HIDDEN_STARS.has(s.id))) {
       const { sx, sy } = toScreen(star.x, star.y, W, H);
       if (Math.hypot(sx - e.clientX, sy - e.clientY) < 28) {
         setClickRipple({ x: sx, y: sy, color: star.color });
@@ -730,7 +781,7 @@ export default function StarfieldView() {
       }
     }
     // Subcategory star click
-    for (const star of starsNow) {
+    for (const star of starsNow.filter(s => !HIDDEN_STARS.has(s.id))) {
       const subs = SUBCATEGORY_MAP[star.id] ?? [];
       for (let i = 0; i < subs.length; i++) {
         const sub = subs[i];
@@ -738,16 +789,16 @@ export default function StarfieldView() {
         const { sx, sy } = toScreen(pos.x, pos.y, W, H);
         if (Math.hypot(sx - e.clientX, sy - e.clientY) < 14) {
           setClickRipple({ x: sx, y: sy, color: star.color });
-          openWidget(star, sub.id);
+          openSubWidget(star, sub.id);
           return;
         }
       }
     }
     // Ghost star click → pre-fill input
     const GHOST_PROMPTS: Record<string, string> = {
-      finance: 'Ho speso ', health: 'Peso ', psychology: 'Umore ', calendar: 'Domani ',
+      finance: 'Ho speso ', health: 'Peso ', psychology: 'Umore ',
     };
-    for (const cat of ['finance', 'health', 'psychology', 'calendar']) {
+    for (const cat of ['finance', 'health', 'psychology']) {
       if (starsNow.some(s => s.id === cat)) continue;
       const pos = starPosition(cat);
       const { sx, sy } = toScreen(pos.x, pos.y, W, H);
@@ -756,7 +807,7 @@ export default function StarfieldView() {
         break;
       }
     }
-  }, [user, openWidget, toScreen, setGhostStarPrompt]);
+  }, [user, openWidget, openSubWidget, toScreen, setGhostStarPrompt]);
 
   // ── Touch: pan + pinch-zoom ────────────────────────────────
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
@@ -830,7 +881,7 @@ export default function StarfieldView() {
         const W = canvas.width, H = canvas.height;
         const starsNow = useAlterStore.getState().stars;
         let touchHit = false;
-        for (const star of starsNow) {
+        for (const star of starsNow.filter(s => !HIDDEN_STARS.has(s.id))) {
           const { sx, sy } = toScreen(star.x, star.y, W, H);
           if (Math.hypot(sx - state.touchStartX, sy - state.touchStartY) < 36) {
             setClickRipple({ x: sx, y: sy, color: star.color });
@@ -840,14 +891,14 @@ export default function StarfieldView() {
           }
         }
         if (!touchHit) {
-          outer: for (const star of starsNow) {
+          outer: for (const star of starsNow.filter(s => !HIDDEN_STARS.has(s.id))) {
             const subs = SUBCATEGORY_MAP[star.id] ?? [];
             for (let i = 0; i < subs.length; i++) {
               const pos = substarPos(star.x, star.y, subs[i].id, i, subs.length);
               const { sx, sy } = toScreen(pos.x, pos.y, W, H);
               if (Math.hypot(sx - state.touchStartX, sy - state.touchStartY) < 18) {
                 setClickRipple({ x: sx, y: sy, color: star.color });
-                openWidget(star, subs[i].id);
+                openSubWidget(star, subs[i].id);
                 touchHit = true;
                 break outer;
               }
@@ -856,9 +907,9 @@ export default function StarfieldView() {
         }
         if (!touchHit) {
           const GHOST_PROMPTS: Record<string, string> = {
-            finance: 'Ho speso ', health: 'Peso ', psychology: 'Umore ', calendar: 'Domani ',
+            finance: 'Ho speso ', health: 'Peso ', psychology: 'Umore ',
           };
-          for (const cat of ['finance', 'health', 'psychology', 'calendar']) {
+          for (const cat of ['finance', 'health', 'psychology']) {
             if (starsNow.some(s => s.id === cat)) continue;
             const pos = starPosition(cat);
             const { sx, sy } = toScreen(pos.x, pos.y, W, H);
@@ -880,7 +931,7 @@ export default function StarfieldView() {
       state.dragX     = e.touches[0].clientX;
       state.dragY     = e.touches[0].clientY;
     }
-  }, [user, setActiveWidget, markStarSeen, toScreen, setGhostStarPrompt]);
+  }, [user, setActiveWidget, markStarSeen, toScreen, setGhostStarPrompt, openWidget, openSubWidget]);
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#020205' }}>
@@ -892,7 +943,6 @@ export default function StarfieldView() {
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onClick={handleClick}
-        onWheel={handleWheel}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -1089,6 +1139,8 @@ export function buildStar(category: string, count: number, lastEntry: string): S
   const recencyScore = Math.max(0, 1 - daysSince / 14);
   const countScore   = Math.min(1, count / 20);
   const intensity    = Math.max(0.15, (recencyScore * 0.6 + countScore * 0.4));
+  // Wither: full vibrancy for first day, then linear fade to gray at ~18 days
+  const witherFactor = Math.max(0, Math.min(1, 1 - Math.max(0, daysSince - 1) / 17));
 
   return {
     id:         category,
@@ -1100,5 +1152,6 @@ export function buildStar(category: string, count: number, lastEntry: string): S
     intensity,
     entryCount: count,
     lastEntry,
+    witherFactor,
   };
 }

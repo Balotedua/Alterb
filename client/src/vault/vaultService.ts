@@ -150,6 +150,13 @@ export async function getSemanticLinks(userId: string): Promise<SemanticLink[]> 
   return links.sort((a, b) => b.similarity - a.similarity);
 }
 
+// ─── Update: patch data JSONB of an entry ────────────────────
+export async function updateEntryData(id: string, data: Record<string, unknown>): Promise<boolean> {
+  const { error } = await supabase.from('vault').update({ data }).eq('id', id);
+  if (error) { console.error('[vault updateEntryData]', error); return false; }
+  return true;
+}
+
 // ─── Delete ──────────────────────────────────────────────────
 export async function deleteEntry(id: string): Promise<boolean> {
   const { error } = await supabase.from('vault').delete().eq('id', id);
@@ -248,14 +255,14 @@ export interface AdminStats {
 
 export interface ActiveUser {
   userId: string;
-  lastActivity: string;
-  entryCount: number;
+  email: string;
+  lastSignIn: string;
+  createdAt: string;
 }
 
 export async function getAdminStats(): Promise<AdminStats> {
   const { data, error } = await supabase
-    .from('vault')
-    .select('category, created_at, data')
+    .rpc('admin_get_stats')
     .order('created_at', { ascending: false });
 
   if (error || !data) return { totalEntries: 0, byCategory: [], aiCalls: 0, aiTokensIn: 0, aiTokensOut: 0, estimatedCostUSD: 0, totalSizeMB: 0 };
@@ -280,27 +287,10 @@ export async function getAdminStats(): Promise<AdminStats> {
 }
 
 export async function getLastActiveUsers(): Promise<ActiveUser[]> {
-  const { data, error } = await supabase
-    .from('vault')
-    .select('user_id, created_at')
-    .order('created_at', { ascending: false })
-    .limit(500);
-
+  const { data, error } = await supabase.rpc('admin_get_user_logins');
   if (error || !data) return [];
-
-  const map = new Map<string, { lastActivity: string; count: number }>();
-  for (const row of data) {
-    const existing = map.get(row.user_id);
-    if (!existing) {
-      map.set(row.user_id, { lastActivity: row.created_at, count: 1 });
-    } else {
-      existing.count++;
-    }
-  }
-  return Array.from(map.entries())
-    .map(([userId, v]) => ({ userId, lastActivity: v.lastActivity, entryCount: v.count }))
-    .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
-    .slice(0, 20);
+  return (data as { user_id: string; email: string; last_sign_in_at: string; created_at: string }[])
+    .map(r => ({ userId: r.user_id, email: r.email, lastSignIn: r.last_sign_in_at, createdAt: r.created_at }));
 }
 
 // ─── Delete: all data for a user (full reset) ────────────────

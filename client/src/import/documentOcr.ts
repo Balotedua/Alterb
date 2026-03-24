@@ -70,8 +70,8 @@ async function extractPdfViaOcr(
       const ctx = canvas.getContext('2d')!;
       await page.render({ canvasContext: ctx, viewport }).promise;
 
-      const blob = await new Promise<Blob>((res) =>
-        canvas.toBlob((b) => res(b!), 'image/png')
+      const blob = await new Promise<Blob>((res, rej) =>
+        canvas.toBlob((b) => b ? res(b) : rej(new Error('Rendering pagina PDF fallito')), 'image/png')
       );
       const { data } = await worker.recognize(blob);
       if (data.text.trim()) pageTexts.push(data.text.trim());
@@ -110,6 +110,20 @@ async function extractText(file: File): Promise<OcrResult> {
   return { text: text.trim(), mimeType: file.type };
 }
 
+// ── XLSX extraction via SheetJS ───────────────────────────────
+async function extractXlsx(file: File): Promise<OcrResult> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const XLSX = await import('xlsx') as any;
+  const ab = await file.arrayBuffer();
+  const wb = XLSX.read(ab, { type: 'array', cellDates: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const text: string = XLSX.utils.sheet_to_csv(ws);
+  return {
+    text,
+    mimeType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  };
+}
+
 // ── Public entry point ────────────────────────────────────────
 export async function extractDocument(file: File): Promise<OcrResult> {
   const type = file.type.toLowerCase();
@@ -124,6 +138,12 @@ export async function extractDocument(file: File): Promise<OcrResult> {
   if (type.startsWith('text/') || name.endsWith('.txt') || name.endsWith('.md')) {
     return extractText(file);
   }
+  if (
+    type.includes('spreadsheetml') || type.includes('excel') ||
+    name.endsWith('.xlsx') || name.endsWith('.xls')
+  ) {
+    return extractXlsx(file);
+  }
 
   throw new Error(`Formato non supportato: ${file.type || name}`);
 }
@@ -137,6 +157,13 @@ export function isDocumentFile(file: File): boolean {
     type.startsWith('image/') ||
     type.startsWith('text/') ||
     name.endsWith('.txt') ||
-    name.endsWith('.md')
+    name.endsWith('.md') ||
+    type.includes('spreadsheetml') || type.includes('excel') ||
+    name.endsWith('.xlsx') || name.endsWith('.xls')
   );
+}
+
+export function isFinanceFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return name.endsWith('.csv') || name.endsWith('.xlsx') || name.endsWith('.xls');
 }

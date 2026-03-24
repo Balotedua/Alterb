@@ -38,6 +38,7 @@ export interface Star {
   isInsight?: boolean;   // autonomous discovery — golden pulsing aura
   ephemeral?: boolean;   // view stars — auto-deleted after 15 days
   lastAccessedAt?: string; // ISO string, for ephemeral cleanup
+  witherFactor?: number; // 1=fresh, 0=fully withered (gray) after ~18 days of inactivity
 }
 
 // ─── Widget ──────────────────────────────────────────────────

@@ -1,4 +1,11 @@
 import { saveEntry } from '../vault/vaultService';
+import { supabase } from '../config/supabase';
+import { applyRule } from '../core/descriptionRules';
+
+export interface ImportResult {
+  imported: number;
+  duplicates: BankTransaction[];
+}
 
 export interface BankTransaction {
   date: string;
@@ -95,57 +102,119 @@ export function parseBankCsv(csvText: string): BankTransaction[] {
   return results;
 }
 
-async function categorizeBankTransactions(txs: BankTransaction[]): Promise<BankTransaction[]> {
-  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
-  if (!apiKey || txs.length === 0) return txs;
-  const batch = txs.slice(0, 150);
-  const lines = batch.map((tx, i) =>
-    `${i}|${tx.description.slice(0, 60)}|${tx.amount > 0 ? 'in' : 'out'}`
-  );
-  const prompt = `Categorizza queste transazioni bancarie italiane. Subcategorie disponibili: food, transport, health, shopping, entertainment, utilities, salary, subscription, other.\nRispondi SOLO con un JSON array di stringhe nell'ordine dato, es: ["food","salary",...].\n\n${lines.join('\n')}`;
-  try {
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0,
-        max_tokens: Math.min(txs.length, 150) * 6 + 50,
-      }),
-    });
-    const json = await res.json();
-    const content: string = json.choices?.[0]?.message?.content ?? '';
-    const match = content.match(/\[[\s\S]*?\]/);
-    if (match) {
-      const cats: string[] = JSON.parse(match[0]);
-      return txs.map((tx, i) => ({ ...tx, subcategory: cats[i] ?? 'other' }));
-    }
-  } catch { /* skip, import without subcategory */ }
-  return txs;
-}
 
 export async function importBankCsv(
   csvText: string,
   userId: string,
   onProgress?: (done: number, total: number) => void
-): Promise<number> {
-  let transactions = parseBankCsv(csvText);
-  transactions = await categorizeBankTransactions(transactions);
-  let count = 0;
-  for (let i = 0; i < transactions.length; i++) {
-    const tx = transactions[i];
+): Promise<ImportResult> {
+  const transactions = parseBankCsv(csvText);
+  return importParsedTransactions(transactions, userId, onProgress, 'csv_import');
+}
+
+// ─── Duplicate key: YYYY-MM-DD|description_lower|abs_amount ──
+function dupKey(date: string, description: string, amount: number): string {
+  return `${date.slice(0, 10)}|${description.toLowerCase().trim()}|${Math.abs(amount).toFixed(2)}`;
+}
+
+// ─── Fetch existing finance keys for a user ───────────────────
+async function fetchExistingFinanceKeys(userId: string): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('vault')
+    .select('data')
+    .eq('user_id', userId)
+    .eq('category', 'finance');
+  if (error || !data) return new Set();
+  const keys = new Set<string>();
+  for (const row of data) {
+    const d = row.data as Record<string, unknown>;
+    if (d.date && d.label && d.amount != null) {
+      keys.add(dupKey(d.date as string, d.label as string, d.amount as number));
+    }
+  }
+  return keys;
+}
+
+// ─── Batch save pre-parsed transactions ───────────────────────
+export async function importParsedTransactions(
+  txs: BankTransaction[],
+  userId: string,
+  onProgress?: (done: number, total: number) => void,
+  source: string = 'file_import'
+): Promise<ImportResult> {
+  const existing = await fetchExistingFinanceKeys(userId);
+  let imported = 0;
+  const duplicates: BankTransaction[] = [];
+
+  for (let i = 0; i < txs.length; i++) {
+    const tx = txs[i];
+    const key = dupKey(tx.date, tx.description, tx.amount);
+    if (existing.has(key)) {
+      duplicates.push(tx);
+      onProgress?.(i + 1, txs.length);
+      continue;
+    }
+    const subcategory = applyRule(userId, tx.description) ?? 'da_associare';
     const saved = await saveEntry(userId, 'finance', {
       type: tx.type,
       amount: Math.abs(tx.amount),
       label: tx.description,
       date: tx.date,
-      source: 'csv_import',
+      source,
       raw: tx.description,
-      ...(tx.subcategory ? { subcategory: tx.subcategory } : {}),
+      subcategory,
     });
-    if (saved) count++;
-    onProgress?.(i + 1, transactions.length);
+    if (saved) {
+      imported++;
+      existing.add(key); // prevent intra-import duplicates too
+    }
+    onProgress?.(i + 1, txs.length);
   }
-  return count;
+  return { imported, duplicates };
+}
+
+// ─── Parse bank statement from PDF extracted text ─────────────
+export function parseBankPdfText(text: string): BankTransaction[] {
+  const lines = text.split('\n');
+  const results: BankTransaction[] = [];
+
+  for (const line of lines) {
+    const l = line.trim();
+    if (!l || l.length < 10) continue;
+
+    // Match: date [time] description amount  (e.g. "01/03/2026 Pagamento Amazon -45,90")
+    const m = l.match(
+      /^(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)(?:\s+(\d{2}:\d{2}(?::\d{2})?))?[\s\t]+(.+?)[\s\t]+([\+\-]?\d{1,6}(?:[,\.]\d{1,3})?)$/
+    );
+    if (!m) continue;
+
+    const [, dateStr, timeStr, desc, amtStr] = m;
+    const amount = parseAmount(amtStr);
+    if (amount === 0) continue;
+
+    const description = desc.trim().replace(/\s{2,}/g, ' ');
+    if (!description || description.length < 2) continue;
+
+    try {
+      const date = parseDate(dateStr, timeStr);
+      results.push({ date, amount, description, type: amount >= 0 ? 'income' : 'expense' });
+    } catch { /* skip malformed */ }
+  }
+
+  return results;
+}
+
+// ─── XLSX import (SheetJS, lazy-loaded) ───────────────────────
+export async function importBankXlsx(
+  file: File,
+  userId: string,
+  onProgress?: (done: number, total: number) => void
+): Promise<ImportResult> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const XLSX = await import('xlsx') as any;
+  const ab = await file.arrayBuffer();
+  const wb = XLSX.read(ab, { type: 'array', cellDates: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const csvText: string = XLSX.utils.sheet_to_csv(ws);
+  return importBankCsv(csvText, userId, onProgress);
 }
