@@ -3,9 +3,9 @@ import type { User } from '@supabase/supabase-js';
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from './config/supabase';
-import { getCategorySummaries, getUpcomingEvents } from './vault/vaultService';
-import { buildStar } from './components/starfield/StarfieldView';
-import { runInsightEngine, generateDailyGreeting } from './core/insightEngine';
+import { getCategorySummaries, getUpcomingEvents, purgeExpiredDeleted } from './vault/vaultService';
+import { buildStar, getCategoryMeta, starPosition } from './components/starfield/StarfieldView';
+import { generateDailyGreeting } from './core/insightEngine';
 import { handleGoogleFitCallback, syncGoogleFit } from './core/wearableSync';
 import { useAlterStore } from './store/alterStore';
 import LoginScreen from './components/auth/LoginScreen';
@@ -21,6 +21,7 @@ import DataAnalyticsView from './components/dashboard/DataAnalyticsView';
 import SettingsPanel from './components/settings/SettingsPanel';
 import BugReportPanel from './components/panels/BugReportPanel';
 import DynamicIslandTimer from './components/timer/DynamicIslandTimer';
+import PWAInstallPrompt from './components/pwa/PWAInstallPrompt';
 
 export default function App() {
   const [authUser, setAuthUser] = useState<User | null | undefined>(undefined);
@@ -72,6 +73,12 @@ export default function App() {
 
     setUser({ id: authUser.id, email: authUser.email ?? '' });
 
+    // Track last app access in user metadata (updates on every app open, not just login)
+    supabase.auth.updateUser({ data: { last_app_access: new Date().toISOString() } });
+
+    // Purge entries soft-deleted more than 7 days ago (fire-and-forget)
+    purgeExpiredDeleted(authUser.id);
+
     // Load existing category stars
     getCategorySummaries(authUser.id).then((summaries) => {
       const now = Date.now();
@@ -88,16 +95,18 @@ export default function App() {
       summaries.forEach(({ category, count, lastEntry }) => {
         if (category === 'chat') return; // skip chat sessions — not a star
         const star = buildStar(category, count, lastEntry);
-        upsertStar({ ...star, isInsight: category === 'insight' });
-        if (category !== 'insight') addKnownCategory(category);
+        upsertStar(star);
+        addKnownCategory(category);
       });
 
-      // Run insight engine (max once/24h, silently in background)
-      runInsightEngine(authUser.id).then((entry) => {
-        if (!entry) return;
-        const insightStar = buildStar('insight', 1, entry.created_at);
-        upsertStar({ ...insightStar, isInsight: true });
-      });
+      // Auto-inject chronicle (Chi Sono) as dormant planet alongside first planet
+      const hasAnyData = summaries.some(s => s.category !== 'chat');
+      const hasChronicle = summaries.some(s => s.category === 'chronicle');
+      if (hasAnyData && !hasChronicle) {
+        const pos  = starPosition('chronicle');
+        const meta = getCategoryMeta('chronicle');
+        upsertStar({ id: 'chronicle', label: meta.label, color: meta.color, icon: meta.icon, x: pos.x, y: pos.y, intensity: 0.15, entryCount: 0, lastEntry: null, witherFactor: 0.5 });
+      }
 
       // Daily greeting — held silently, prepended to first nebula reply
       generateDailyGreeting(authUser.id).then((greeting) => {
@@ -164,8 +173,8 @@ export default function App() {
   // ── Loading ───────────────────────────────────────────────
   if (authUser === undefined) {
     return (
-      <div style={{ position: 'fixed', inset: 0, background: '#000000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#ffffff', opacity: 0.6 }} />
+      <div style={{ position: 'fixed', inset: 0, background: '#05070D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(200,168,75,0.7)', boxShadow: '0 0 12px rgba(200,168,75,0.4)' }} />
       </div>
     );
   }
@@ -220,6 +229,7 @@ export default function App() {
       <ChatHistorySidebar />
       <TabBar />
       <BugReportPanel />
+      <PWAInstallPrompt />
 
       {/* ── Ghost Action: Reminder Alert (chat + dashboard only; galaxy has its own) ── */}
       <AnimatePresence>
@@ -233,13 +243,13 @@ export default function App() {
             style={{
               position: 'fixed', top: 56, left: '50%', transform: 'translateX(-50%)',
               zIndex: 900,
-              background: 'rgba(10,10,18,0.95)',
-              border: '1px solid rgba(167,139,250,0.5)',
-              borderRadius: 14,
+              background: 'rgba(5,7,18,0.94)',
+              border: '1px solid rgba(155,127,212,0.35)',
+              borderRadius: 18,
               padding: '12px 20px',
               display: 'flex', alignItems: 'center', gap: 12,
-              boxShadow: '0 0 24px rgba(167,139,250,0.25), 0 4px 20px rgba(0,0,0,0.5)',
-              backdropFilter: 'blur(12px)',
+              boxShadow: '0 0 28px rgba(155,127,212,0.18), 0 8px 32px rgba(0,0,0,0.6)',
+              backdropFilter: 'blur(20px)',
               maxWidth: 360,
               cursor: 'pointer',
             }}
@@ -247,7 +257,7 @@ export default function App() {
           >
             <span style={{ fontSize: 22 }}>🔔</span>
             <div>
-              <div style={{ color: '#a78bfa', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 2 }}>Promemoria</div>
+              <div style={{ color: '#9B7FD4', fontSize: 10, fontWeight: 500, letterSpacing: '0.10em', textTransform: 'uppercase', marginBottom: 2 }}>Promemoria</div>
               <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 500 }}>{alertEvent.title}</div>
             </div>
             <div style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>tocca per chiudere</div>
@@ -262,22 +272,22 @@ export default function App() {
         style={{
           position: 'fixed', top: 14, left: 14,
           zIndex: 500,
-          background: 'rgba(10,10,18,0.75)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: 10,
-          width: 32, height: 32,
+          background: 'rgba(5,7,18,0.72)',
+          border: '1px solid rgba(255,255,255,0.07)',
+          borderRadius: 12,
+          width: 34, height: 34,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', color: 'rgba(255,255,255,0.3)',
-          backdropFilter: 'blur(8px)',
+          cursor: 'pointer', color: 'rgba(255,255,255,0.28)',
+          backdropFilter: 'blur(12px)',
           transition: 'color 0.2s, border-color 0.2s',
         }}
         onMouseEnter={e => {
-          (e.currentTarget as HTMLButtonElement).style.color = '#ffffff';
-          (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.2)';
+          (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.75)';
+          (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.18)';
         }}
         onMouseLeave={e => {
-          (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.3)';
-          (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.08)';
+          (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.28)';
+          (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.07)';
         }}
       >
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -294,22 +304,22 @@ export default function App() {
         style={{
           position: 'fixed', top: 14, right: 14,
           zIndex: 500,
-          background: 'rgba(10,10,18,0.75)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: 10,
-          width: 32, height: 32,
+          background: 'rgba(5,7,18,0.72)',
+          border: '1px solid rgba(255,255,255,0.07)',
+          borderRadius: 12,
+          width: 34, height: 34,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', color: 'rgba(255,255,255,0.3)',
-          backdropFilter: 'blur(8px)',
+          cursor: 'pointer', color: 'rgba(255,255,255,0.28)',
+          backdropFilter: 'blur(12px)',
           transition: 'color 0.2s, border-color 0.2s',
         }}
         onMouseEnter={e => {
-          (e.currentTarget as HTMLButtonElement).style.color = '#f0c040';
-          (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(240,192,64,0.3)';
+          (e.currentTarget as HTMLButtonElement).style.color = '#C8A84B';
+          (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(200,168,75,0.28)';
         }}
         onMouseLeave={e => {
-          (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.3)';
-          (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.08)';
+          (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.28)';
+          (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.07)';
         }}
       >
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

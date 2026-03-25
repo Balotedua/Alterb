@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAlterStore } from '../../store/alterStore';
+import ChatReportModal from './ChatReportModal';
 
 // Minimal markdown renderer: bold, italic, headers, bullet lists, line breaks
 function renderMarkdown(text: string): React.ReactNode[] {
@@ -29,7 +30,7 @@ function parseInline(text: string): React.ReactNode[] {
   let last = 0, m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) parts.push(text.slice(last, m.index));
-    if (m[2] !== undefined) parts.push(<strong key={m.index} style={{ fontWeight: 600, color: 'var(--accent)' }}>{m[2]}</strong>);
+    if (m[2] !== undefined) parts.push(<span key={m.index}>{m[2]}</span>);
     else if (m[3] !== undefined) parts.push(<em key={m.index} style={{ fontStyle: 'italic' }}>{m[3]}</em>);
     last = m.index + m[0].length;
   }
@@ -52,8 +53,9 @@ function StreamingCursor() {
 export default function ChatView() {
   const { messages, streamingMessage } = useAlterStore();
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
-  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [copiedIdx, setCopiedIdx]     = useState<number | null>(null);
+  const [hoveredIdx, setHoveredIdx]   = useState<number | null>(null);
+  const [showReport, setShowReport]   = useState(false);
 
   const copyMessage = (text: string, idx: number) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -235,24 +237,42 @@ export default function ChatView() {
                 {isUser ? msg.text : renderMarkdown(msg.text)}
               </div>
               {!isUser && (
-                <button
-                  onClick={() => copyMessage(msg.text, i)}
-                  title="Copia messaggio"
-                  style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    padding: '4px', borderRadius: 6, flexShrink: 0,
-                    opacity: isHovered ? 1 : 0,
-                    transition: 'opacity 0.2s ease',
-                    color: isCopied ? '#40e0d0' : 'rgba(255,255,255,0.35)',
-                    display: 'flex', alignItems: 'center',
-                    marginBottom: 2,
-                  }}
-                >
-                  {isCopied
-                    ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                    : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                  }
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', marginBottom: 2 }}>
+                  <button
+                    onClick={() => copyMessage(msg.text, i)}
+                    title="Copia messaggio"
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      padding: '4px', borderRadius: 6, flexShrink: 0,
+                      opacity: isHovered ? 1 : 0,
+                      transition: 'opacity 0.2s ease',
+                      color: isCopied ? '#40e0d0' : 'rgba(255,255,255,0.35)',
+                      display: 'flex', alignItems: 'center',
+                    }}
+                  >
+                    {isCopied
+                      ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    }
+                  </button>
+                  <button
+                    onClick={() => setShowReport(true)}
+                    title="Segnala risposta imprecisa"
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      padding: '4px', borderRadius: 6, flexShrink: 0,
+                      opacity: isHovered ? 1 : 0,
+                      transition: 'opacity 0.2s ease',
+                      color: 'rgba(240,192,64,0.45)',
+                      display: 'flex', alignItems: 'center',
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                  </button>
+                </div>
               )}
             </div>
           );
@@ -285,6 +305,10 @@ export default function ChatView() {
         <style>{`@keyframes blink-cursor { 0%,100% { opacity: 1 } 50% { opacity: 0 } }`}</style>
         <div ref={bottomRef} />
       </div>
+
+      <AnimatePresence>
+        {showReport && <ChatReportModal onClose={() => setShowReport(false)} />}
+      </AnimatePresence>
     </motion.div>
   );
 }

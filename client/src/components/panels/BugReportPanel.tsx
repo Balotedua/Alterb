@@ -192,7 +192,6 @@ export default function BugReportPanel() {
                     ? 'Es. "Ho premuto invia e nulla è successo…"'
                     : 'Es. "Sarebbe utile poter esportare in PDF…"'
                   }
-                  maxLength={600}
                   rows={activeTab === 'improvement' ? 5 : 3}
                   disabled={submitting}
                   style={{
@@ -205,7 +204,7 @@ export default function BugReportPanel() {
                   }}
                 />
                 <div style={{ fontSize: 10, color: 'var(--text-dim)', textAlign: 'right', marginTop: 4, marginBottom: 10 }}>
-                  {description.length}/600
+                  {description.length} caratteri
                 </div>
 
                 {error && <p style={{ fontSize: 11, color: '#f08080', marginBottom: 8, margin: '0 0 8px' }}>{error}</p>}

@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAlterStore } from '../../store/alterStore';
 import type { Theme } from '../../types';
-import { getCategorySummaries, deleteCategory, deleteAllUserData } from '../../vault/vaultService';
+import { getCategorySummaries, deleteCategory, deleteAllUserData, restoreCategory, getDeletedCategories, purgeCategory } from '../../vault/vaultService';
 import { updateDisplayName } from '../../social/nexusService';
-import type { CategorySummary } from '../../vault/vaultService';
+import type { CategorySummary, DeletedCategorySummary } from '../../vault/vaultService';
+import { buildStar, getCategoryMeta } from '../starfield/StarfieldView';
 import AdminPopup from '../admin/AdminPopup';
 import { supabase } from '../../config/supabase';
 import { isGoogleFitConnected, connectGoogleFit, disconnectGoogleFit } from '../../core/wearableSync';
@@ -14,7 +15,7 @@ const THEMES: { id: Theme; label: string; desc: string; preview: string[] }[] = 
     id: 'dark',
     label: 'Deep Space',
     desc: 'Il tema originale. Spazio profondo.',
-    preview: ['#03030a', '#f0c040', '#40e0d0'],
+    preview: ['#05070D', '#C8A84B', '#4BC4B8'],
   },
   {
     id: 'matrix',
@@ -210,17 +211,29 @@ export default function SettingsPanel() {
 }
 
 function DataSection({ userId }: { userId: string | null }) {
-  const [open,         setOpen]         = useState(false);
-  const [summaries,    setSummaries]    = useState<CategorySummary[]>([]);
-  const [confirmCat,   setConfirmCat]   = useState<string | null>(null);
-  const [confirmReset, setConfirmReset] = useState(false);
-  const [resetStep,    setResetStep]    = useState(0); // 0 = idle, 1 = first confirm, 2 = done
-  const [busy,         setBusy]         = useState(false);
+  const [open,           setOpen]           = useState(false);
+  const [summaries,      setSummaries]      = useState<CategorySummary[]>([]);
+  const [confirmCat,     setConfirmCat]     = useState<string | null>(null);
+  const [confirmReset,   setConfirmReset]   = useState(false);
+  const [resetStep,      setResetStep]      = useState(0);
+  const [busy,           setBusy]           = useState(false);
+  const [showRestore,    setShowRestore]    = useState(false);
+  const [deletedCats,    setDeletedCats]    = useState<DeletedCategorySummary[]>([]);
+  const [restoringCat,   setRestoringCat]   = useState<string | null>(null);
+  const [restoredCat,    setRestoredCat]    = useState<string | null>(null);
+  const [confirmPurge,   setConfirmPurge]   = useState<string | null>(null);
+  const [purgingCat,     setPurgingCat]     = useState<string | null>(null);
+  const { upsertStar } = useAlterStore();
 
   useEffect(() => {
     if (!open || !userId) return;
     getCategorySummaries(userId).then(setSummaries);
   }, [open, userId]);
+
+  useEffect(() => {
+    if (!showRestore || !userId) return;
+    getDeletedCategories(userId).then(setDeletedCats);
+  }, [showRestore, userId]);
 
   async function handleDeleteCategory(cat: string) {
     if (!userId) return;
@@ -239,6 +252,32 @@ function DataSection({ userId }: { userId: string | null }) {
     setResetStep(2);
     setBusy(false);
     setTimeout(() => { setResetStep(0); setConfirmReset(false); }, 3000);
+  }
+
+  async function handlePurge(cat: string) {
+    if (!userId) return;
+    setPurgingCat(cat);
+    await purgeCategory(userId, cat);
+    setDeletedCats(prev => prev.filter(d => d.category !== cat));
+    setConfirmPurge(null);
+    setPurgingCat(null);
+  }
+
+  async function handleRestore(cat: string) {
+    if (!userId) return;
+    setRestoringCat(cat);
+    const ok = await restoreCategory(userId, cat);
+    if (ok) {
+      setDeletedCats(prev => prev.filter(d => d.category !== cat));
+      setRestoredCat(cat);
+      // Re-add star to galaxy
+      const entry = await import('../../vault/vaultService').then(m => m.getByCategory(userId, cat, 1));
+      const count = entry.length; // rough — star will refresh on next full load
+      const star = buildStar(cat, count, entry[0]?.created_at ?? new Date().toISOString());
+      upsertStar(star);
+      setTimeout(() => setRestoredCat(null), 2500);
+    }
+    setRestoringCat(null);
   }
 
   if (!userId) return null;
@@ -328,8 +367,140 @@ function DataSection({ userId }: { userId: string | null }) {
         </div>
       )}
 
-      {/* Full reset */}
+      {/* Cestino */}
       <div style={{ marginTop: 12 }}>
+        <button
+          onClick={() => setShowRestore(v => !v)}
+          style={{
+            width: '100%', background: showRestore ? 'rgba(240,80,80,0.06)' : 'none',
+            border: '1px solid rgba(240,80,80,0.3)', borderRadius: 10,
+            padding: '9px 14px', cursor: 'pointer',
+            fontSize: 11.5, fontWeight: 600, letterSpacing: '0.04em',
+            color: 'rgba(240,80,80,0.85)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            transition: 'background 0.2s',
+          }}
+        >
+          <span>🗑 Cestino</span>
+          <span style={{ fontSize: 9.5, opacity: 0.6, fontWeight: 400 }}>eliminati automaticamente dopo 7gg</span>
+        </button>
+        <AnimatePresence initial={false}>
+          {showRestore && (
+            <motion.div
+              key="restore-panel"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              style={{ overflow: 'hidden' }}
+            >
+              <div style={{
+                marginTop: 6,
+                background: 'rgba(240,80,80,0.03)',
+                border: '1px solid rgba(240,80,80,0.1)',
+                borderRadius: 10,
+                padding: '10px',
+                display: 'flex', flexDirection: 'column', gap: 6,
+              }}>
+                {deletedCats.length === 0 ? (
+                  <div style={{ fontSize: 11, color: 'var(--text-dim)', padding: '4px 2px', textAlign: 'center' }}>
+                    Il cestino è vuoto.
+                  </div>
+                ) : (
+                  deletedCats.map(d => {
+                    const meta = getCategoryMeta(d.category);
+                    const daysAgo = Math.floor((Date.now() - new Date(d.deletedAt).getTime()) / 86400000);
+                    const daysLeft = 7 - daysAgo;
+                    const isRestored = restoredCat === d.category;
+                    const isPurging = purgingCat === d.category;
+                    const isConfirmingPurge = confirmPurge === d.category;
+                    return (
+                      <div key={d.category} style={{
+                        background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(240,80,80,0.1)',
+                        borderRadius: 9, padding: '8px 10px',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 14, opacity: 0.65 }}>{meta.icon}</span>
+                            <div>
+                              <span style={{ fontSize: 12, color: 'var(--text)', textTransform: 'capitalize' }}>
+                                {meta.label}
+                              </span>
+                              <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>
+                                {d.count} voci · {daysAgo === 0 ? 'eliminata oggi' : `${daysAgo}g fa`} · scade in {daysLeft}g
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 5 }}>
+                            <button
+                              disabled={restoringCat === d.category || isRestored}
+                              onClick={() => handleRestore(d.category)}
+                              style={{
+                                background: isRestored ? 'rgba(80,200,120,0.15)' : 'rgba(255,255,255,0.06)',
+                                border: `1px solid ${isRestored ? 'rgba(80,200,120,0.35)' : 'rgba(255,255,255,0.12)'}`,
+                                borderRadius: 7, padding: '4px 10px', fontSize: 10.5, fontWeight: 600,
+                                color: isRestored ? '#4ecb71' : 'var(--text-dim)',
+                                cursor: restoringCat === d.category ? 'wait' : 'pointer',
+                                transition: 'all 0.2s',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {isRestored ? '✓' : restoringCat === d.category ? '...' : 'Ripristina'}
+                            </button>
+                            <button
+                              onClick={() => setConfirmPurge(isConfirmingPurge ? null : d.category)}
+                              style={{
+                                background: isConfirmingPurge ? 'rgba(240,80,80,0.18)' : 'none',
+                                border: '1px solid rgba(240,80,80,0.3)',
+                                borderRadius: 7, padding: '4px 8px', fontSize: 10.5,
+                                color: 'rgba(240,80,80,0.8)', cursor: 'pointer',
+                                transition: 'all 0.2s',
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                        <AnimatePresence>
+                          {isConfirmingPurge && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ duration: 0.15 }}
+                              style={{ overflow: 'hidden' }}
+                            >
+                              <div style={{ paddingTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
+                                <span style={{ fontSize: 10.5, color: 'rgba(240,80,80,0.7)', flex: 1 }}>
+                                  Eliminare definitivamente? Azione irreversibile.
+                                </span>
+                                <button
+                                  disabled={isPurging}
+                                  onClick={() => handlePurge(d.category)}
+                                  style={{
+                                    background: 'rgba(240,80,80,0.15)', border: '1px solid rgba(240,80,80,0.4)',
+                                    borderRadius: 7, padding: '4px 10px', fontSize: 10.5, fontWeight: 600,
+                                    color: '#f08080', cursor: 'pointer', whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  {isPurging ? '...' : 'Elimina'}
+                                </button>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Full reset */}
+      <div style={{ marginTop: 8 }}>
         {resetStep === 2 ? (
           <div style={{ fontSize: 11.5, color: '#4ecb71', textAlign: 'center', padding: '8px 0' }}>
             ✓ Vault azzerato.
@@ -344,7 +515,7 @@ function DataSection({ userId }: { userId: string | null }) {
             }}
           >
             <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.7)', marginBottom: 10, lineHeight: 1.5 }}>
-              ⚠️ Cancellare TUTTI i dati del vault? Questa azione è irreversibile.
+              ⚠️ Cancellare TUTTI i dati del vault? Potrai recuperarli entro 7 giorni dalla sezione sopra.
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button

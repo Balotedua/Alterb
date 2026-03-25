@@ -9,13 +9,18 @@ import WorkoutRenderer  from './renderers/WorkoutRenderer';
 import TimelineRenderer from './renderers/TimelineRenderer';
 import { HealthChart, NumericChart }   from './renderers/HealthRenderer';
 import { MoodChart, DiaryList }        from './renderers/MoodRenderer';
-import { NebulaInsight, NexusView }    from './renderers/InsightRenderer';
+import { NexusView }    from './renderers/InsightRenderer';
 import DocumentRenderer, { DocDownloadList, GenericList } from './renderers/DocRenderer';
+import CodexRenderer from './renderers/CodexRenderer';
+import CoherenceRenderer from './renderers/CoherenceRenderer';
+import VoidRenderer from './renderers/VoidRenderer';
 
 // ─── Render type inference ────────────────────────────────────
 export function inferRenderType(entries: VaultEntry[], category?: string): RenderType {
   if (category === 'calendar' || (!entries.length && category === 'calendar')) return 'timeline';
   if (category === 'documents') return 'doc_download';
+  if (category === 'chronicle') return 'codex';
+  if (category === 'notes') return 'void';
   if (!entries.length) {
     if (category === 'finance') return 'finance';
     if (category === 'health') return 'chart';
@@ -56,41 +61,46 @@ export default function PolymorphicWidget() {
       <AnimatePresence>
         {activeWidget && (
           <motion.div
-            key="widget"
+            key={`widget-${activeWidget.category}-${activeWidget.subTab ?? ''}`}
             initial={{ clipPath: 'circle(0% at 50% 50%)', opacity: 0, x: '-50%', y: '-50%' }}
             animate={{ clipPath: 'circle(150% at 50% 50%)', opacity: 1, x: '-50%', y: '-50%' }}
             exit={{   clipPath: 'circle(0% at 50% 50%)', opacity: 0, x: '-50%', y: '-50%' }}
             transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
             style={{
               position: 'fixed', top: '50%', left: '50%',
-              width: 'min(500px, calc(100vw - 16px))',
+              width: activeWidget.renderType === 'codex' ? 'min(560px, calc(100vw - 24px))' : 'min(500px, calc(100vw - 24px))',
               maxHeight: 'min(72vh, calc(100svh - 80px))',
               overflowY: 'auto',
               WebkitOverflowScrolling: 'touch' as never,
-              background: 'rgba(6,6,8,0.92)',
+              background: 'rgba(5,7,16,0.92)',
               border: '1px solid rgba(255,255,255,0.07)',
-              borderRadius: 4,
-              padding: '20px 20px 16px',
-              backdropFilter: 'blur(40px)',
-              WebkitBackdropFilter: 'blur(40px)',
+              borderRadius: 20,
+              padding: '22px 22px 18px',
+              backdropFilter: 'blur(48px)',
+              WebkitBackdropFilter: 'blur(48px)',
               zIndex: 100,
-              boxShadow: '0 24px 60px rgba(0,0,0,0.9)',
+              boxShadow: '0 32px 80px rgba(0,0,0,0.85), 0 0 0 0.5px rgba(255,255,255,0.04) inset',
             }}
           >
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 18, gap: 10 }}>
-              <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'rgba(255,255,255,0.5)', flexShrink: 0 }} />
-              <span style={{ fontSize: 10, fontWeight: 400, color: 'rgba(255,255,255,0.45)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20, gap: 10 }}>
+              <div style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: activeWidget.color,
+                boxShadow: `0 0 8px ${activeWidget.color}80`,
+                flexShrink: 0,
+              }} />
+              <span style={{ fontSize: 10, fontWeight: 500, color: 'rgba(240,238,248,0.5)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
                 {activeWidget.label}
               </span>
-              <span style={{ marginLeft: 'auto', fontSize: 10, color: 'rgba(255,255,255,0.15)', letterSpacing: '0.05em' }}>
+              <span style={{ marginLeft: 'auto', fontSize: 10, color: 'rgba(255,255,255,0.14)', letterSpacing: '0.04em', fontFamily: "'Space Mono', monospace" }}>
                 {activeWidget.entries.length}
               </span>
               <button
                 onClick={() => setActiveWidget(null)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2e3347', padding: 4, transition: 'color 0.2s', display: 'flex', alignItems: 'center' }}
-                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = '#6b7280')}
-                onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = '#2e3347')}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.18)', padding: 4, marginLeft: 4, transition: 'color 0.2s', display: 'flex', alignItems: 'center', borderRadius: 6 }}
+                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.65)')}
+                onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.18)')}
               >
                 <X size={13} />
               </button>
@@ -99,8 +109,11 @@ export default function PolymorphicWidget() {
             {/* Body — polymorphic switch */}
             {activeWidget.renderType === 'doc_download'
             ? <DocumentRenderer  entries={activeWidget.entries} color={activeWidget.color} />
+            : activeWidget.renderType === 'codex'        ? <CodexRenderer     entries={activeWidget.entries} color={activeWidget.color} />
+            : activeWidget.renderType === 'coherence'    ? <CoherenceRenderer entries={activeWidget.entries} color={activeWidget.color} />
+            : activeWidget.renderType === 'void'         ? <VoidRenderer      entries={activeWidget.entries} color={activeWidget.color} />
             : activeWidget.entries.length === 0 ? (
-              <p style={{ color: '#2e3347', fontSize: 12, textAlign: 'center', padding: '24px 0', letterSpacing: '0.05em' }}>
+              <p style={{ color: 'rgba(255,255,255,0.22)', fontSize: 12, textAlign: 'center', padding: '24px 0', letterSpacing: '0.05em' }}>
                 Nessun dato ancora.
               </p>
             ) : activeWidget.renderType === 'finance'      ? <FinanceRenderer   entries={activeWidget.entries} color={activeWidget.color} initialTab={activeWidget.subTab} />
@@ -110,7 +123,6 @@ export default function PolymorphicWidget() {
             : activeWidget.renderType === 'mood'         ? <MoodChart         entries={activeWidget.entries} color={activeWidget.color} />
             : activeWidget.renderType === 'diary'        ? <DiaryList         entries={activeWidget.entries} color={activeWidget.color} />
             : activeWidget.renderType === 'timeline'     ? <TimelineRenderer  entries={activeWidget.entries} color={activeWidget.color} />
-            : activeWidget.renderType === 'insight'      ? <NebulaInsight     entries={activeWidget.entries} color={activeWidget.color} />
             : activeWidget.renderType === 'nexus'        ? <NexusView         entries={activeWidget.entries} />
             : <GenericList entries={activeWidget.entries} color={activeWidget.color} />}
           </motion.div>

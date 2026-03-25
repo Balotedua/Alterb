@@ -1,0 +1,5 @@
+async function r(i){const n="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";try{const t=await fetch("https://api.tavily.com/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({api_key:n,query:i,max_results:5,search_depth:"basic",include_answer:!0})});if(!t.ok)return null;const e=await t.json(),s=[];e.answer&&s.push({title:"Risposta diretta",snippet:e.answer});for(const a of(e.results??[]).slice(0,4))s.push({title:a.title??"",snippet:a.content??"",url:a.url});return s.length>0?s:null}catch{return null}}async function c(i){try{const n=await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(i)}&format=json&no_html=1&skip_disambig=1`);if(!n.ok)return null;const t=await n.json(),e=[];t.Abstract&&e.push({title:t.Heading||i,snippet:t.Abstract,url:t.AbstractURL});for(const s of(t.RelatedTopics??[]).slice(0,4))s.Text&&e.push({title:s.Text.split(" - ")[0],snippet:s.Text});return e.length>0?e:null}catch{return null}}async function o(i){const n=await r(i)??await c(i);return!n||n.length===0?null:n.map(t=>`**${t.title}**
+${t.snippet}${t.url?`
+↗ ${t.url}`:""}`).join(`
+
+`)}export{o as webSearch};

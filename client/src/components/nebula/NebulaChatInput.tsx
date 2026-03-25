@@ -8,7 +8,8 @@ import type { BankTransaction } from '../../import/bankCsvImport';
 import { extractDocument, isDocumentFile } from '../../import/documentOcr';
 import { quickConnect } from '../../core/insightEngine';
 import { saveEntry, getByCategory, queryCalendarByDate, getRecentAll, deleteCategory, deleteByCategoryAndDateRange, deleteAllUserData, saveChatSession, updateChatSession } from '../../vault/vaultService';
-import { aiQuery, analyzeGalaxy, aiChat, aiChatAndExtract, aiNexusNarrative, aiCapability, aiChatStream, aiChatAndExtractStream } from '../../core/aiParser';
+import { aiQuery, aiChat, aiChatAndExtract, aiNexusNarrative, aiCapability, aiChatStream, aiChatAndExtractStream } from '../../core/aiParser';
+import { validateEntry } from '../../core/l3Validator';
 import { buildStar, getCategoryMeta, starPosition } from '../starfield/StarfieldView';
 import { useAlterStore } from '../../store/alterStore';
 
@@ -26,6 +27,7 @@ const HINTS = [
   '50€ abbonamento palestra...',
   'Ricordami tra 10 minuti di chiamare Marco...',
   'Perché sono sempre stanco?',
+  'Audit di coerenza...',
   'Ricordami tra 1 ora di prendere le medicine...',
 ];
 
@@ -277,8 +279,11 @@ export default function NebulaCore() {
       const sizeNote  = sizeSaved > 5 ? ` · −${sizeSaved}%` : '';
       const subjectNote = classification.main_subject ? ` · ${classification.main_subject}` : '';
       const valueNote   = classification.value ? ` · €${classification.value}` : '';
-      const reply = `📄 ${classification.docTypeLabel}${subjectNote}${valueNote}${sizeNote}`;
-      setLastReply(reply); addMessage('nebula', reply);
+      const summaryLine = classification.summary && classification.summary !== classification.docTypeLabel
+        ? `\n${classification.summary}` : '';
+      const reply = `📄 ${classification.docTypeLabel}${subjectNote}${valueNote}${sizeNote}${summaryLine}`;
+      setLastReply(`📄 ${classification.docTypeLabel}${subjectNote}${valueNote}${sizeNote}`);
+      addMessage('nebula', reply);
 
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Errore caricamento documento.';
@@ -301,9 +306,10 @@ export default function NebulaCore() {
     setLastReply(null);
 
     // If answering a pending clarification, merge original phrase + amount
+    const wasClarification = pendingClarification !== null && overrideText === undefined;
     let processText = text;
-    if (pendingClarification && overrideText === undefined) {
-      processText = `${pendingClarification.originalText} ${text}`;
+    if (wasClarification) {
+      processText = `${pendingClarification!.originalText} ${text}`;
       setPendingClarification(null);
     }
 
@@ -319,9 +325,15 @@ export default function NebulaCore() {
         setLastReply(msg); addMessage('nebula', msg);
 
       } else if (action.type === 'clarify') {
-        const msg = 'Quanto hai speso?';
-        setPendingClarification({ originalText: action.raw });
-        setLastReply(msg); addMessage('nebula', msg);
+        if (wasClarification) {
+          // User answered the clarification but still no amount — don't loop, give up
+          const msg = 'Digita l\'importo (es. "15€") e ti registro la spesa.';
+          setLastReply(msg); addMessage('nebula', msg);
+        } else {
+          const msg = 'Quanto hai speso?';
+          setPendingClarification({ originalText: action.raw });
+          setLastReply(msg); addMessage('nebula', msg);
+        }
 
       } else if (action.type === 'capability') {
         const msg = await aiCapability(action.raw, messages);
@@ -375,6 +387,18 @@ export default function NebulaCore() {
           } else {
             const reply = `✦ ${meta.icon} Registrato in ${meta.label}`;
             setLastReply(reply); addMessage('nebula', reply);
+          }
+
+          // ── L3 Validator: anomaly detection vs vault history ──
+          if (['finance', 'health'].includes(intent.category)) {
+            getByCategory(user.id, intent.category, 30).then(history => {
+              const alert = validateEntry(intent.category, intent.data as Record<string, unknown>, history);
+              if (alert) {
+                setTimeout(() => {
+                  addMessage('nebula', alert.message);
+                }, 1200);
+              }
+            });
           }
 
           // ── Big Bang: proactive follow-up on first entry ──
@@ -536,17 +560,6 @@ export default function NebulaCore() {
           }
         }
 
-      } else if (action.type === 'analyse') {
-        const entries = await getRecentAll(user.id, 30);
-        const insight = await analyzeGalaxy(entries);
-        addMessage('nebula', insight);
-        setLastReply('✦ Nebula Insight');
-        setActiveWidget({
-          category: 'insight', label: 'Nebula Insight', color: '#ffffff',
-          entries: [{ id: 'insight', user_id: user.id, category: 'insight', data: { insight }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }],
-          renderType: 'insight',
-        });
-
       } else if (action.type === 'nexus') {
         const { catA, catB } = action;
         // Free-form nexus: "Perché sono stanco?" — no explicit categories given
@@ -560,12 +573,6 @@ export default function NebulaCore() {
             const narrative = await aiNexusNarrative(text, entries);
             addMessage('nebula', narrative);
             setLastReply('✦ Nexus');
-            setActiveWidget({
-              category: 'insight', label: '✦ Nexus Analysis', color: '#a78bfa',
-              entries: [{ id: 'nexus-ai', user_id: user.id, category: 'insight',
-                data: { insight: narrative }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }],
-              renderType: 'insight',
-            });
           }
         } else {
           // Both catA and catB are strings here (catB checked above, catA may still be null → fallback)
@@ -698,9 +705,53 @@ export default function NebulaCore() {
         setLastReply(reply.length > 80 ? reply.slice(0, 77) + '…' : reply);
         addMessage('nebula', reply);
 
+      } else if (action.type === 'coherence_audit') {
+        const { generateCoherenceAudit } = await import('../../core/insightEngine');
+        addMessage('nebula', '🔍 Sto analizzando i tuoi dati degli ultimi 90 giorni...');
+        const report = await generateCoherenceAudit(user.id);
+        if (!report) {
+          const err = 'Non ho ancora abbastanza dati per fare un audit di coerenza. Continua a tracciare le tue giornate!';
+          setLastReply(err); addMessage('nebula', err);
+        } else {
+          const color = report.score >= 70 ? '#40e0d0' : report.score >= 45 ? '#f0c040' : '#f08080';
+          setActiveWidget({
+            category:   'insight',
+            label:      'Audit di Coerenza',
+            color,
+            entries:    [{ id: 'coherence', user_id: user.id, category: 'insight', data: report as unknown as Record<string, unknown>, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }],
+            renderType: 'coherence',
+          });
+          const intro = report.score >= 70
+            ? `✦ Punteggio di coerenza: ${report.score}/100. Stai camminando nella direzione giusta.`
+            : report.score >= 45
+            ? `✦ Punteggio di coerenza: ${report.score}/100. Ci sono alcune tensioni da guardare insieme.`
+            : `✦ Punteggio di coerenza: ${report.score}/100. Ho trovato delle contraddizioni importanti — ma insieme possiamo lavorarci.`;
+          setLastReply(intro); addMessage('nebula', intro);
+        }
+
+      } else if (action.type === 'codex') {
+        const { getChronicles } = await import('../../vault/vaultService');
+        const chronicles = await getChronicles(user.id);
+        const meta = getCategoryMeta('chronicle');
+        setActiveWidget({
+          category:   'chronicle',
+          label:      'Il Codex Galattico',
+          color:      meta.color,
+          entries:    chronicles,
+          renderType: 'codex',
+        });
+        const reply = chronicles.length === 0
+          ? '📖 Il tuo Codex Galattico è pronto. Genera il primo capitolo.'
+          : `📖 ${chronicles.length} capitol${chronicles.length === 1 ? 'o' : 'i'} scritti. Il nostro viaggio continua.`;
+        setLastReply(reply); addMessage('nebula', reply);
+
       } else {
         // Chatbot-first: AI replies and optionally extracts data in one call (streaming)
-        const result = await aiChatAndExtractStream(text, (chunk) => setStreamingMessage(chunk), messages);
+        const starsForFallback = useAlterStore.getState().stars;
+        const fallbackVaultContext = starsForFallback.length > 0
+          ? starsForFallback.map(s => `${s.icon} ${s.label}: ${s.entryCount} voci, ultima: ${s.lastEntry ? new Date(s.lastEntry).toLocaleDateString('it-IT') : 'n/d'}`).join('\n')
+          : undefined;
+        const result = await aiChatAndExtractStream(text, (chunk) => setStreamingMessage(chunk), messages, fallbackVaultContext);
         setStreamingMessage(null);
         const display = result.reply.length > 80 ? result.reply.slice(0, 77) + '…' : result.reply;
         setLastReply(display);

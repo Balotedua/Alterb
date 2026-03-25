@@ -1,4 +1,4 @@
-import type { CategoryMeta, ParsedIntent } from '../types';
+import type { CategoryMeta, ParsedIntent, VaultEntry } from '../types';
 import { supabase } from '../config/supabase';
 
 // ─── Global rate limiter (Supabase-backed) ────────────────────
@@ -261,16 +261,16 @@ export async function aiChatStream(
 
 Quando l'utente condivide qualcosa o fa una domanda, rispondi come farebbe un amico che ci tiene davvero — non come un assistente virtuale. Sii spontaneo, reattivo, presente.
 
-Regola fondamentale sul vault: usa i dati personali SOLO se sono direttamente pertinenti. Se parla di argomenti esterni — rispondi da amico curioso, non da analista.
-
 Regole:
 - Rispondi in italiano, tono da amico — non da chatbot
 - Mai iniziare con "Certo!", "Perfetto!", "Ottimo!" da soli — sono vuoti
 - 2-4 frasi: sii presente senza essere prolisso
-- Se l'utente fa una domanda generica su sé stesso (es. "tu che mi dici di me?", "come sto?") e hai il contesto vault — usalo subito per dire qualcosa di concreto e personale, non restare vago`;
+- MAI fare domande casuali o disconnesse dalla vita dell'utente (es. "quale superpotere sceglieresti?"). Se devi fare una domanda, che sia concreta e legata ai suoi dati o alla conversazione corrente
+- Se l'utente dice "dimmi qualcosa / chiedimi qualcosa / fai qualcosa" e hai il contesto vault, usa le sue categorie reali per proporre qualcosa di pertinente (es. "Ho visto che hai X voci in finanza — vuoi un'analisi delle spese?"). Se non hai il contesto, chiedi cosa vuole tracciare o cosa sta pensando — mai domande filosofiche a caso
+- Se l'utente fa una domanda su sé stesso e hai il contesto vault — usalo subito, cita dati reali (conteggi, categorie, date), non restare vago`;
 
   let systemContent = vaultContext
-    ? `${systemBase}\n\nIMPORTANTE: Sei un amico di lunga data, non al primo incontro. Mai frasi come "benvenuto", "sono Nebula". Conosci già questa persona.\n\nSe ti chiede qualcosa su di sé in modo generico, DEVI usare il contesto sotto per rispondere in modo personale e specifico — cita categorie reali, date, conteggi. Non essere vago quando hai informazioni.\n\n⚠️ ANTI-ALLUCINAZIONE: Il contesto mostra SOLO categorie, conteggi e date — NON il contenuto delle singole voci. Non inventare importi, note o eventi specifici. Per dati dettagliati suggerisci "mostrami [categoria]".\n\n📊 Galassia personale:\n${vaultContext}`
+    ? `${systemBase}\n\nIMPORTANTE: Sei un amico di lunga data, non al primo incontro. Mai frasi come "benvenuto", "sono Nebula". Conosci già questa persona.\n\nSe ti chiede qualcosa su di sé in modo generico, DEVI usare il contesto sotto per rispondere in modo personale e specifico — cita categorie reali, date, conteggi. Non essere vago quando hai informazioni.\n\n⛔ ANTI-ALLUCINAZIONE (ASSOLUTA): Il contesto mostra SOLO categorie, conteggi e date — NON il contenuto delle singole voci. VIETATO inventare o elencare importi specifici, nomi di negozi/persone, date di transazioni, note o qualsiasi dato dettagliato. Se l'utente vuole i dettagli, di' SOLO: 'Digita "mostrami [categoria]" per vedere i dati reali.' Non fare esempi, non simulare, non usare cifre inventate.\n\n📊 Galassia personale (solo conteggi e date):\n${vaultContext}`
     : systemBase;
 
   if (webContext) {
@@ -297,10 +297,14 @@ Regole:
 export async function aiChatAndExtractStream(
   text: string,
   onReplyChunk: (replyText: string) => void,
-  history: ChatHistoryEntry[] = []
+  history: ChatHistoryEntry[] = [],
+  vaultContext?: string
 ): Promise<ChatAndExtractResult> {
   const fallback = (): ChatAndExtractResult => ({ reply: 'Sono qui. Dimmi pure.', extractions: [] });
-  const msgs = [{ role: 'system', content: SYSTEM_COMBINED }, ...buildHistory(history), { role: 'user', content: text }];
+  const systemContent = vaultContext
+    ? `${SYSTEM_COMBINED}\n\n⛔ ANTI-ALLUCINAZIONE (ASSOLUTA): Hai SOLO conteggi e date per categoria — NON il contenuto delle singole voci. VIETATO inventare note, importi, nomi, idee specifiche. Se l'utente chiede il contenuto dettagliato, rispondi SOLO: 'Digita "mostrami [categoria]" per vedere i dati reali.'\n\n📊 Galassia personale (solo conteggi e date):\n${vaultContext}`
+    : SYSTEM_COMBINED;
+  const msgs = [{ role: 'system', content: systemContent }, ...buildHistory(history), { role: 'user', content: text }];
 
   // Try Gemini first with streaming
   const useGemini = await canUseGemini();
@@ -359,6 +363,7 @@ export interface DocumentClassification {
   docTypeLabel: string;   // human-readable Italian label
   main_subject: string | null;   // issuer / company / hospital / etc.
   doc_date: string | null;       // ISO YYYY-MM-DD
+  expiry_date: string | null;    // ISO YYYY-MM-DD — data di scadenza (CI, patente, polizza, garanzia, contratto…)
   value: number | null;          // main monetary amount in €
   summary: string;               // one-sentence Italian summary
   tags: string[];                // 2–4 searchable keywords
@@ -395,7 +400,15 @@ export async function classifyDocument(text: string): Promise<DocumentClassifica
     const amountMatch = text.match(/(?:totale|importo|netto|da\s+pagare|saldo)[^\d]*(\d+[,.]?\d*)\s*[€e]|(\d+[,.]?\d*)\s*€/i);
     const value = amountMatch ? parseFloat((amountMatch[1] ?? amountMatch[2]).replace(',', '.')) : null;
     const issuerMatch = text.match(/\b(Enel|Eni|Snam|Hera|Edison|A2A|Iren|Tim|Vodafone|Fastweb|Wind|Tre|Poste|UniCredit|Intesa|BNL|Fineco|INPS|Agenzia\s*Entrate)\b/i);
-    return { docType, docTypeLabel, main_subject: issuerMatch?.[1] ?? null, doc_date: null, value, summary: docTypeLabel, tags: [docType] };
+    // Regex expiry date fallback: "scade il DD/MM/YYYY", "valida fino al", "data scadenza", "scadenza: DD/MM/YYYY"
+    let expiry_date: string | null = null;
+    const expM = text.match(/(?:scade?\s+(?:il|al|il\s+giorno)?|valida?\s+fino\s+al|scadenza[:\s]+|valid\s+until[:\s]+)\s*(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/i);
+    if (expM) {
+      const [, dd, mm, yy] = expM;
+      const yyyy = yy.length === 2 ? `20${yy}` : yy;
+      expiry_date = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+    }
+    return { docType, docTypeLabel, main_subject: issuerMatch?.[1] ?? null, doc_date: null, expiry_date, value, summary: docTypeLabel, tags: [docType] };
   };
 
   const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
@@ -410,8 +423,9 @@ export async function classifyDocument(text: string): Promise<DocumentClassifica
   "docTypeLabel": nome in italiano (es. "Busta paga"),
   "main_subject": ente o azienda emittente (stringa o null),
   "doc_date": data documento ISO YYYY-MM-DD (o null),
+  "expiry_date": data di SCADENZA ISO YYYY-MM-DD (o null) — cerca "scade il", "valida fino al", "data scadenza", "scadenza polizza", "valid until", garanzie con durata. Per CI/passaporto/patente estrai la data di scadenza esplicita. Per polizze assicurative la data fine copertura. Per contratti la data fine. Per garanzie prodotto la data fine garanzia. Se non c'è una scadenza esplicita → null.
   "value": importo numerico principale in euro (o null),
-  "summary": riassunto in 1 frase in italiano,
+  "summary": riassunto in 1 frase in italiano (includi la scadenza se trovata),
   "tags": array di 2-4 parole chiave utili per ricerche future
 }`,
     },
@@ -428,6 +442,7 @@ export async function classifyDocument(text: string): Promise<DocumentClassifica
       docTypeLabel: parsed.docTypeLabel ?? 'Documento',
       main_subject: parsed.main_subject ?? null,
       doc_date:     parsed.doc_date     ?? null,
+      expiry_date:  parsed.expiry_date  ?? null,
       value:        typeof parsed.value === 'number' ? parsed.value : null,
       summary:      parsed.summary      ?? '',
       tags:         Array.isArray(parsed.tags) ? parsed.tags : [],
@@ -473,16 +488,16 @@ export async function aiChat(text: string, history: ChatHistoryEntry[] = [], vau
 
 Quando l'utente condivide qualcosa o fa una domanda, rispondi come farebbe un amico che ci tiene davvero — non come un assistente virtuale. Sii spontaneo, reattivo, presente.
 
-Regola fondamentale sul vault: usa i dati personali SOLO se sono direttamente pertinenti. Se parla di argomenti esterni — rispondi da amico curioso, non da analista.
-
 Regole:
 - Rispondi in italiano, tono da amico — non da chatbot
 - Mai iniziare con "Certo!", "Perfetto!", "Ottimo!" da soli — sono vuoti
 - 2-4 frasi: sii presente senza essere prolisso
-- Se l'utente fa una domanda generica su sé stesso (es. "tu che mi dici di me?", "come sto?") e hai il contesto vault — usalo subito per dire qualcosa di concreto e personale, non restare vago`;
+- MAI fare domande casuali o disconnesse dalla vita dell'utente (es. "quale superpotere sceglieresti?"). Se devi fare una domanda, che sia concreta e legata ai suoi dati o alla conversazione
+- Se l'utente dice "dimmi qualcosa / chiedimi qualcosa / fai qualcosa" e hai il contesto vault, usa le sue categorie reali per proporre qualcosa di pertinente. Se non hai il contesto, chiedi cosa vuole tracciare — mai domande filosofiche a caso
+- Se l'utente fa una domanda su sé stesso e hai il contesto vault — usalo subito, cita dati reali, non restare vago`;
 
   const systemContent = vaultContext
-    ? `${systemBase}\n\nIMPORTANTE: Sei un amico di lunga data, non al primo incontro. Mai frasi come "benvenuto", "sono Nebula". Conosci già questa persona.\n\nSe ti chiede qualcosa su di sé in modo generico, DEVI usare il contesto sotto per rispondere in modo personale e specifico — cita categorie reali, date, conteggi. Non essere vago quando hai informazioni.\n\n⚠️ ANTI-ALLUCINAZIONE: Il contesto mostra SOLO categorie, conteggi e date — NON il contenuto delle singole voci. Non inventare importi, note o eventi specifici. Per dati dettagliati suggerisci "mostrami [categoria]".\n\n📊 Galassia personale:\n${vaultContext}`
+    ? `${systemBase}\n\nIMPORTANTE: Sei un amico di lunga data, non al primo incontro. Mai frasi come "benvenuto", "sono Nebula". Conosci già questa persona.\n\nSe ti chiede qualcosa su di sé in modo generico, DEVI usare il contesto sotto per rispondere in modo personale e specifico — cita categorie reali, date, conteggi. Non essere vago quando hai informazioni.\n\n⛔ ANTI-ALLUCINAZIONE (ASSOLUTA): Il contesto mostra SOLO categorie, conteggi e date — NON il contenuto delle singole voci. VIETATO inventare o elencare importi specifici, nomi di negozi/persone, date di transazioni, note o qualsiasi dato dettagliato. Se l'utente vuole i dettagli, di' SOLO: 'Digita "mostrami [categoria]" per vedere i dati reali.' Non fare esempi, non simulare, non usare cifre inventate.\n\n📊 Galassia personale (solo conteggi e date):\n${vaultContext}`
     : systemBase;
 
   const reply = await aiChat_router([
@@ -612,7 +627,7 @@ Capacità di Alter OS (usale se l'utente fa domande sul funzionamento):
 - Comandi: "mostrami documenti", "analizza", "correlazione tra X e Y", "cancella X"
 
 Per ogni messaggio fai DUE cose contemporaneamente:
-1. RISPOSTA DA AMICO: reagisci in modo genuino a ciò che l'utente ha condiviso. Se parla di vita sua (spese, sport, umore), cita il dato specifico. Se parla di argomenti esterni (notizie, politica, opinioni, cultura), rispondi da amico curioso e coinvolgente — NON tirare in ballo i suoi dati personali quando non c'entrano nulla. Puoi usare 2-4 frasi. Non iniziare con "Certo!", "Perfetto!" da soli.
+1. RISPOSTA DA AMICO: reagisci in modo genuino a ciò che l'utente ha condiviso. Se parla di vita sua (spese, sport, umore), cita il dato specifico. Se parla di argomenti esterni (notizie, politica, opinioni, cultura), rispondi da amico curioso e coinvolgente — NON tirare in ballo i suoi dati personali quando non c'entrano nulla. Puoi usare 2-4 frasi. Non iniziare con "Certo!", "Perfetto!" da soli. MAI fare domande casuali non correlate alla vita dell'utente (es. "quale superpotere?") — se devi stimolare, chiedi qualcosa di concreto legato alla conversazione.
 2. ESTRAZIONE DATI: analizza se il testo contiene informazioni da archiviare. Un messaggio può generare estrazioni in PIÙ categorie simultaneamente.
 
 Galassie disponibili:
@@ -626,7 +641,9 @@ Galassie disponibili:
 
 Se non ci sono dati da archiviare, "extractions" deve essere [].
 
-REGOLA CRITICA: estrai dati SOLO dal messaggio CORRENTE dell'utente. NON ri-estrarre informazioni già menzionate nei messaggi precedenti della conversazione. Se l'utente sta solo rispondendo a una domanda o continuando una conversazione senza aggiungere nuovi dati, "extractions" deve essere [].
+REGOLA CRITICA — ESTRAZIONE: estrai dati SOLO dal messaggio CORRENTE dell'utente. NON ri-estrarre informazioni già menzionate nei messaggi precedenti della conversazione. Se l'utente sta solo rispondendo a una domanda o continuando una conversazione senza aggiungere nuovi dati, "extractions" deve essere [].
+
+⛔ REGOLA ASSOLUTA — ANTI-ALLUCINAZIONE: Non hai accesso al contenuto reale del vault dell'utente (transazioni, importi, nomi, note). NON inventare MAI dati specifici: niente liste di spese, niente importi, niente nomi di negozi, niente date di movimenti. Se l'utente chiede di vedere le sue spese/transazioni/dati recenti, rispondi SOLO con: 'Digita "mostrami finanze" (o la categoria) per vedere i tuoi dati reali — non ho i dettagli qui.' Non simulare, non esemplificare, non dire "per esempio".
 
 Rispondi SOLO con JSON valido:
 {
@@ -692,5 +709,125 @@ export async function aiParse(text: string): Promise<Omit<ParsedIntent, 'source'
   } catch (e) {
     console.error('[aiParser]', e);
     return null;
+  }
+}
+
+// ─── Chronicle generator — Codex Galattico ────────────────────
+export async function generateChronicle(
+  recentEntries: VaultEntry[],
+  chapterNumber: number,
+  username: string,
+  previousChaptersText: string,
+  generateIdentitySnapshot: boolean,
+  chapterDate?: string
+): Promise<{
+  text: string;
+  page1?: { title: string; text: string };
+  page2?: { title: string; text: string };
+  shadow_insight?: { finding: string; categories: string[]; advice: string } | null;
+  chapter_type?: 'daily' | 'weekly' | 'monthly';
+  insights: string[];
+  energy: 'low' | 'mid' | 'high';
+  stats: Record<string, unknown>;
+  identity_snapshot?: Record<string, unknown>;
+}> {
+  const fallback = () => ({
+    text: 'Stiamo raccogliendo dati sufficienti per scrivere questo capitolo. Continua a registrare la tua vita.',
+    insights: [],
+    energy: 'mid' as const,
+    stats: {},
+  });
+
+  // Detect chapter type from date
+  const date = chapterDate ? new Date(chapterDate) : new Date();
+  const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  const isMonthly = date.getDate() === lastDayOfMonth;
+  const isWeekly  = !isMonthly && date.getDay() === 0; // Sunday
+  const chapterType: 'daily' | 'weekly' | 'monthly' = isMonthly ? 'monthly' : isWeekly ? 'weekly' : 'daily';
+
+  const typeLabel = chapterType === 'monthly' ? 'RIEPILOGO MENSILE'
+    : chapterType === 'weekly' ? 'RIEPILOGO SETTIMANALE'
+    : 'LOG GIORNALIERO';
+
+  const p1Label = chapterType === 'monthly' ? 'Il Mese Analizzato'
+    : chapterType === 'weekly' ? 'Fotografia della Settimana'
+    : 'Log di Bordo';
+
+  const p2Label = chapterType === 'monthly' ? 'Chi Stai Diventando'
+    : chapterType === 'weekly' ? 'Pattern & Trend'
+    : 'Analisi di Rotta';
+
+  const scopeLabel = chapterType === 'monthly' ? 'ultimi 30 giorni'
+    : chapterType === 'weekly' ? 'ultimi 7 giorni'
+    : 'ultime 24-48 ore';
+
+  // Raggruppa per categoria
+  const groups: Record<string, unknown[]> = {};
+  for (const e of recentEntries) {
+    if (!groups[e.category]) groups[e.category] = [];
+    groups[e.category].push(e.data);
+  }
+  const dataContext = Object.entries(groups)
+    .map(([cat, items]) => `[${cat}] ${items.length} voci: ${JSON.stringify(items.slice(0, chapterType === 'daily' ? 3 : 6))}`)
+    .join('\n');
+
+  const identityBlock = generateIdentitySnapshot
+    ? `\nATTENZIONE: Questo è il TRENTESIMO capitolo. Aggiungi "identity_snapshot" con:\n- "profile": 3-4 frasi su chi è ${username} basate su 30 capitoli\n- "vices": lista 2-3 debolezze/vizi emersi\n- "passions": lista 2-3 passioni/punti di forza\n- "psychological_note": 1 frase di osservazione psicologica`
+    : '';
+
+  const prevBlock = previousChaptersText
+    ? `\nUltimi capitoli scritti:\n${previousChaptersText}`
+    : '';
+
+  const system = `Sei Alter, il sistema di intelligenza del Codex Galattico di ${username}. Stai scrivendo il Capitolo ${chapterNumber} — ${typeLabel}.
+Lingua: italiano. Scope temporale: ${scopeLabel}.
+
+STILE: Diario di bordo scientifico. Prima persona plurale ("abbiamo rilevato", "la rotta mostra", "i dati confermano"). Analitico e preciso sui numeri reali. Empatico senza essere sentimentale. Diretto senza essere freddo. MAI drammatizzare o usare metafore spaziali gratuite.
+
+PAGINA I — "${p1Label}": Log fattuale. Cosa è successo. Dati reali con numeri specifici (importi, ore, ripetizioni, valori). 3-4 frasi. Tono: preciso, osservativo.
+
+PAGINA II — "${p2Label}": Analisi. Pattern trasversali tra domini diversi. ${chapterType === 'monthly' ? 'Riflessione su tendenze del mese e su chi sta diventando questa persona.' : 'Cerca connessioni non ovvie tra categorie diverse.'} 2-3 frasi. Tono: analitico ma comprensivo.
+
+SHADOW INSIGHT: Cerca UNA correlazione cross-dominio concreta basata sui dati reali (esempi: spesa elevata → qualità sonno peggiore → più fast food; bollette → stress → umore basso; allenamento regolare → produttività → umore migliore). Deve citare numeri o date reali dall'archivio. Se non ci sono pattern sufficienti, metti null.
+
+Rispondi SOLO con JSON valido (no markdown):
+{
+  "chapter_type": "${chapterType}",
+  "page1": { "title": "${p1Label}", "text": "..." },
+  "page2": { "title": "${p2Label}", "text": "..." },
+  "shadow_insight": { "finding": "...", "categories": ["cat1","cat2"], "advice": "..." } | null,
+  "insights": ["nota breve 1", "nota breve 2"],
+  "energy": "high|mid|low",
+  "stats": { "categories_active": <N>, "total_entries_analyzed": <N> }${generateIdentitySnapshot ? ',\n  "identity_snapshot": { "profile": "...", "vices": [...], "passions": [...], "psychological_note": "..." }' : ''}
+}${identityBlock}`;
+
+  const raw = await aiChat_router([
+    { role: 'system', content: system },
+    { role: 'user', content: `Dati vault (${scopeLabel}):\n${dataContext}${prevBlock}` },
+  ], 1100);
+
+  if (!raw) return fallback();
+  try {
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return fallback();
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    const page1 = parsed.page1 && typeof parsed.page1.text === 'string' ? parsed.page1 as { title: string; text: string } : undefined;
+    const page2 = parsed.page2 && typeof parsed.page2.text === 'string' ? parsed.page2 as { title: string; text: string } : undefined;
+    const fallbackText = page1?.text ?? (typeof parsed.text === 'string' ? parsed.text : fallback().text);
+
+    return {
+      text:             fallbackText,
+      page1,
+      page2,
+      shadow_insight:   parsed.shadow_insight ?? null,
+      chapter_type:     (['daily','weekly','monthly'] as const).includes(parsed.chapter_type) ? parsed.chapter_type : chapterType,
+      insights:         Array.isArray(parsed.insights) ? parsed.insights : [],
+      energy:           (['high','mid','low'] as const).includes(parsed.energy) ? parsed.energy : 'mid',
+      stats:            typeof parsed.stats === 'object' && parsed.stats ? parsed.stats : {},
+      identity_snapshot: parsed.identity_snapshot ?? undefined,
+    };
+  } catch {
+    return fallback();
   }
 }

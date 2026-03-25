@@ -9,8 +9,9 @@ const SPORT_KW     = ['km','corsa','palestra','allenamento','bici','nuoto','camm
 const MOOD_KW      = ['umore','mood','felice','triste','stressato','stress','ansioso','ansia','calmo','depresso','su di giri','giù','ottimo','pessimo','sento','sto bene','sto male'];
 const INCOME_KW    = ['guadagnato','entrata','stipendio','fattura','incassato','ricevuto','bonifico','rimborso'];
 const CALENDAR_KW  = ['appuntamento','riunione','meeting','promemoria','ricordami','evento','visita','colloquio','call','conferenza','scadenza','appuntam'];
-const RECURRING_KW = ['ogni giorno','tutti i giorni','tutte le mattine','tutte le sere','ogni mattina','ogni sera','ogni settimana','ricordami ogni'];
-const ROUTINE_KW   = ['routine','imposta routine','orario giornaliero'];
+const RECURRING_KW    = ['ogni giorno','tutti i giorni','tutte le mattine','tutte le sere','ogni mattina','ogni sera','ogni settimana','ricordami ogni'];
+const ROUTINE_KW      = ['routine','imposta routine','orario giornaliero'];
+const CONSCIOUSNESS_KW = ['penso che','mi sono detto','oggi ho capito','riflessione','rifletto','ho realizzato','voglio ricordare','nota a me stesso','nota mentale','mi sono accorto','sto pensando','pensiero','nota: ','appunto: '];
 
 function extractNumber(text: string): number | null {
   const m = text.match(/(\d+([.,]\d+)?)/);
@@ -173,7 +174,17 @@ export function localParse(
     };
   }
 
-  // ── 9. Calendar event ─────────────────────────────────────
+  // ── 9. Consciousness: pensieri, riflessioni, note ─────────
+  const hasTags = /#\w+/.test(text);
+  if (CONSCIOUSNESS_KW.some(k => lower.includes(k)) || hasTags) {
+    const tags = (text.match(/#\w+/g) ?? []).map(t => t.toLowerCase());
+    return {
+      category: 'notes',
+      data: { text, tags, raw: text, renderType: 'void' },
+    };
+  }
+
+  // ── 10. Calendar event ─────────────────────────────────────
   if (CALENDAR_KW.some(k => lower.includes(k))) {
     const scheduledAt = extractScheduledDate(lower);
     const title = text.replace(/^(appuntamento|riunione|meeting|promemoria|ricordami|evento|visita|colloquio|call|conferenza|scadenza)\s*/i, '').trim() || text;

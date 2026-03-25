@@ -8,25 +8,25 @@ import { nebulaCameraRef } from '../nebula/nebulaCamera';
 
 // ─── Category meta registry ───────────────────────────────────
 export const CATEGORY_META: Record<string, { label: string; color: string; icon: string }> = {
-  finance:      { label: 'Finanza',          color: '#f5c842', icon: '💰' },
-  health:       { label: 'Salute',           color: '#00e8d0', icon: '💪' },
-  psychology:   { label: 'Salute Mentale',   color: '#c084fc', icon: '🧠' },
-  mental_health:{ label: 'Salute Mentale',   color: '#c084fc', icon: '🧠' },
-  calendar:     { label: 'Calendario',       color: '#60a5fa', icon: '📅' },
-  routine:      { label: 'Tempo & Routine',  color: '#34d399', icon: '⏳' },
-  notes:        { label: 'Archivio',         color: '#e2e8f0', icon: '📓' },
-  interests:    { label: 'Interessi',        color: '#fb923c', icon: '🌍' },
-  career:       { label: 'Carriera',         color: '#818cf8', icon: '🚀' },
-  badges:       { label: 'Badge',            color: '#fbbf24', icon: '🏆' },
-  insight:      { label: 'Insight',          color: '#fcd34d', icon: '✨' },
-  documents:    { label: 'Documenti',        color: '#38bdf8', icon: '📄' },
+  finance:      { label: 'Finanza',          color: '#C8A84B', icon: '💰' },
+  health:       { label: 'Salute',           color: '#4BC4B8', icon: '💪' },
+  psychology:   { label: 'Salute Mentale',   color: '#9B7FD4', icon: '🧠' },
+  mental_health:{ label: 'Salute Mentale',   color: '#9B7FD4', icon: '🧠' },
+  calendar:     { label: 'Calendario',       color: '#6B98D4', icon: '📅' },
+  routine:      { label: 'Tempo & Routine',  color: '#52B892', icon: '⏳' },
+  notes:        { label: 'Coscienza',         color: '#8B7FCF', icon: '✦' },
+  interests:    { label: 'Interessi',        color: '#CC8958', icon: '🌍' },
+  career:       { label: 'Carriera',         color: '#7A82CC', icon: '🚀' },
+  badges:       { label: 'Badge',            color: '#C8A84B', icon: '🏆' },
+  documents:    { label: 'Documenti',        color: '#5AA8CC', icon: '📄' },
+  chronicle:    { label: 'Il Codex',         color: '#A870C4', icon: '📖' },
 };
 
 export function getCategoryMeta(cat: string) {
   if (CATEGORY_META[cat]) return CATEGORY_META[cat];
   let hash = 0;
   for (const c of cat) hash = ((hash << 5) - hash) + c.charCodeAt(0);
-  const PALETTE = ['#f0b8d0','#f5c898','#a0d8a8','#90c8f0','#d0a8f0','#f0e0a0'];
+  const PALETTE = ['#C49AB4','#C4A880','#8CBEA0','#7AAAC4','#A490C4','#C4BC80'];
   const ICONS   = ['⭐','🌿','🎯','📚','✈️','🐾','🎵','🔮'];
   const color   = PALETTE[Math.abs(hash) % PALETTE.length];
   const icon    = ICONS[Math.abs(hash >> 4) % ICONS.length];
@@ -35,12 +35,12 @@ export function getCategoryMeta(cat: string) {
 
 // ─── Subcategory constellation map (L1 zoom) ─────────────────
 export const SUBCATEGORY_MAP: Record<string, Array<{ id: string; label: string; icon: string }>> = {
-  finance:      [{ id: 'transazioni', label: 'Transazioni', icon: '💳' }, { id: 'associa', label: 'Da Associare', icon: '🔗' }, { id: 'cashflow', label: 'Cashflow', icon: '📊' }, { id: 'budget', label: 'Budget', icon: '🎯' }, { id: 'ricorrenti', label: 'Ricorrenti', icon: '🔄' }, { id: 'analisi', label: 'Analisi', icon: '🔥' }],
+  finance:      [{ id: 'transazioni', label: 'Transazioni', icon: '💳' }, { id: 'cashflow', label: 'Cashflow', icon: '📊' }, { id: 'budget', label: 'Budget', icon: '🎯' }, { id: 'prestiti', label: 'Prestiti', icon: '💸' }, { id: 'patrimonio', label: 'Patrimonio', icon: '🏦' }, { id: 'analisi', label: 'Analisi', icon: '🔥' }],
   health:       [{ id: 'peso', label: 'Peso', icon: '⚖️' }, { id: 'allenamento', label: 'Allenamento', icon: '🏋️' }, { id: 'sonno', label: 'Sonno', icon: '😴' }, { id: 'nutrizione', label: 'Nutrizione', icon: '🥗' }],
   psychology:   [{ id: 'umore', label: 'Umore', icon: '🎭' }, { id: 'stress', label: 'Stress', icon: '💆' }, { id: 'gratitudine', label: 'Gratitudine', icon: '✨' }, { id: 'riflessioni', label: 'Riflessioni', icon: '📝' }],
   mental_health:[{ id: 'umore', label: 'Umore', icon: '🎭' }, { id: 'stress', label: 'Stress', icon: '💆' }, { id: 'gratitudine', label: 'Gratitudine', icon: '✨' }, { id: 'riflessioni', label: 'Riflessioni', icon: '📝' }],
   career:       [{ id: 'obiettivi', label: 'Obiettivi', icon: '🎯' }, { id: 'skills', label: 'Skills', icon: '🚀' }, { id: 'log', label: 'Work Log', icon: '📋' }],
-  notes:        [{ id: 'note', label: 'Note', icon: '📓' }, { id: 'idee', label: 'Idee', icon: '💡' }],
+  notes:        [{ id: 'pensieri', label: 'Pensieri', icon: '✦' }, { id: 'riflessioni', label: 'Riflessioni', icon: '🪞' }, { id: 'idee', label: 'Idee', icon: '💡' }, { id: 'frasi', label: 'Frasi', icon: '✍️' }],
   interests:    [{ id: 'hobby', label: 'Hobby', icon: '🌍' }, { id: 'letture', label: 'Letture', icon: '📚' }, { id: 'musica', label: 'Musica', icon: '🎵' }],
   routine:      [{ id: 'mattina', label: 'Mattina', icon: '☀️' }, { id: 'sera', label: 'Sera', icon: '🌙' }, { id: 'abitudini', label: 'Abitudini', icon: '✅' }, { id: 'calendario', label: 'Calendario', icon: '📅' }, { id: 'agenda', label: 'Agenda', icon: '📋' }],
   documents:    [{ id: 'bollette', label: 'Bollette', icon: '⚡' }, { id: 'buste_paga', label: 'Buste paga', icon: '💼' }, { id: 'contratti', label: 'Contratti', icon: '📝' }, { id: 'fatture', label: 'Fatture', icon: '📄' }],
@@ -61,13 +61,13 @@ const FIXED_STAR_POSITIONS: Record<string, { x: number; y: number }> = {
   interests:    { x: 0.50, y: 0.12 },
   health:       { x: 0.80, y: 0.20 },
   notes:        { x: 0.10, y: 0.50 },
-  insight:      { x: 0.34, y: 0.44 },
   documents:    { x: 0.64, y: 0.44 },
   career:       { x: 0.86, y: 0.44 },
   badges:       { x: 0.42, y: 0.84 },
   routine:      { x: 0.50, y: 0.80 },
   psychology:   { x: 0.86, y: 0.70 },
   mental_health:{ x: 0.86, y: 0.70 },
+  chronicle:    { x: 0.50, y: 0.46 },
 };
 
 // ─── Deterministic star position ─────────────────────────────
@@ -236,7 +236,7 @@ export default function StarfieldView() {
     // Deep space background — theme-aware radial vignette
     const currentTheme = useAlterStore.getState().theme ?? 'dark';
     const BG_COLORS: Record<string, [string, string, string]> = {
-      dark:   ['#020312', '#010209', '#000000'],
+      dark:   ['#060A14', '#04070F', '#020408'],
       matrix: ['#001200', '#000800', '#000300'],
       nebula: ['#0d0020', '#06000f', '#020008'],
       light:  ['#dde2ff', '#eaeeff', '#f4f6ff'],
@@ -251,7 +251,7 @@ export default function StarfieldView() {
 
     // Subtle nebula wisps — tinted dust clouds for depth
     const NEBULA_TINTS: Record<string, [number,number,number]> = {
-      dark:   [28, 46, 128],
+      dark:   [14, 24, 72],
       matrix: [0,  130, 28],
       nebula: [88, 36, 175],
       light:  [55, 75, 195],
@@ -285,14 +285,14 @@ export default function StarfieldView() {
       const py = p.y * H + state.panY * factor;
       ctx.beginPath();
       ctx.arc(px, py, p.r, 0, Math.PI * 2);
-      const particleAlpha = p.a * (0.08 + p.layer * 0.045);
+      const particleAlpha = p.a * (0.065 + p.layer * 0.038);
       const pColor = isLightTheme
         ? `rgba(80,80,160,${particleAlpha * 0.55})`
         : isMatrixTheme
         ? `rgba(0,255,65,${particleAlpha * 0.65})`
         : isNebulaTheme
         ? `rgba(180,140,255,${particleAlpha * 0.60})`
-        : `rgba(255,255,255,${particleAlpha})`;
+        : `rgba(210,220,255,${particleAlpha})`;
       ctx.fillStyle = pColor;
       ctx.fill();
       // 4-point cross sparkle on select bright particles
@@ -355,8 +355,7 @@ export default function StarfieldView() {
       const isHov     = hov === star.id;
       const isHighlit = highlightedId === star.id;
       const isAlert   = alertEvt != null && star.id === 'routine';
-      const isInsight = star.isInsight ?? false;
-      const [r, g, b] = isAlert ? [255, 80, 80] : isInsight ? [240, 192, 64] : hexToRgb(star.color);
+      const [r, g, b] = isAlert ? [255, 80, 80] : hexToRgb(star.color);
       const { intensity } = star;
       const isEphemeral = star.ephemeral ?? false;
       // Wither: 1=full color, 0=fully gray after ~18 days inactivity
@@ -371,7 +370,6 @@ export default function StarfieldView() {
       const pulse   = isHighlit
         ? Math.sin(state.t * 4.5) * 0.15 + 0.9
         : isAlert   ? Math.sin(state.t * 3)   * 0.18 + 0.88
-        : isInsight ? Math.sin(state.t * 1.8) * 0.20 + 0.92
         : twinkle;
       // Wither also dims alpha: min 25% even when fully withered (still visible but dull)
       const witherAlphaFactor = 0.25 + wf * 0.75;
@@ -474,7 +472,6 @@ export default function StarfieldView() {
       ctx.fillText(star.label.toUpperCase(), px, py + coreR + (isPlanet ? 22 : 16) * s);
       ctx.shadowBlur = 0;
       ctx.restore();
-      void isInsight;
     });
 
     // ── Subcategory stars — colored pixels near each planet ──
@@ -530,7 +527,7 @@ export default function StarfieldView() {
     });
 
     // ── Ghost Stars: missing pillar categories ──
-    const PILLARS = ['finance', 'health', 'psychology'] as const;
+    const PILLARS = ['finance', 'health', 'psychology', 'chronicle'] as const;
     PILLARS.forEach((cat) => {
       if (starsNow.some(st => st.id === cat)) return;
       const pos = starPosition(cat);
@@ -714,7 +711,7 @@ export default function StarfieldView() {
       }
     }
     if (!found) {
-      const PILLARS = ['finance', 'health', 'psychology'];
+      const PILLARS = ['finance', 'health', 'psychology', 'chronicle'];
       for (const cat of PILLARS) {
         if (starsNow.some(s => s.id === cat)) continue;
         const pos = starPosition(cat);
@@ -743,7 +740,7 @@ export default function StarfieldView() {
   const openWidget = useCallback(async (star: { id: string; label: string; color: string }, subTab?: string) => {
     if (!user) return;
     const entries = await getByCategory(user.id, star.id);
-    const renderType = star.id === 'insight' ? 'insight' : inferRenderType(entries, star.id);
+    const renderType = inferRenderType(entries, star.id);
     setActiveWidget({ category: star.id, label: star.label, color: star.color, entries, renderType, subTab });
     markStarSeen(star.id);
   }, [user, setActiveWidget, markStarSeen]);
@@ -771,16 +768,7 @@ export default function StarfieldView() {
     const W = canvas.width, H = canvas.height;
     const starsNow = useAlterStore.getState().stars;
 
-    // Planet click
-    for (const star of starsNow.filter(s => !HIDDEN_STARS.has(s.id))) {
-      const { sx, sy } = toScreen(star.x, star.y, W, H);
-      if (Math.hypot(sx - e.clientX, sy - e.clientY) < 28) {
-        setClickRipple({ x: sx, y: sy, color: star.color });
-        openWidget(star);
-        return;
-      }
-    }
-    // Subcategory star click
+    // Subcategory star click (checked first — sub-stars cluster near planets)
     for (const star of starsNow.filter(s => !HIDDEN_STARS.has(s.id))) {
       const subs = SUBCATEGORY_MAP[star.id] ?? [];
       for (let i = 0; i < subs.length; i++) {
@@ -794,11 +782,20 @@ export default function StarfieldView() {
         }
       }
     }
+    // Planet click
+    for (const star of starsNow.filter(s => !HIDDEN_STARS.has(s.id))) {
+      const { sx, sy } = toScreen(star.x, star.y, W, H);
+      if (Math.hypot(sx - e.clientX, sy - e.clientY) < 28) {
+        setClickRipple({ x: sx, y: sy, color: star.color });
+        openWidget(star);
+        return;
+      }
+    }
     // Ghost star click → pre-fill input
     const GHOST_PROMPTS: Record<string, string> = {
-      finance: 'Ho speso ', health: 'Peso ', psychology: 'Umore ',
+      finance: 'Ho speso ', health: 'Peso ', psychology: 'Umore ', chronicle: 'chi sono',
     };
-    for (const cat of ['finance', 'health', 'psychology']) {
+    for (const cat of ['finance', 'health', 'psychology', 'chronicle']) {
       if (starsNow.some(s => s.id === cat)) continue;
       const pos = starPosition(cat);
       const { sx, sy } = toScreen(pos.x, pos.y, W, H);
@@ -881,35 +878,36 @@ export default function StarfieldView() {
         const W = canvas.width, H = canvas.height;
         const starsNow = useAlterStore.getState().stars;
         let touchHit = false;
-        for (const star of starsNow.filter(s => !HIDDEN_STARS.has(s.id))) {
-          const { sx, sy } = toScreen(star.x, star.y, W, H);
-          if (Math.hypot(sx - state.touchStartX, sy - state.touchStartY) < 36) {
-            setClickRipple({ x: sx, y: sy, color: star.color });
-            openWidget(star);
-            touchHit = true;
-            break;
+        // Sub-stars checked first — they cluster near planets and would otherwise be intercepted
+        outer: for (const star of starsNow.filter(s => !HIDDEN_STARS.has(s.id))) {
+          const subs = SUBCATEGORY_MAP[star.id] ?? [];
+          for (let i = 0; i < subs.length; i++) {
+            const pos = substarPos(star.x, star.y, subs[i].id, i, subs.length);
+            const { sx, sy } = toScreen(pos.x, pos.y, W, H);
+            if (Math.hypot(sx - state.touchStartX, sy - state.touchStartY) < 18) {
+              setClickRipple({ x: sx, y: sy, color: star.color });
+              openSubWidget(star, subs[i].id);
+              touchHit = true;
+              break outer;
+            }
           }
         }
         if (!touchHit) {
-          outer: for (const star of starsNow.filter(s => !HIDDEN_STARS.has(s.id))) {
-            const subs = SUBCATEGORY_MAP[star.id] ?? [];
-            for (let i = 0; i < subs.length; i++) {
-              const pos = substarPos(star.x, star.y, subs[i].id, i, subs.length);
-              const { sx, sy } = toScreen(pos.x, pos.y, W, H);
-              if (Math.hypot(sx - state.touchStartX, sy - state.touchStartY) < 18) {
-                setClickRipple({ x: sx, y: sy, color: star.color });
-                openSubWidget(star, subs[i].id);
-                touchHit = true;
-                break outer;
-              }
+          for (const star of starsNow.filter(s => !HIDDEN_STARS.has(s.id))) {
+            const { sx, sy } = toScreen(star.x, star.y, W, H);
+            if (Math.hypot(sx - state.touchStartX, sy - state.touchStartY) < 36) {
+              setClickRipple({ x: sx, y: sy, color: star.color });
+              openWidget(star);
+              touchHit = true;
+              break;
             }
           }
         }
         if (!touchHit) {
           const GHOST_PROMPTS: Record<string, string> = {
-            finance: 'Ho speso ', health: 'Peso ', psychology: 'Umore ',
+            finance: 'Ho speso ', health: 'Peso ', psychology: 'Umore ', chronicle: 'chi sono',
           };
-          for (const cat of ['finance', 'health', 'psychology']) {
+          for (const cat of ['finance', 'health', 'psychology', 'chronicle']) {
             if (starsNow.some(s => s.id === cat)) continue;
             const pos = starPosition(cat);
             const { sx, sy } = toScreen(pos.x, pos.y, W, H);
@@ -934,7 +932,7 @@ export default function StarfieldView() {
   }, [user, setActiveWidget, markStarSeen, toScreen, setGhostStarPrompt, openWidget, openSubWidget]);
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#020205' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#04060C' }}>
       <canvas
         ref={canvasRef}
         style={{ display: 'block', width: '100%', height: '100%', cursor: 'grab', touchAction: 'none' }}
@@ -982,9 +980,9 @@ export default function StarfieldView() {
               color: 'rgba(255,255,255,0.28)', lineHeight: 1.8, maxWidth: '100%',
             }}>
               Ogni cosa che scrivi diventa una stella.<br />
-              Prova con <span style={{ color: '#e8d090' }}>«Ho speso 12€ al supermercato»</span>,<br />
-              <span style={{ color: '#90d8d2' }}>«Peso 74kg»</span> o{' '}
-              <span style={{ color: '#c4b2f5' }}>«Umore 8/10»</span>.<br />
+              Prova con <span style={{ color: '#C8A84B' }}>«Ho speso 12€ al supermercato»</span>,<br />
+              <span style={{ color: '#4BC4B8' }}>«Peso 74kg»</span> o{' '}
+              <span style={{ color: '#9B7FD4' }}>«Umore 8/10»</span>.<br />
               Scrivi nell'input in basso e guarda la galassia prendere vita.
             </p>
           </motion.div>
@@ -1033,21 +1031,21 @@ export default function StarfieldView() {
             style={{
               position: 'absolute',
               top: 56, left: '50%', transform: 'translateX(-50%)',
-              background: 'rgba(10,10,18,0.95)',
-              border: '1px solid rgba(167,139,250,0.5)',
-              borderRadius: 14,
+              background: 'rgba(5,7,18,0.94)',
+              border: '1px solid rgba(155,127,212,0.32)',
+              borderRadius: 18,
               padding: '10px 18px',
               display: 'flex', alignItems: 'center', gap: 10,
               whiteSpace: 'nowrap',
               zIndex: 50,
-              boxShadow: '0 0 24px rgba(167,139,250,0.25)',
-              backdropFilter: 'blur(12px)',
+              boxShadow: '0 0 28px rgba(155,127,212,0.16), 0 8px 32px rgba(0,0,0,0.5)',
+              backdropFilter: 'blur(20px)',
               cursor: 'pointer',
             }}
           >
             <span style={{ fontSize: 18 }}>🔔</span>
             <div>
-              <div style={{ fontSize: 10, color: '#a78bfa', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 1 }}>Promemoria</div>
+              <div style={{ fontSize: 10, color: '#9B7FD4', fontWeight: 500, letterSpacing: '0.10em', textTransform: 'uppercase', marginBottom: 1 }}>Promemoria</div>
               <span style={{ fontSize: 13, color: '#ffffff', fontWeight: 500 }}>
                 {alertEvent.title} · {new Date(alertEvent.scheduledAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
               </span>
@@ -1070,10 +1068,10 @@ export default function StarfieldView() {
               const { aiNexusNarrative } = await import('../../core/aiParser');
               const narrative = await aiNexusNarrative('Analizza le correlazioni tra tutte le mie categorie e dimmi cosa noti di interessante.', entries);
               setActiveWidget({
-                category: 'insight', label: '✦ Scansione Nexus', color: '#a78bfa',
-                entries: [{ id: 'nexus-scan', user_id: user.id, category: 'insight',
+                category: 'nexus', label: '✦ Scansione Nexus', color: '#a78bfa',
+                entries: [{ id: 'nexus-scan', user_id: user.id, category: 'nexus',
                   data: { insight: narrative }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }],
-                renderType: 'insight',
+                renderType: 'list',
               });
             } finally {
               setNexusScanning(false);
@@ -1083,16 +1081,16 @@ export default function StarfieldView() {
             position: 'absolute',
             bottom: 90, left: '50%', transform: 'translateX(-50%)', margin: 0,
             zIndex: 40,
-            background: nexusScanning ? 'rgba(167,139,250,0.15)' : 'rgba(10,10,18,0.8)',
-            border: '1px solid rgba(167,139,250,0.35)',
-            borderRadius: 20,
-            padding: '7px 18px',
+            background: nexusScanning ? 'rgba(155,127,212,0.12)' : 'rgba(5,7,18,0.82)',
+            border: '1px solid rgba(155,127,212,0.28)',
+            borderRadius: 24,
+            padding: '8px 20px',
             display: 'flex', alignItems: 'center', gap: 8,
             cursor: nexusScanning ? 'wait' : 'pointer',
-            color: '#a78bfa',
-            fontSize: 12, fontWeight: 500, letterSpacing: '0.06em',
-            backdropFilter: 'blur(10px)',
-            boxShadow: '0 0 20px rgba(167,139,250,0.12)',
+            color: '#9B7FD4',
+            fontSize: 11, fontWeight: 500, letterSpacing: '0.08em',
+            backdropFilter: 'blur(16px)',
+            boxShadow: '0 0 24px rgba(155,127,212,0.10)',
             transition: 'all 0.25s',
           }}
         >

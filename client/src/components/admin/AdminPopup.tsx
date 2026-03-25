@@ -18,7 +18,7 @@ interface BugTicket {
   created_at: string;
   user_description: string;
   page_path?: string;
-  type: 'bug' | 'improvement';
+  type: 'bug' | 'improvement' | 'chat_report';
   status: BugStatus;
   priority: BugPriority;
   complexity?: BugComplexity;
@@ -68,6 +68,7 @@ const FILTER_TABS = [
   { id: 'in_progress' as const, label: 'In corso' },
   { id: 'resolved'    as const, label: 'Risolti'  },
   { id: 'wont_fix'    as const, label: 'No fix'   },
+  { id: 'chat_report' as const, label: '⚠ Chat'   },
 ];
 type FilterId = typeof FILTER_TABS[number]['id'];
 
@@ -391,7 +392,11 @@ function TicketsTab({
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
-  const filtered = filter === 'all' ? sorted : sorted.filter(b => b.status === filter);
+  const filtered = filter === 'all'
+    ? sorted
+    : filter === 'chat_report'
+      ? sorted.filter(b => b.type === 'chat_report')
+      : sorted.filter(b => b.status === filter && b.type !== 'chat_report');
 
   const counts = STATUS_ORDER.reduce<Record<string, number>>((acc, s) => {
     acc[s] = approvedBugs.filter(b => b.status === s).length;
@@ -736,7 +741,7 @@ function TicketRow({ bug, onUpdate, onDelete, onCopy }: {
                           {entry.type === 'msg_user' ? '→' : entry.type === 'msg_ai' ? '←' : '◦'}
                         </span>
                         <span style={{ fontSize: 10.5, color: 'var(--text)', opacity: 0.65, flex: 1, lineHeight: 1.4 }}>
-                          {entry.content.length > 100 ? entry.content.slice(0, 100) + '…' : entry.content}
+                          {entry.content}
                         </span>
                         {entry.timestamp && (
                           <span style={{ fontSize: 9, color: 'var(--text-dim)', flexShrink: 0 }}>

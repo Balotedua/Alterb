@@ -68,7 +68,7 @@ export default function NexusView() {
   async function init() {
     setLoading(true);
     const stats = Object.fromEntries(
-      stars.filter(s => !s.isInsight).map(s => [s.id, s.entryCount])
+      stars.map(s => [s.id, s.entryCount])
     );
     const profile = await getOrCreateProfile(user!.id, user!.email, username || undefined);
     if (profile) {

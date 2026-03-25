@@ -1,5 +1,5 @@
-import { getRecentAll, saveEntry } from '../vault/vaultService';
-import type { VaultEntry, Star } from '../types';
+import { getRecentAll } from '../vault/vaultService';
+import type { Star } from '../types';
 
 // ── Daily greeting (spontaneous reflection) ──────────────────
 const GREETING_KEY = 'alter_last_greeting';
@@ -57,6 +57,99 @@ Rispondi SOLO con il testo del messaggio, senza formattazioni.`,
   }
 }
 
+// ── Coherence Audit ───────────────────────────────────────────
+
+export interface CoherenceFinding {
+  title: string;
+  contradiction: string;
+  dataPoints: string[];
+  advice: string;
+  severity: 'high' | 'medium' | 'low';
+  categories: string[];
+}
+
+export interface CoherenceReport {
+  score: number;
+  summary: string;
+  findings: CoherenceFinding[];
+}
+
+export async function generateCoherenceAudit(userId: string): Promise<CoherenceReport | null> {
+  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
+  if (!apiKey) return null;
+
+  const entries = (await getRecentAll(userId, 90)).filter(
+    e => e.category !== 'chat' && e.category !== 'insight'
+  );
+  if (entries.length < 5) return null;
+
+  const byCategory: Record<string, typeof entries> = {};
+  for (const e of entries) {
+    if (!byCategory[e.category]) byCategory[e.category] = [];
+    byCategory[e.category].push(e);
+  }
+
+  const context = Object.entries(byCategory)
+    .map(([cat, rows]) => {
+      const sample = rows.slice(0, 8).map(r =>
+        `  [${new Date(r.created_at).toLocaleDateString('it-IT')}] ${JSON.stringify(r.data)}`
+      ).join('\n');
+      return `=== ${cat.toUpperCase()} (${rows.length} voci) ===\n${sample}`;
+    })
+    .join('\n\n');
+
+  try {
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [
+          {
+            role: 'system',
+            content: `Sei Nebula, il compagno digitale di Alter OS — un amico sincero e premuroso che conosce profondamente l'utente attraverso i suoi dati. Il tuo compito è generare un "Report di Coerenza": confronta ciò che l'utente dichiara di volere (obiettivi nei documenti, note, carriera) con come si comporta realmente (spese, salute, umore, routine).
+
+Tono: diretto e onesto come un amico che ti vuole bene, mai giudicante né freddo. Parla in seconda persona all'utente ("hai", "stai", "noto che"). Usa i dati reali (numeri, date, importi) per rendere l'analisi specifica e non generica.
+
+Rispondi SOLO con JSON valido (nessun markdown, nessuna spiegazione), con questo schema esatto:
+{
+  "score": <numero 0-100 che indica la coerenza complessiva>,
+  "summary": "<1-2 frasi: la fotografia onesta di chi sta diventando l'utente, con calore e verità>",
+  "findings": [
+    {
+      "title": "<nome breve della contraddizione>",
+      "contradiction": "<la contraddizione in 1-2 frasi, con dati specifici citati>",
+      "dataPoints": ["<dato specifico 1 es. '€312 spesi in abbigliamento a marzo'>", "<dato specifico 2>"],
+      "advice": "<un consiglio concreto, fattibile, non generico>",
+      "severity": "<high|medium|low>",
+      "categories": ["<categoria1>", "<categoria2>"]
+    }
+  ]
+}
+
+Se non ci sono contraddizioni significative, score sarà alto (>75) e findings avrà 1-2 osservazioni positive. Massimo 4 findings.`,
+          },
+          { role: 'user', content: `Dati vault degli ultimi 90 giorni:\n\n${context}` },
+        ],
+        temperature: 0.6,
+        max_tokens: 900,
+      }),
+    });
+
+    if (!res.ok) return null;
+    const json = await res.json();
+    const raw = json.choices[0]?.message?.content as string | undefined;
+    if (!raw?.trim()) return null;
+
+    const clean = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    const parsed = JSON.parse(clean) as CoherenceReport;
+    return parsed;
+  } catch (e) {
+    console.error('[generateCoherenceAudit]', e);
+    return null;
+  }
+}
+
 // ── quickConnect: L1 semantic beam (zero API cost) ───────────
 
 const STOPWORDS = new Set([
@@ -101,7 +194,7 @@ export function quickConnect(
   const newWords = extractKeywords(rawText + ' ' + newCat.replace(/_/g, ' '));
   if (newWords.size === 0) return null;
 
-  const candidates = stars.filter(s => s.id !== newCat && s.id !== 'insight' && !s.ephemeral);
+  const candidates = stars.filter(s => s.id !== newCat && !s.ephemeral);
   if (candidates.length === 0) return null;
 
   const matches: Array<{ star: Star; count: number }> = [];
@@ -123,79 +216,3 @@ export function quickConnect(
   return { catB: star.id, colorB: star.color, correlation: 0.72 };
 }
 
-const STORAGE_KEY   = 'alter_last_insight_run';
-const COOLDOWN_MS   = 24 * 60 * 60 * 1000; // 24h
-const MIN_ENTRIES   = 20;
-const MIN_RICH_CATS = 2; // at least 2 categories with ≥5 entries each
-
-export async function runInsightEngine(userId: string): Promise<VaultEntry | null> {
-  // ── Cooldown check ──────────────────────────────────────────
-  const lastRun = localStorage.getItem(STORAGE_KEY);
-  if (lastRun && Date.now() - parseInt(lastRun, 10) < COOLDOWN_MS) return null;
-
-  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
-  if (!apiKey) return null;
-
-  // ── Fetch & filter ──────────────────────────────────────────
-  const all      = await getRecentAll(userId, 100);
-  const entries  = all.filter(e => e.category !== 'insight');
-
-  if (entries.length < MIN_ENTRIES) return null;
-
-  // Require at least MIN_RICH_CATS categories with ≥5 entries
-  const catCount = new Map<string, number>();
-  for (const e of entries) catCount.set(e.category, (catCount.get(e.category) ?? 0) + 1);
-  const richCats = [...catCount.entries()].filter(([, c]) => c >= 5);
-  if (richCats.length < MIN_RICH_CATS) return null;
-
-  // ── Build context ───────────────────────────────────────────
-  const context = entries.slice(0, 60).map(e =>
-    `[${new Date(e.created_at).toLocaleDateString('it-IT')} · ${e.category}] ${JSON.stringify(e.data)}`
-  ).join('\n');
-
-  // ── Call DeepSeek ───────────────────────────────────────────
-  try {
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          {
-            role: 'system',
-            content: `Sei Nebula, l'analista autonomo di Alter OS. Mentre l'utente non c'era, hai analizzato la sua galassia di dati.
-Trova UNA correlazione sorprendente e concreta tra categorie diverse. Usa numeri reali dai dati.
-Rispondi SOLO con JSON valido — nessuna spiegazione.
-Schema: { "title": "titolo breve max 6 parole", "insight": "2-3 frasi che spiegano la correlazione con dati concreti (numeri, date)", "categories": ["slug1", "slug2"] }`,
-          },
-          { role: 'user', content: `Dati recenti:\n${context}` },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.65,
-        max_tokens: 320,
-      }),
-    });
-
-    if (!res.ok) throw new Error(`DeepSeek ${res.status}`);
-    const json   = await res.json();
-    const parsed = JSON.parse(json.choices[0].message.content) as {
-      title?: string; insight?: string; categories?: string[];
-    };
-
-    if (!parsed.insight) return null;
-
-    const entry = await saveEntry(userId, 'insight', {
-      title:       parsed.title       ?? 'Scoperta Autonoma',
-      insight:     parsed.insight,
-      categories:  parsed.categories  ?? [],
-      generatedAt: new Date().toISOString(),
-    });
-
-    if (entry) localStorage.setItem(STORAGE_KEY, Date.now().toString());
-    return entry;
-
-  } catch (e) {
-    console.error('[insightEngine]', e);
-    return null;
-  }
-}

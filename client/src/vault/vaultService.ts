@@ -31,9 +31,23 @@ export async function getByCategory(
     .select('*')
     .eq('user_id', userId)
     .eq('category', category)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) { console.error('[vault getByCategory]', error); return []; }
+  return (data ?? []) as VaultEntry[];
+}
+
+// ─── Read: chronicles ordered by chapter ─────────────────────
+export async function getChronicles(userId: string): Promise<VaultEntry[]> {
+  const { data, error } = await supabase
+    .from('vault')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('category', 'chronicle')
+    .is('deleted_at', null)
+    .order('created_at', { ascending: true });
+  if (error) { console.error('[vault getChronicles]', error); return []; }
   return (data ?? []) as VaultEntry[];
 }
 
@@ -49,6 +63,7 @@ export async function getCategorySummaries(userId: string): Promise<CategorySumm
     .from('vault')
     .select('category, created_at')
     .eq('user_id', userId)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
   if (error || !data) return [];
@@ -71,6 +86,7 @@ export async function getRecentAll(userId: string, limit = 30): Promise<VaultEnt
     .from('vault')
     .select('*')
     .eq('user_id', userId)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) { console.error('[vault getRecentAll]', error); return []; }
@@ -88,6 +104,7 @@ export async function queryCalendarByDate(
     .select('*')
     .eq('user_id', userId)
     .eq('category', 'calendar')
+    .is('deleted_at', null)
     .gte('data->>scheduled_at', from.toISOString())
     .lte('data->>scheduled_at', to.toISOString())
     .order('data->>scheduled_at', { ascending: true });
@@ -103,6 +120,7 @@ export async function getUpcomingEvents(userId: string): Promise<VaultEntry[]> {
     .from('vault')
     .select('*')
     .eq('user_id', userId)
+    .is('deleted_at', null)
     .filter('data->>is_event', 'eq', 'true')
     .gte('data->>scheduled_at', now.toISOString())
     .lte('data->>scheduled_at', soon.toISOString())
@@ -118,6 +136,7 @@ export async function getSemanticLinks(userId: string): Promise<SemanticLink[]> 
     .from('vault')
     .select('category, data')
     .eq('user_id', userId)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(200);
   if (error || !data) return [];
@@ -157,20 +176,77 @@ export async function updateEntryData(id: string, data: Record<string, unknown>)
   return true;
 }
 
-// ─── Delete ──────────────────────────────────────────────────
+// ─── Soft Delete ─────────────────────────────────────────────
+// Marks entries as deleted — purged after 7 days by purgeExpiredDeleted()
 export async function deleteEntry(id: string): Promise<boolean> {
-  const { error } = await supabase.from('vault').delete().eq('id', id);
+  const { error } = await supabase
+    .from('vault')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id);
   return !error;
 }
 
-// ─── Delete: all entries of a category (removes the star) ────
+// ─── Soft Delete: all entries of a category (removes the star) ──
 export async function deleteCategory(userId: string, category: string): Promise<boolean> {
   const { error } = await supabase
     .from('vault')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('category', category)
+    .is('deleted_at', null);
+  return !error;
+}
+
+// ─── Purge: physically delete entries soft-deleted > 7 days ago ─
+export async function purgeExpiredDeleted(userId: string): Promise<void> {
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  await supabase
+    .from('vault')
     .delete()
     .eq('user_id', userId)
-    .eq('category', category);
+    .not('deleted_at', 'is', null)
+    .lt('deleted_at', cutoff);
+}
+
+// ─── Restore: undo a soft delete within 7 days ───────────────
+export async function restoreCategory(userId: string, category: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('vault')
+    .update({ deleted_at: null })
+    .eq('user_id', userId)
+    .eq('category', category)
+    .not('deleted_at', 'is', null);
   return !error;
+}
+
+// ─── Read: soft-deleted categories still within the 7-day window ─
+export interface DeletedCategorySummary {
+  category: string;
+  count: number;
+  deletedAt: string; // most recent deleted_at for this category
+}
+
+export async function getDeletedCategories(userId: string): Promise<DeletedCategorySummary[]> {
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('vault')
+    .select('category, deleted_at')
+    .eq('user_id', userId)
+    .not('deleted_at', 'is', null)
+    .gte('deleted_at', cutoff)
+    .order('deleted_at', { ascending: false });
+  if (error || !data) return [];
+
+  const map = new Map<string, DeletedCategorySummary>();
+  for (const row of data) {
+    const existing = map.get(row.category);
+    if (!existing) {
+      map.set(row.category, { category: row.category, count: 1, deletedAt: row.deleted_at });
+    } else {
+      existing.count++;
+    }
+  }
+  return Array.from(map.values());
 }
 
 // ─── Chat sessions (stored in vault category='chat') ─────────
@@ -208,6 +284,7 @@ export async function getDocumentsByType(userId: string, docType: string): Promi
     .eq('user_id', userId)
     .eq('category', 'documents')
     .eq('data->>docType', docType)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(20);
   if (error) return [];
@@ -224,6 +301,7 @@ export async function searchDocuments(userId: string, keyword: string): Promise<
     .select('*')
     .eq('user_id', userId)
     .eq('category', 'documents')
+    .is('deleted_at', null)
     .textSearch('data->>extractedText', tsquery, { config: 'italian' })
     .order('created_at', { ascending: false })
     .limit(10);
@@ -234,6 +312,7 @@ export async function searchDocuments(userId: string, keyword: string): Promise<
       .select('*')
       .eq('user_id', userId)
       .eq('category', 'documents')
+      .is('deleted_at', null)
       .ilike('data->>extractedText', `%${keyword}%`)
       .order('created_at', { ascending: false })
       .limit(10);
@@ -293,13 +372,28 @@ export async function getLastActiveUsers(): Promise<ActiveUser[]> {
     .map(r => ({ userId: r.user_id, email: r.email, lastSignIn: r.last_sign_in_at, createdAt: r.created_at }));
 }
 
-// ─── Delete: all data for a user (full reset) ────────────────
+// ─── Soft Delete: all data for a user (full reset) ───────────
 export async function deleteAllUserData(userId: string): Promise<boolean> {
-  const { error } = await supabase.from('vault').delete().eq('user_id', userId);
+  const { error } = await supabase
+    .from('vault')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .is('deleted_at', null);
   return !error;
 }
 
-// ─── Delete: entries in a category within a date range ───────
+// ─── Hard Delete: permanently remove a soft-deleted category ─
+export async function purgeCategory(userId: string, category: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('vault')
+    .delete()
+    .eq('user_id', userId)
+    .eq('category', category)
+    .not('deleted_at', 'is', null);
+  return !error;
+}
+
+// ─── Soft Delete: entries in a category within a date range ──
 export async function deleteByCategoryAndDateRange(
   userId: string,
   category: string,
@@ -311,15 +405,19 @@ export async function deleteByCategoryAndDateRange(
     .select('id')
     .eq('user_id', userId)
     .eq('category', category)
+    .is('deleted_at', null)
     .gte('created_at', from.toISOString())
     .lte('created_at', to.toISOString());
   if (error || !data || data.length === 0) return 0;
   const ids = data.map(r => r.id);
-  const { error: delErr } = await supabase.from('vault').delete().in('id', ids);
-  return delErr ? 0 : ids.length;
+  const { error: updErr } = await supabase
+    .from('vault')
+    .update({ deleted_at: new Date().toISOString() })
+    .in('id', ids);
+  return updErr ? 0 : ids.length;
 }
 
-// ─── Delete: last entry of a category ────────────────────────
+// ─── Soft Delete: last entry of a category ───────────────────
 export async function deleteLastInCategory(
   userId: string,
   category: string
@@ -329,6 +427,7 @@ export async function deleteLastInCategory(
     .select('id')
     .eq('user_id', userId)
     .eq('category', category)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(1)
     .single();

@@ -12,12 +12,19 @@ html, body, #root {
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
   font-weight: 300;
+  letter-spacing: 0.01em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color: var(--text, #ffffff);
   user-select: none;
+}
+
+/* Monospaced data font — use via class or inline font-family */
+.mono, [data-mono] {
+  font-family: 'Space Mono', 'JetBrains Mono', monospace;
+  letter-spacing: -0.02em;
 }
 
 input, button, textarea {
@@ -31,24 +38,24 @@ input, button, textarea {
   }
 }
 
-::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar { width: 3px; height: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
 
 ::selection { background: rgba(255,255,255,0.15); }
 
 /* ── Themes ───────────────────────────────────────────────── */
 :root, [data-theme="dark"] {
-  --bg: #03030a;
-  --bg2: #0a0a18;
-  --text: #ffffff;
-  --text-dim: rgba(255,255,255,0.4);
-  --accent: #f0c040;
-  --accent2: #40e0d0;
-  --border: rgba(255,255,255,0.07);
-  --glass: rgba(10,10,18,0.92);
-  --tab-bg: rgba(5,5,8,0.96);
+  --bg: #05070D;
+  --bg2: #080C18;
+  --text: #F0EEF8;
+  --text-dim: rgba(240,238,248,0.38);
+  --accent: #C8A84B;
+  --accent2: #4BC4B8;
+  --border: rgba(255,255,255,0.06);
+  --glass: rgba(5,7,16,0.90);
+  --tab-bg: rgba(4,6,12,0.97);
   --star-glow: 1;
 }
 

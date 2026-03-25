@@ -35,14 +35,13 @@ export interface Star {
   entryCount: number;
   lastEntry: string | null;
   isNew?: boolean;       // triggers supernova animation
-  isInsight?: boolean;   // autonomous discovery — golden pulsing aura
   ephemeral?: boolean;   // view stars — auto-deleted after 15 days
   lastAccessedAt?: string; // ISO string, for ephemeral cleanup
   witherFactor?: number; // 1=fresh, 0=fully withered (gray) after ~18 days of inactivity
 }
 
 // ─── Widget ──────────────────────────────────────────────────
-export type RenderType = 'chart' | 'list' | 'diary' | 'stats' | 'mood' | 'timeline' | 'insight' | 'nexus' | 'activity' | 'numeric' | 'pie' | 'doc_download' | 'finance' | 'workout';
+export type RenderType = 'chart' | 'list' | 'diary' | 'stats' | 'mood' | 'timeline' | 'nexus' | 'activity' | 'numeric' | 'pie' | 'doc_download' | 'finance' | 'workout' | 'codex' | 'coherence' | 'void';
 
 export interface NexusBeam {
   catA: string;

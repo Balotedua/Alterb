@@ -72,6 +72,27 @@ export interface UploadResult {
   compressedSize: number;
 }
 
+/** Map non-standard or Supabase-unsupported MIME types to accepted equivalents */
+function normalizeContentType(file: File): string {
+  const type = file.type.toLowerCase();
+  const name = file.name.toLowerCase();
+  // Standard types Supabase Storage accepts without issue
+  const PASS_THROUGH = new Set([
+    'application/pdf', 'text/plain', 'text/csv',
+    'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-excel',
+  ]);
+  if (PASS_THROUGH.has(type)) return type;
+  // Non-standard text subtypes → text/plain
+  if (type.startsWith('text/')) return 'text/plain';
+  // Fallback by extension
+  if (name.endsWith('.pdf')) return 'application/pdf';
+  if (name.endsWith('.md') || name.endsWith('.txt')) return 'text/plain';
+  if (name.endsWith('.csv')) return 'text/csv';
+  return 'application/octet-stream';
+}
+
 export async function uploadDocument(userId: string, file: File): Promise<UploadResult> {
   const timestamp = Date.now();
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -82,9 +103,10 @@ export async function uploadDocument(userId: string, file: File): Promise<Upload
     try { uploadBlob = await compressImage(file); } catch { /* keep original */ }
   }
 
+  const contentType = normalizeContentType(file);
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(storagePath, uploadBlob, { contentType: file.type, upsert: false });
+    .upload(storagePath, uploadBlob, { contentType, upsert: false });
 
   if (error) throw new Error(error.message);
   return { storagePath, fileSize: file.size, compressedSize: uploadBlob.size };

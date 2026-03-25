@@ -52,7 +52,27 @@ export default function DocumentRenderer({ entries, color }: { entries: VaultEnt
   const [uploading,    setUploading]    = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [dragOver,     setDragOver]     = useState(false);
+  const [aiSearch,     setAiSearch]     = useState<string | null>(null);
+  const [aiSearching,  setAiSearching]  = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // ── Scadenziario: documenti con expiry_date entro 90 giorni ──
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const expiringDocs = entries
+    .filter(e => {
+      const exp = e.data.expiry_date as string | undefined;
+      if (!exp) return false;
+      const d = new Date(exp);
+      const daysLeft = Math.ceil((d.getTime() - today.getTime()) / 86400000);
+      return daysLeft <= 90;
+    })
+    .map(e => {
+      const d = e.data as Record<string, unknown>;
+      const exp = d.expiry_date as string;
+      const daysLeft = Math.ceil((new Date(exp).getTime() - today.getTime()) / 86400000);
+      return { entry: e, daysLeft, exp };
+    })
+    .sort((a, b) => a.daysLeft - b.daysLeft);
 
   const handleUploadFile = useCallback(async (file: File) => {
     if (!user) return;
@@ -81,6 +101,7 @@ export default function DocumentRenderer({ entries, color }: { entries: VaultEnt
         docTypeLabel:   classification.docTypeLabel,
         main_subject:   classification.main_subject,
         doc_date:       classification.doc_date,
+        expiry_date:    classification.expiry_date,
         value:          classification.value,
         summary:        classification.summary,
         renderType:     'doc_download',
@@ -189,6 +210,21 @@ export default function DocumentRenderer({ entries, color }: { entries: VaultEnt
     if (url) window.open(url, '_blank');
   };
 
+  const handleAiSearch = async () => {
+    if (!search.trim() || entries.length === 0) return;
+    setAiSearching(true);
+    setAiSearch(null);
+    try {
+      const { aiDocumentQuery } = await import('../../../core/aiParser');
+      const result = await aiDocumentQuery(search, entries);
+      setAiSearch(result);
+    } catch {
+      setAiSearch('Errore nella ricerca AI.');
+    } finally {
+      setAiSearching(false);
+    }
+  };
+
   const handleDelete = async (entry: VaultEntry) => {
     setDeletingId(entry.id);
     try {
@@ -286,22 +322,86 @@ export default function DocumentRenderer({ entries, color }: { entries: VaultEnt
         </p>
       )}
 
+      {/* Scadenziario */}
+      {expiringDocs.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 9, color: '#f87171', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span>⏰</span><span>Scadenze imminenti</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {expiringDocs.map(({ entry, daysLeft, exp }) => {
+              const d = entry.data as Record<string, unknown>;
+              const label = (d.docTypeLabel as string) ?? (d.docType as string) ?? 'Documento';
+              const name  = (d.filename as string) ?? (d.main_subject as string) ?? '';
+              const accent = daysLeft <= 0 ? '#f87171' : daysLeft <= 15 ? '#fb923c' : daysLeft <= 30 ? '#fbbf24' : '#4ade80';
+              const expLabel = daysLeft <= 0 ? 'Scaduto' : daysLeft === 1 ? 'Scade domani' : `Scade in ${daysLeft} giorni`;
+              const cfg = DOC_TYPE_CONFIG[(d.docType as string) ?? 'generic'] ?? DOC_TYPE_CONFIG.generic;
+              return (
+                <div key={entry.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  borderRadius: 8, padding: '7px 10px',
+                  background: `${accent}08`, border: `1px solid ${accent}25`,
+                }}>
+                  <span style={{ fontSize: 14, flexShrink: 0 }}>{cfg.icon}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {name || label}
+                    </div>
+                    <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.28)', marginTop: 1 }}>
+                      {label} · scadenza {new Date(exp).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 9, color: accent, fontWeight: 600, letterSpacing: '0.04em', flexShrink: 0 }}>
+                    {expLabel}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Search */}
       {entries.length > 4 && (
-        <input
-          placeholder="Cerca per nome, tipo, importo…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{
-            width: '100%', boxSizing: 'border-box',
-            background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: 8, padding: '7px 12px', fontSize: 11,
-            color: 'rgba(255,255,255,0.65)', outline: 'none', marginBottom: 12,
-            transition: 'border-color 0.2s',
-          }}
-          onFocus={e => { (e.target as HTMLInputElement).style.borderColor = `${color}40`; }}
-          onBlur={e  => { (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.07)'; }}
-        />
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              placeholder="Cerca per nome, tipo, importo… o fai una domanda"
+              value={search}
+              onChange={e => { setSearch(e.target.value); setAiSearch(null); }}
+              onKeyDown={e => { if (e.key === 'Enter') handleAiSearch(); }}
+              style={{
+                flex: 1, boxSizing: 'border-box',
+                background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+                borderRadius: 8, padding: '7px 12px', fontSize: 11,
+                color: 'rgba(255,255,255,0.65)', outline: 'none',
+                transition: 'border-color 0.2s',
+              }}
+              onFocus={e => { (e.target as HTMLInputElement).style.borderColor = `${color}40`; }}
+              onBlur={e  => { (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.07)'; }}
+            />
+            <button
+              onClick={handleAiSearch}
+              disabled={!search.trim() || aiSearching}
+              title="Ricerca semantica AI"
+              style={{
+                flexShrink: 0, background: search.trim() ? `${color}18` : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${search.trim() ? color + '35' : 'rgba(255,255,255,0.07)'}`,
+                borderRadius: 8, padding: '6px 10px', fontSize: 12, cursor: search.trim() ? 'pointer' : 'default',
+                color: search.trim() ? color : 'rgba(255,255,255,0.18)', transition: 'all 0.2s',
+              }}
+            >{aiSearching ? '…' : '✦'}</button>
+          </div>
+          {aiSearch && (
+            <div style={{
+              marginTop: 8, borderRadius: 8, padding: '10px 12px',
+              background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.15)',
+              fontSize: 11, color: 'rgba(255,255,255,0.6)', lineHeight: 1.5,
+            }}>
+              {aiSearch}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Tabs */}

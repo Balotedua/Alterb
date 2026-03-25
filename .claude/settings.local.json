@@ -12,7 +12,11 @@
       "Bash(vercel --prod)",
       "Bash(grep -i \"\\\\.\\(tsx|ts\\)$\")",
       "Bash(grep:*)",
-      "Bash(node -e \":*)"
+      "Bash(node -e \":*)",
+      "Bash(node:*)",
+      "Bash(cat:*)",
+      "Read(//mnt/**)",
+      "Bash(ls /c)"
     ]
   }
 }

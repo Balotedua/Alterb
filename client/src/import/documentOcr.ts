@@ -3,6 +3,9 @@
  * Supports: PDF (pdfjs-dist), images (tesseract.js), plain text
  */
 
+// Vite bundles the worker file and returns the correct URL for any environment
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
 export interface OcrResult {
   text: string;
   pageCount?: number;
@@ -11,17 +14,28 @@ export interface OcrResult {
 }
 
 // ── PDF extraction via pdfjs-dist ─────────────────────────────
+function isIOSorPWA(): boolean {
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  // Standalone = installed PWA
+  const isPWA = ('standalone' in navigator) && (navigator as any).standalone === true;
+  return isIOS || isPWA;
+}
+
 async function extractPdf(file: File): Promise<OcrResult> {
   const pdfjsLib = await import('pdfjs-dist');
 
-  // Use the bundled worker via CDN (avoids Vite worker issues)
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-    'pdfjs-dist/build/pdf.worker.mjs',
-    import.meta.url
-  ).toString();
+  // iOS/PWA: ES module workers not supported — run pdfjs in main thread
+  pdfjsLib.GlobalWorkerOptions.workerSrc = isIOSorPWA() ? '' : pdfWorkerUrl;
 
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pdf = await pdfjsLib.getDocument({
+    data: arrayBuffer,
+    useWorkerFetch: false,
+    isEvalSupported: false,
+    useSystemFonts: true,
+  }).promise;
   const pageTexts: string[] = [];
 
   for (let i = 1; i <= pdf.numPages; i++) {
