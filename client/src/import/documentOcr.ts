@@ -14,20 +14,31 @@ export interface OcrResult {
 }
 
 // ── PDF extraction via pdfjs-dist ─────────────────────────────
-function isIOSorPWA(): boolean {
-  const ua = navigator.userAgent;
-  const isIOS = /iPad|iPhone|iPod/.test(ua) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  // Standalone = installed PWA
-  const isPWA = ('standalone' in navigator) && (navigator as any).standalone === true;
-  return isIOS || isPWA;
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+// iOS Safari non supporta Web Worker ES module → crea Blob URL same-origin
+let resolvedWorkerSrc: string | null = null;
+async function getWorkerSrc(): Promise<string> {
+  if (resolvedWorkerSrc) return resolvedWorkerSrc;
+  if (isIOS) {
+    try {
+      const resp = await fetch(pdfWorkerUrl);
+      const text = await resp.text();
+      resolvedWorkerSrc = URL.createObjectURL(new Blob([text], { type: 'text/javascript' }));
+      return resolvedWorkerSrc;
+    } catch {
+      // fallback: prova URL diretto
+    }
+  }
+  resolvedWorkerSrc = pdfWorkerUrl;
+  return resolvedWorkerSrc;
 }
 
 async function extractPdf(file: File): Promise<OcrResult> {
   const pdfjsLib = await import('pdfjs-dist');
 
-  // iOS/PWA: ES module workers not supported — run pdfjs in main thread
-  pdfjsLib.GlobalWorkerOptions.workerSrc = isIOSorPWA() ? '' : pdfWorkerUrl;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = await getWorkerSrc();
 
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({
@@ -35,6 +46,9 @@ async function extractPdf(file: File): Promise<OcrResult> {
     useWorkerFetch: false,
     isEvalSupported: false,
     useSystemFonts: true,
+    disableRange: isIOS,
+    disableStream: isIOS,
+    disableAutoFetch: isIOS,
   }).promise;
   const pageTexts: string[] = [];
 

@@ -1,52 +1,13 @@
-import type { CategoryMeta, ParsedIntent, VaultEntry } from '../types';
-import { supabase } from '../config/supabase';
+import type { CategoryMeta, ParsedIntent, VaultEntry, UserCalibration, CorrectionRule } from '../types';
 
-// ─── Global rate limiter (Supabase-backed) ────────────────────
-const GEMINI_RPM_LIMIT = 14; // margine di sicurezza sotto 15
 
-async function canUseGemini(): Promise<boolean> {
-  try {
-    const { data, error } = await supabase
-      .from('ai_rate_limit')
-      .select('count, window_start')
-      .eq('id', 1)
-      .single();
-    if (error || !data) return false;
-
-    const windowStart = new Date(data.window_start as string).getTime();
-    const now = Date.now();
-
-    if (now - windowStart > 60_000) {
-      // Finestra scaduta — reset
-      await supabase
-        .from('ai_rate_limit')
-        .update({ count: 1, window_start: new Date().toISOString() })
-        .eq('id', 1);
-      return true;
-    }
-
-    if ((data.count as number) < GEMINI_RPM_LIMIT) {
-      await supabase
-        .from('ai_rate_limit')
-        .update({ count: (data.count as number) + 1 })
-        .eq('id', 1);
-      return true;
-    }
-
-    return false; // rate limit raggiunto → usa DeepSeek
-  } catch {
-    return false;
-  }
-}
-
-// ─── Gemini Flash ─────────────────────────────────────────────
+// ─── Gemini Flash (non-streaming) ─────────────────────────────
 async function geminiChat(messages: { role: string; content: string }[], maxTokens = 256): Promise<string | null> {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
   if (!apiKey) return null;
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    // Converti formato OpenAI → Google (system va nel primo user turn)
+    const timeout = setTimeout(() => controller.abort(), 10000);
     const system = messages.find(m => m.role === 'system')?.content ?? '';
     const turns = messages.filter(m => m.role !== 'system');
     const contents = turns.map(m => ({
@@ -57,7 +18,7 @@ async function geminiChat(messages: { role: string; content: string }[], maxToke
       contents[0].parts[0].text = `${system}\n\n${contents[0].parts[0].text}`;
     }
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -66,7 +27,11 @@ async function geminiChat(messages: { role: string; content: string }[], maxToke
       }
     );
     clearTimeout(timeout);
-    if (!res.ok) throw new Error(`Gemini ${res.status}`);
+    if (!res.ok) {
+      const err = await res.text().catch(() => '');
+      console.error('[geminiChat] HTTP', res.status, err);
+      return null;
+    }
     const json = await res.json();
     return (json.candidates?.[0]?.content?.parts?.[0]?.text as string) ?? null;
   } catch (e) {
@@ -94,14 +59,18 @@ async function geminiChatStream(
       contents[0].parts[0].text = `${system}\n\n${contents[0].parts[0].text}`;
     }
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?key=${apiKey}&alt=sse`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: maxTokens, temperature: 0.4 } }),
       }
     );
-    if (!res.ok || !res.body) return null;
+    if (!res.ok || !res.body) {
+      const errText = await res.text().catch(() => '');
+      console.error('[geminiChatStream] HTTP', res.status, errText);
+      return null;
+    }
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let full = '';
@@ -126,14 +95,9 @@ async function geminiChatStream(
   }
 }
 
-// ─── Router: Gemini se sotto rate limit, DeepSeek come fallback ─
+// ─── Router: Gemini ───────────────────────────────────────────
 async function aiChat_router(messages: { role: string; content: string }[], maxTokens = 256): Promise<string | null> {
-  const useGemini = await canUseGemini();
-  if (useGemini) {
-    const result = await geminiChat(messages, maxTokens);
-    if (result !== null) return result;
-  }
-  return deepseekChat(messages, maxTokens);
+  return geminiChat(messages, maxTokens);
 }
 
 const SYSTEM = `Sei il cervello di "Alter", un OS personale liquido.
@@ -173,72 +137,6 @@ interface AiResult {
   meta: CategoryMeta;
 }
 
-async function deepseekChat(messages: { role: string; content: string }[], maxTokens = 256): Promise<string | null> {
-  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
-  if (!apiKey) return null;
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'deepseek-chat', messages, temperature: 0.4, max_tokens: maxTokens }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!res.ok) throw new Error(`DeepSeek ${res.status}`);
-    const json = await res.json();
-    localStorage.setItem('_alter_ai_calls', String(parseInt(localStorage.getItem('_alter_ai_calls') ?? '0', 10) + 1));
-    const tokIn  = (json.usage?.prompt_tokens     ?? 0) as number;
-    const tokOut = (json.usage?.completion_tokens ?? 0) as number;
-    localStorage.setItem('_alter_ai_tokens_in',  String(parseInt(localStorage.getItem('_alter_ai_tokens_in')  ?? '0', 10) + tokIn));
-    localStorage.setItem('_alter_ai_tokens_out', String(parseInt(localStorage.getItem('_alter_ai_tokens_out') ?? '0', 10) + tokOut));
-    return json.choices[0].message.content as string;
-  } catch (e) {
-    console.error('[deepseekChat]', e);
-    return null;
-  }
-}
-
-// ─── DeepSeek SSE streaming ────────────────────────────────────
-async function deepseekChatStream(
-  messages: { role: string; content: string }[],
-  onChunk: (accumulated: string) => void,
-  maxTokens = 700
-): Promise<string | null> {
-  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
-  if (!apiKey) return null;
-  try {
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'deepseek-chat', messages, temperature: 0.4, max_tokens: maxTokens, stream: true }),
-    });
-    if (!res.ok || !res.body) return null;
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let full = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const raw = decoder.decode(value, { stream: true });
-      for (const line of raw.split('\n')) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data: ')) continue;
-        const data = trimmed.slice(6);
-        if (data === '[DONE]') continue;
-        try {
-          const delta = (JSON.parse(data).choices?.[0]?.delta?.content ?? '') as string;
-          if (delta) { full += delta; onChunk(full); }
-        } catch { /* malformed chunk — skip */ }
-      }
-    }
-    return full || null;
-  } catch (e) {
-    console.error('[deepseekChatStream]', e);
-    return null;
-  }
-}
 
 // Extract the "reply" field value from a partially-streamed JSON string
 function extractReplyFromPartialJson(json: string): string {
@@ -249,13 +147,39 @@ function extractReplyFromPartialJson(json: string): string {
   return '';
 }
 
+// ─── Calibration block injected into all AI system prompts ────
+function calibrationBlock(cal?: UserCalibration | null, rules?: CorrectionRule[]): string {
+  const lines: string[] = [];
+
+  if (cal) {
+    lines.push('\n\nPROFILO COMUNICATIVO UTENTE (rispetta sempre queste preferenze):');
+    const empathy = cal.empathy >= 7 ? 'Rispondi con calore, riconosci le emozioni' : cal.empathy >= 4 ? 'Tono neutro ed equilibrato' : 'Risposta diretta, meno emotiva';
+    const directness = cal.directness >= 7 ? 'Frasi brevi, vai al punto, niente divagazioni' : cal.directness >= 4 ? 'Bilanciato tra brevità e contesto' : 'Risposte più elaborate e dettagliate';
+    const humor = cal.humor >= 7 ? 'Tono leggero e giocoso, puoi scherzare' : cal.humor >= 4 ? 'Occasionalmente scherzoso' : 'Tono serio, evita battute';
+    const logic = cal.logic >= 7 ? 'Cita dati e ragionamenti strutturati' : cal.logic >= 4 ? 'Mix di intuizione e analisi' : 'Approccio intuitivo e narrativo, meno numeri';
+    lines.push(`- Empatia ${cal.empathy}/10 → ${empathy}`);
+    lines.push(`- Direttezza ${cal.directness}/10 → ${directness}`);
+    lines.push(`- Umorismo ${cal.humor}/10 → ${humor}`);
+    lines.push(`- Logica ${cal.logic}/10 → ${logic}`);
+  }
+
+  if (rules && rules.length > 0) {
+    lines.push('\n⚠️ REGOLE APPRESE (assolute, mai violare):');
+    rules.forEach((r, i) => lines.push(`${i + 1}. ${r.rule}`));
+  }
+
+  return lines.join('\n');
+}
+
 // ─── Streaming aiChat ─────────────────────────────────────────
 export async function aiChatStream(
   text: string,
   onChunk: (text: string) => void,
   history: ChatHistoryEntry[] = [],
   vaultContext?: string,
-  webContext?: string
+  webContext?: string,
+  calibration?: UserCalibration | null,
+  correctionRules?: CorrectionRule[]
 ): Promise<string> {
   const systemBase = `Sei Nebula, il compagno digitale di Alter OS. Hai la personalità di un amico autentico: curioso, caldo, diretto. Mai banale, mai formale.
 
@@ -278,19 +202,13 @@ Regole:
     systemContent += `\n\n🌐 DATI WEB AGGIORNATI (${today}):\n${webContext}\n\nUsa questi dati per rispondere. Se disponibili, cita la fonte. Non affermare limiti di conoscenza — hai i dati qui sopra.`;
   }
 
+  systemContent += calibrationBlock(calibration, correctionRules);
+
   const msgs = [{ role: 'system', content: systemContent }, ...buildHistory(history), { role: 'user', content: text }];
 
-  const useGemini = await canUseGemini();
-  if (useGemini) {
-    let finalGemini = '';
-    const result = await geminiChatStream(msgs, (acc) => { finalGemini = acc; onChunk(acc); }, 700);
-    if (result !== null) return result ?? finalGemini;
-  }
-
-  // DeepSeek SSE fallback
   let finalText = '';
-  const result = await deepseekChatStream(msgs, (acc) => { finalText = acc; onChunk(acc); }, 700);
-  return result ?? finalText ?? 'Ci sono. Dimmi pure.';
+  const result = await geminiChatStream(msgs, (acc) => { finalText = acc; onChunk(acc); }, 700);
+  return result || finalText || 'Ci sono. Dimmi pure.';
 }
 
 // ─── Streaming aiChatAndExtract ───────────────────────────────
@@ -298,44 +216,19 @@ export async function aiChatAndExtractStream(
   text: string,
   onReplyChunk: (replyText: string) => void,
   history: ChatHistoryEntry[] = [],
-  vaultContext?: string
+  vaultContext?: string,
+  calibration?: UserCalibration | null,
+  correctionRules?: CorrectionRule[]
 ): Promise<ChatAndExtractResult> {
   const fallback = (): ChatAndExtractResult => ({ reply: 'Sono qui. Dimmi pure.', extractions: [] });
-  const systemContent = vaultContext
+  let systemContent = vaultContext
     ? `${SYSTEM_COMBINED}\n\n⛔ ANTI-ALLUCINAZIONE (ASSOLUTA): Hai SOLO conteggi e date per categoria — NON il contenuto delle singole voci. VIETATO inventare note, importi, nomi, idee specifiche. Se l'utente chiede il contenuto dettagliato, rispondi SOLO: 'Digita "mostrami [categoria]" per vedere i dati reali.'\n\n📊 Galassia personale (solo conteggi e date):\n${vaultContext}`
     : SYSTEM_COMBINED;
+  systemContent += calibrationBlock(calibration, correctionRules);
   const msgs = [{ role: 'system', content: systemContent }, ...buildHistory(history), { role: 'user', content: text }];
 
-  // Try Gemini first with streaming
-  const useGemini = await canUseGemini();
-  if (useGemini) {
-    let rawGemini = '';
-    const result = await geminiChatStream(
-      msgs,
-      (acc) => {
-        rawGemini = acc;
-        const replyText = extractReplyFromPartialJson(acc);
-        if (replyText) onReplyChunk(replyText);
-      },
-      900
-    );
-    if (result !== null) {
-      const full = result ?? rawGemini;
-      try {
-        const jsonMatch = full.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) return fallback();
-        const parsed = JSON.parse(jsonMatch[0]);
-        return {
-          reply: typeof parsed.reply === 'string' ? parsed.reply : 'Compreso.',
-          extractions: Array.isArray(parsed.extractions) ? parsed.extractions : [],
-        };
-      } catch { return fallback(); }
-    }
-  }
-
-  // DeepSeek SSE: stream reply field progressively
   let rawFull = '';
-  await deepseekChatStream(
+  const result = await geminiChatStream(
     msgs,
     (acc) => {
       rawFull = acc;
@@ -345,9 +238,10 @@ export async function aiChatAndExtractStream(
     900
   );
 
-  if (!rawFull) return fallback();
+  const full = result ?? rawFull;
+  if (!full) return fallback();
   try {
-    const jsonMatch = rawFull.match(/\{[\s\S]*\}/);
+    const jsonMatch = full.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return fallback();
     const parsed = JSON.parse(jsonMatch[0]);
     return {
@@ -411,10 +305,10 @@ export async function classifyDocument(text: string): Promise<DocumentClassifica
     return { docType, docTypeLabel, main_subject: issuerMatch?.[1] ?? null, doc_date: null, expiry_date, value, summary: docTypeLabel, tags: [docType] };
   };
 
-  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
   if (!apiKey) return fallback();
 
-  const raw = await deepseekChat([
+  const raw = await geminiChat([
     {
       role: 'system',
       content: `Sei un classificatore di documenti. Analizza il testo e restituisci SOLO un JSON valido (niente altro) con questi campi:
@@ -509,13 +403,12 @@ Regole:
 }
 
 // ─── Query: answer a question using vault entries as context ──
-export async function aiQuery(question: string, entries: import('../types').VaultEntry[]): Promise<string> {
+export async function aiQuery(question: string, entries: import('../types').VaultEntry[], calibration?: UserCalibration | null, correctionRules?: CorrectionRule[]): Promise<string> {
   const context = entries.slice(0, 30).map(e =>
     `[${new Date(e.created_at).toLocaleDateString('it-IT')} · ${e.category}] ${JSON.stringify(e.data)}`
   ).join('\n');
 
-  const reply = await aiChat_router([
-    { role: 'system', content: `Sei Nebula, il compagno digitale di Alter OS. L'utente ti fa una domanda sui suoi dati. Rispondi come un amico diretto e attento — non come un database.
+  const systemBase = `Sei Nebula, il compagno digitale di Alter OS. L'utente ti fa una domanda sui suoi dati. Rispondi come un amico diretto e attento — non come un database.
 
 Regole:
 - Prima dai la risposta principale in modo diretto e conversazionale (es. "Hai speso 35€ ieri, per la pizza"), poi aggiungi dettagli utili se ce ne sono
@@ -523,7 +416,10 @@ Regole:
 - Se hai 3+ voci, puoi usare un elenco informale con "·" ma tieni il tono caldo
 - Cita cifre e date in modo naturale, non da tabella
 - Se i dati sono scarsi o mancanti, dillo in modo umano e suggerisci cosa potrebbe fare
-- Rispondi in italiano, mai formale` },
+- Rispondi in italiano, mai formale` + calibrationBlock(calibration, correctionRules);
+
+  const reply = await aiChat_router([
+    { role: 'system', content: systemBase },
     { role: 'user', content: `Dati disponibili:\n${context || '(nessun dato)'}\n\nDomanda: ${question}` },
   ], 800);
 
@@ -679,32 +575,15 @@ export async function aiChatAndExtract(text: string, history: ChatHistoryEntry[]
 }
 
 export async function aiParse(text: string): Promise<Omit<ParsedIntent, 'source' | 'rawText'> | null> {
-  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
-  if (!apiKey) {
-    console.warn('[aiParser] No VITE_DEEPSEEK_API_KEY set — falling back to null');
-    return null;
-  }
-
   try {
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: text }],
-        response_format: { type: 'json_object' },
-        temperature: 0.2,
-        max_tokens: 256,
-      }),
-    });
-    if (!res.ok) throw new Error(`DeepSeek ${res.status}`);
-    const json = await res.json();
-    localStorage.setItem('_alter_ai_calls', String(parseInt(localStorage.getItem('_alter_ai_calls') ?? '0', 10) + 1));
-    const tokIn  = (json.usage?.prompt_tokens     ?? 0) as number;
-    const tokOut = (json.usage?.completion_tokens ?? 0) as number;
-    localStorage.setItem('_alter_ai_tokens_in',  String(parseInt(localStorage.getItem('_alter_ai_tokens_in')  ?? '0', 10) + tokIn));
-    localStorage.setItem('_alter_ai_tokens_out', String(parseInt(localStorage.getItem('_alter_ai_tokens_out') ?? '0', 10) + tokOut));
-    const parsed: AiResult = JSON.parse(json.choices[0].message.content);
+    const raw = await geminiChat(
+      [{ role: 'system', content: SYSTEM }, { role: 'user', content: text }],
+      256
+    );
+    if (!raw) return null;
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    const parsed: AiResult = JSON.parse(jsonMatch[0]);
     return { category: parsed.category, data: parsed.data, categoryMeta: parsed.meta };
   } catch (e) {
     console.error('[aiParser]', e);
@@ -830,4 +709,43 @@ Rispondi SOLO con JSON valido (no markdown):
   } catch {
     return fallback();
   }
+}
+
+// ─── Correction: proactive apology when user flags an error ───
+export async function aiCorrection(
+  userMessage: string,
+  onChunk: (text: string) => void,
+  correctionRules: CorrectionRule[] = [],
+  calibration?: UserCalibration | null
+): Promise<string> {
+  const rulesContext = correctionRules.length > 0
+    ? `\n\nRegole già apprese in precedenza:\n${correctionRules.map((r, i) => `${i + 1}. ${r.rule}`).join('\n')}`
+    : '';
+
+  const systemContent = `Sei Nebula, il compagno digitale di Alter OS. L'utente ti sta correggendo su qualcosa che hai fatto di sbagliato.
+
+COMPORTAMENTO RICHIESTO (obbligatorio):
+1. Scusati in modo genuino e proattivo — non difenderti, ammetti l'errore direttamente
+2. Descrivi brevemente la regola che hai capito di dover seguire
+3. Chiedi se vuole eliminare il dato/entry che hai creato per errore
+4. Tono: amico che ammette un errore senza drammi, 2-3 frasi max
+
+MAI iniziare con "Certo!" o "Capito!" da soli. Sii diretto e umano.${rulesContext}` + calibrationBlock(calibration);
+
+  let finalText = '';
+  const result = await geminiChatStream(
+    [{ role: 'system', content: systemContent }, { role: 'user', content: userMessage }],
+    (acc) => { finalText = acc; onChunk(acc); },
+    350
+  );
+  return result || finalText || 'Hai ragione, mi scuso. Ho capito cosa non fare — vuoi che elimini l\'entry che ho salvato per errore?';
+}
+
+// ─── Extract correction rule from user feedback ────────────────
+export async function aiExtractCorrectionRule(userMessage: string): Promise<string> {
+  const raw = await geminiChat([
+    { role: 'system', content: `Dato il messaggio di correzione dell'utente, estrai una regola comportamentale concisa da seguire in futuro. Rispondi SOLO con la regola come stringa in italiano, senza punteggiatura finale. Max 20 parole. Esempi: "Non categorizzare input privi di significato semantico come interessi o carriera" · "Non salvare automaticamente messaggi di test o nonsense"` },
+    { role: 'user', content: userMessage },
+  ], 100);
+  return raw?.trim() ?? 'Non ripetere questo comportamento in futuro';
 }

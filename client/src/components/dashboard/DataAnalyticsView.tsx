@@ -241,7 +241,7 @@ export default function DataAnalyticsView() {
 
       setResult(localAnalyse(data, category));
 
-      const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
       if (apiKey) {
         setLoading(true);
         try {

@@ -329,20 +329,17 @@ export default function StarfieldView() {
         const [rB, gB, bB] = hexToRgb(sB.color);
         const strength = (link.similarity - 0.55) / 0.45; // 0..1
         const breathe  = 0.82 + Math.sin(state.t * 0.65 + link.catA.charCodeAt(0) * 0.13) * 0.18;
-        const alpha    = strength * 0.30 * breathe;
+        const alpha    = strength * 0.06 * breathe; // hairline, quasi-invisible
         const grad = ctx.createLinearGradient(pa.sx, pa.sy, pb.sx, pb.sy);
         grad.addColorStop(0,   `rgba(${rA},${gA},${bA},${alpha})`);
-        grad.addColorStop(0.5, `rgba(255,255,255,${alpha * 0.7})`);
+        grad.addColorStop(0.5, `rgba(255,255,255,${alpha * 0.5})`);
         grad.addColorStop(1,   `rgba(${rB},${gB},${bB},${alpha})`);
         ctx.beginPath();
         ctx.moveTo(pa.sx, pa.sy);
         ctx.lineTo(pb.sx, pb.sy);
         ctx.strokeStyle = grad;
-        ctx.lineWidth   = 1.5 + strength * 2.0;
-        ctx.shadowBlur  = 8 * strength;
-        ctx.shadowColor = `rgba(${rA},${gA},${bA},0.5)`;
+        ctx.lineWidth   = 0.5; // hairline fisso
         ctx.stroke();
-        ctx.shadowBlur  = 0;
       }
       ctx.restore();
     }
@@ -429,7 +426,7 @@ export default function StarfieldView() {
       ctx.fill();
       ctx.shadowBlur = 0;
 
-      // Dual orbital rings + icon for planets
+      // Dual orbital rings for planets (pure spheres — no emoji)
       if (isPlanet) {
         ctx.save();
         ctx.translate(px, py);
@@ -449,14 +446,6 @@ export default function StarfieldView() {
         ctx.lineWidth = 0.45 * s;
         ctx.shadowBlur = 0;
         ctx.stroke();
-        ctx.restore();
-        const pmeta = getCategoryMeta(star.id);
-        ctx.save();
-        ctx.font = `${Math.round(coreR * 0.80)}px system-ui`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.globalAlpha = (isHov ? 0.88 : 0.68) * (0.3 + wf * 0.7);
-        ctx.fillText(pmeta.icon, px, py);
         ctx.restore();
       }
 

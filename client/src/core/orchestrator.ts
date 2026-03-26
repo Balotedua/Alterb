@@ -33,6 +33,12 @@ function extractDocTypeFromQuery(text: string): string | null {
   return null;
 }
 
+// Correction: user flagging something the AI did wrong
+const CORRECTION_PATTERN = /\b(hai\s+sbagliato|era\s+sbagliato|non\s+farlo\s+più|non\s+fare\s+così|era\s+errato|non\s+categorizzare|hai\s+fatto\s+male|l[''']hai\s+sbagliata?|era\s+un\s+errore|questo\s+è\s+(sbagliato|un\s+errore)|non\s+avevi\s+dovuto|non\s+dovevi|non\s+si\s+fa)\b/i;
+
+// Calibration: user wants to adjust Nebula's communication style
+const CALIBRATE_PATTERN = /\b(calibra|calibrami?|cambia\s+tono|feedback\s+su\s+(nebula|te|di\s+te)|preferenze\s+(nebula|comunicative?)|come\s+vuoi\s+(che\s+)?parli?|come\s+mi\s+parli?|adatta\s+(il\s+tono|ti|il\s+modo)|modifica\s+(il\s+tono|il\s+modo\s+di\s+parlare)|personalizza\s+nebula)\b/i;
+
 const HELP_TRIGGERS    = ['?', 'aiuto', 'help'];
 const CAPABILITY_PATTERN = /\b(cosa\s+(sai|puoi|riesci|supporti)\s+fare|cosa\s+posso\s+(fare|chiederti|dirti)|come\s+(funzion|si\s+usa)|posso\s+(caricare|inviarti|mandarti|uploadare|allegare|passarti)|supporti?\s+(pdf|csv|xlsx|documenti?|file)|puoi\s+(leggere|analizzare|importare|gestire).{0,30}(pdf|csv|documenti?|file|estratt)|hai\s+(funzion|capacit|feature)|cosa\s+fai|a\s+cosa\s+servi|come\s+ti\s+uso|come\s+funzioni|cosa\s+gestisci|quali\s+(funzioni|comandi|categorie))/i;
 const DELETE_PATTERN   = /^(cancella|elimina|rimuovi|delete)\s+/i;
@@ -79,6 +85,9 @@ const CHAT_PATTERN = /^(ciao|salve|buongiorno|buonasera|buona\s*notte|hey|hello|
 
 // Conversational questions about Alter or personal/relational — NOT data queries
 const CHAT_PERSONAL_PATTERN = /\b(cosa.*\bdi te\b|di te\b|ti (piace|fa|sembra|pensi|dici|rende)|cosa (ti|ne) (pensi|sembra|dici|fa)|sai cosa (mi|ti|gli|le)|mi (piace|fa ridere|fa sorridere|fa piacere) (di te|in te|il fatto)|sei (bello|bravo|speciale|utile|unico|diverso)|cosa (sei|pensi di te)|ti (voglio bene|amo)|come mai sei|perché sei)\b/i;
+
+// Short conversational continuations — follow-up reactions, clarification requests, chitchat
+const CHAT_CONTINUATION_PATTERN = /^(in\s+che\s+senso|che\s+senso|cioè\??|tipo\??|davvero\??|sul\s+serio\??|interessante[!.]?|capisco[!.]?|non\s+capisco[!.]?|non\s+ho\s+capito[!.]?|cosa\s+(intendi|vuoi\s+dire|significa)[^?]*\??|ma\s+cosa|e\s+(allora|quindi|poi)\??|e\s+quindi\??|continua[!.]?|dimmi\s+(ancora|di\s+più|altro)[!.]?|raccontami\s+(ancora|di\s+più|altro)[!.]?|che\s+(bella|grande|strana|assurda|brutta)\s+(storia|cosa|roba|idea|risposta)[!.]?|che\s+(bello|grande|strano|assurdo|brutto|bello)[!.!]*|ma\s+dai[!.?]*|no\s+dai[!.?]*|dai[!.?]*|wow[!.?]*|boh[!.?]*|mah[!.?]*|ahahah[ah!.]*|haha[ha!.]*|lol[!.]*|incredibile[!.]?|assurdo[!.]?|strano[!.]?|interessante[!.]?|davvero\s+interessante[!.]?|ovviamente[!.]?|logico[!.]?|ha\s+senso[!.]?|non\s+ha\s+senso[!.]?|e\s+con\s+ciò[?!.]?|e\s+quindi[?!.]?|quindi[?!.]?|allora[?!.]?|insomma[?!.]?)[\s!.?]*$/i;
 
 
 function extractDeleteCategory(text: string): string | null {
@@ -131,7 +140,7 @@ function extractDeleteDateRange(text: string): [Date, Date] | null {
 }
 
 // Questions that query existing data (not create new entries)
-const QUERY_PATTERN = /(\?$)|^(cosa devo|cosa c'è|cosa ho |quanto ho |quanti |quante |com'era|com era|mostrami|dimmi tutto|elenca|lista |ci sono (impegni|appuntamenti)|ho (impegni|appuntamenti)|impegni (di|per)|cosa (è previsto|succede|mi aspetta)|cos[a']?\s+altro\s+(ho|c[''è]|hai)|che\s+(note|appunti|idee|riflessioni|interessi|libri|obiettivi|abitudini|routine)|quali\s+(note|appunti|interessi|attività|categorie))|\b(ho\s+(speso|pagato|comprato|guadagnato|preso)|dove\s+ho\s+(speso|pagato)|quando\s+ho\s+(speso|pagato)|in\s+che\s+(periodo|mese|giorno)|a\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre))/i;
+const QUERY_PATTERN = /(\?$)|^(cosa devo|cosa c'è|cosa ho |quanto ho |quanti |quante |com'era|com era|mostrami|dimmi\b|raccontami\b|fammi\s+vedere|parlami\b|voglio\s+(vedere|sapere|controllare)\b|vediamo\b|elenca|lista |ci sono (impegni|appuntamenti)|ho (impegni|appuntamenti)|impegni (di|per)|cosa (è previsto|succede|mi aspetta)|cos[a']?\s+altro\s+(ho|c[''è]|hai)|che\s+(note|appunti|idee|riflessioni|interessi|libri|obiettivi|abitudini|routine)|quali\s+(note|appunti|interessi|attività|categorie))|\b(ho\s+(speso|pagato|comprato|guadagnato|preso)|dove\s+ho\s+(speso|pagato)|quando\s+ho\s+(speso|pagato)|in\s+che\s+(periodo|mese|giorno)|a\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre))/i;
 
 // Affirmative follow-up + category keyword, or "le ultime" standalone
 const AFFIRMATIVE_QUERY_PATTERN = /^(s[iì]|ok|okay|vai|perfetto|certo|sure)\s+(le?\s+)?(ultime?|recenti?|spes[ae]|finanz|transazion|uscite?|entrate?|acquisti?|spese\s+recenti)|^le\s+ultime?\b/i;
@@ -140,7 +149,7 @@ const AFFIRMATIVE_QUERY_PATTERN = /^(s[iì]|ok|okay|vai|perfetto|certo|sure)\s+(
 export function inferQueryCategory(text: string): string | null {
   const lower = text.toLowerCase();
   if (/impegn|appuntament|riunione|meeting|calendario|devo fare|previsto|succede/.test(lower)) return 'calendar';
-  if (/spes[oa]|finanz|budget|soldi|euro|€|costo|guadagn|entrat|transazion/.test(lower))       return 'finance';
+  if (/spes[oa]|finanz|budget|soldi|euro|€|costo|guadagn|entrat|transazion|uscit/.test(lower))  return 'finance';
   if (/umore|mood|psiche|ansia|stress|felice|triste|riflessioni?/.test(lower))                  return 'mental_health';
   if (/peso|sonno|salute|sport|allenamento|acqua|dieta|calorie/.test(lower))                    return 'health';
   if (/note?|appunti|idee?|pensieri|nota\s+a\s+me/.test(lower))                                 return 'notes';
@@ -236,6 +245,8 @@ export type OrchestratorAction =
   | { type: 'web_search';   raw: string; query: string }
   | { type: 'codex' }
   | { type: 'coherence_audit' }
+  | { type: 'correction';   raw: string }
+  | { type: 'calibrate' }
   | { type: 'unknown';      raw: string };
 
 export function orchestrate(
@@ -246,6 +257,13 @@ export function orchestrate(
   if (!trimmed) return { type: 'unknown', raw: trimmed };
 
   const lower = trimmed.toLowerCase();
+
+  // ── Correction / Calibration — check before everything else ─
+  if (CORRECTION_PATTERN.test(lower))
+    return { type: 'correction', raw: trimmed };
+
+  if (CALIBRATE_PATTERN.test(lower))
+    return { type: 'calibrate' };
 
   // ── Document commands ────────────────────────────────────
   if (DOC_LIST_PATTERN.test(trimmed))
@@ -294,7 +312,7 @@ export function orchestrate(
   }
 
   // ── Chat: greetings / chit-chat / personal questions — no data to save ────────
-  if (CHAT_PATTERN.test(trimmed) || CHAT_PERSONAL_PATTERN.test(lower))
+  if (CHAT_PATTERN.test(trimmed) || CHAT_PERSONAL_PATTERN.test(lower) || CHAT_CONTINUATION_PATTERN.test(trimmed))
     return { type: 'chat', raw: trimmed };
 
   if (QUERY_PATTERN.test(trimmed))

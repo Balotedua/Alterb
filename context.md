@@ -33,4 +33,3 @@ Input utente
 
 ## Design System
 - Dark background con glassmorphism (`border-opacity: 0.05–0.1`)
-- Contrasto testo ≥ 4.5:1 · Touch target ≥ 44px · Keyboard navigabile

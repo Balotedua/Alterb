@@ -4,7 +4,7 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Trash2, X } from 'lucide-react';
+import { Check, Trash2, X, CreditCard, TrendingUp, Target, ArrowLeftRight, Landmark, BarChart2 } from 'lucide-react';
 import { useAlterStore } from '../../../store/alterStore';
 import { saveEntry, updateEntryData, deleteEntry } from '../../../vault/vaultService';
 import { importBankCsv, importBankXlsx, parseBankPdfText, importParsedTransactions } from '../../../import/bankCsvImport';
@@ -47,7 +47,7 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
   });
   const [editBudgetLabel, setEditBudgetLabel] = useState<string | null>(null);
   const [editBudgetVal, setEditBudgetVal] = useState('');
-  const { setActiveWidget, user } = useAlterStore();
+  const { setActiveWidget, activeWidget, user } = useAlterStore();
 
   const [addMode, setAddMode] = useState<'form' | 'import'>('form');
   const [addType, setAddType] = useState<'expense' | 'income'>('expense');
@@ -80,7 +80,7 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
     return { key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`, label: MESI[d.getMonth()], entrate: 0, uscite: 0, netto: 0 };
   });
   for (const e of entries) {
-    const key = e.created_at.slice(0, 7);
+    const key = ((e.data.date as string | undefined) || e.created_at).slice(0, 7);
     const m = months6.find(mx => mx.key === key);
     if (!m) continue;
     if (e.data.type === 'income')  m.entrate += (e.data.amount as number) ?? 0;
@@ -98,7 +98,7 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
 
   // giorno della settimana
   const daySpend = Array(7).fill(0) as number[];
-  for (const e of expenses) daySpend[new Date(e.created_at).getDay()] += (e.data.amount as number) ?? 0;
+  for (const e of expenses) daySpend[new Date((e.data.date as string | undefined) || e.created_at).getDay()] += (e.data.amount as number) ?? 0;
   const maxDaySpend = Math.max(...daySpend);
   const topDay = daySpend.indexOf(maxDaySpend);
 
@@ -106,7 +106,7 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
   const labelMonths = new Map<string, Set<string>>();
   for (const e of expenses) {
     const lbl = (e.data.label as string) || 'altro';
-    const month = e.created_at.slice(0, 7);
+    const month = ((e.data.date as string | undefined) || e.created_at).slice(0, 7);
     if (!labelMonths.has(lbl)) labelMonths.set(lbl, new Set());
     labelMonths.get(lbl)!.add(month);
   }
@@ -172,33 +172,41 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
     setPrestSubmitting(false);
     if (saved) {
       setShowAddPrest(false); setPrestPersona(''); setPrestImporto(''); setPrestNote('');
-      // trigger re-render by toggling a dummy state — widget re-fetches on its own cycle
+      if (activeWidget) setActiveWidget({ ...activeWidget, entries: [...activeWidget.entries, saved] });
     } else {
       setPrestErr('Errore salvataggio.');
     }
-  }, [user, prestTipo, prestPersona, prestImporto, prestData, prestNote]);
+  }, [user, prestTipo, prestPersona, prestImporto, prestData, prestNote, activeWidget, setActiveWidget]);
 
   const handleToggleSaldato = useCallback(async (id: string, current: boolean) => {
     setTogglingId(id);
     const entry = allPrestiti.find(e => e.id === id);
-    if (entry) await updateEntryData(id, { ...entry.data, saldato: !current });
+    if (entry) {
+      const newData = { ...entry.data, saldato: !current };
+      await updateEntryData(id, newData);
+      if (activeWidget) {
+        const updated = activeWidget.entries.map(e => e.id === id ? { ...e, data: newData } : e);
+        setActiveWidget({ ...activeWidget, entries: updated });
+      }
+    }
     setTogglingId(null);
-  }, [allPrestiti]);
+  }, [allPrestiti, activeWidget, setActiveWidget]);
 
   const handleDeletePrestito = useCallback(async (id: string) => {
     setRemovingId(id);
     await deleteEntry(id);
+    if (activeWidget) setActiveWidget({ ...activeWidget, entries: activeWidget.entries.filter(e => e.id !== id) });
     setRemovingId(null);
-  }, []);
+  }, [activeWidget, setActiveWidget]);
 
   // patrimonio running balance
   const sortedAll = [...entries]
     .filter(e => e.data.type === 'income' || e.data.type === 'expense')
-    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    .sort((a, b) => ((a.data.date as string | undefined) || a.created_at).localeCompare((b.data.date as string | undefined) || b.created_at));
   let cumBal = 0;
   const nwRaw = sortedAll.map(e => {
     cumBal += e.data.type === 'income' ? ((e.data.amount as number) ?? 0) : -((e.data.amount as number) ?? 0);
-    return { key: e.created_at.slice(0, 7), value: cumBal };
+    return { key: ((e.data.date as string | undefined) || e.created_at).slice(0, 7), value: cumBal };
   });
   const nwByMonth = Object.values(
     nwRaw.reduce((acc, d) => {
@@ -220,7 +228,8 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
 
   const filtered = entries
     .filter(e => filter === 'all' || e.data.type === filter)
-    .filter(e => !search || ((e.data.label as string) ?? '').toLowerCase().includes(search.toLowerCase()));
+    .filter(e => !search || ((e.data.label as string) ?? '').toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => ((b.data.date as string | undefined) || b.created_at).localeCompare((a.data.date as string | undefined) || a.created_at));
 
   // ── Handlers ──────────────────────────────────────────────────────
   const handleManualAdd = async () => {
@@ -277,12 +286,12 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
   // ── HUB ───────────────────────────────────────────────────────────
   if (!singleMode && tab === null) {
     const hubCards = [
-      { id: 'transazioni' as FinanceTab, icon: '💳', label: 'Transazioni', metric: String(expenses.length + income.length), sub: 'movimenti totali', accent: '#60a5fa' },
-      { id: 'cashflow'    as FinanceTab, icon: '📊', label: 'Cashflow',    metric: `${months6[5]?.netto >= 0 ? '+' : ''}€${(months6[5]?.netto ?? 0).toFixed(0)}`, sub: 'netto ' + MESI[_now.getMonth()], accent: '#4ade80' },
-      { id: 'budget'      as FinanceTab, icon: '🎯', label: 'Budget',      metric: bgtTotalTarget > 0 ? `${Math.round(bgtRingPct)}%` : String(recurring.length), sub: bgtTotalTarget > 0 ? 'budget usato' : 'spese fisse rilevate', accent: C },
-      { id: 'prestiti'    as FinanceTab, icon: '💸', label: 'Prestiti',    metric: `€${(totalDebt + totalCredit).toFixed(0)}`, sub: `${debtEntries.length + creditEntries.length} registrazioni`, accent: '#f59e0b' },
-      { id: 'patrimonio'  as FinanceTab, icon: '🏦', label: 'Patrimonio',  metric: `${currentNetWorth >= 0 ? '+' : ''}€${Math.abs(currentNetWorth).toFixed(0)}`, sub: 'saldo accumulato', accent: '#a78bfa' },
-      { id: 'analisi'     as FinanceTab, icon: '🔥', label: 'Analisi',     metric: topDay >= 0 && maxDaySpend > 0 ? DAYS_IT[topDay] : '—', sub: 'giorno top spese', accent: '#f87171' },
+      { id: 'transazioni' as FinanceTab, Icon: CreditCard,    label: 'Transazioni', metric: String(expenses.length + income.length), sub: 'movimenti totali',            accent: '#5187c8' },
+      { id: 'cashflow'    as FinanceTab, Icon: TrendingUp,    label: 'Cashflow',    metric: `${months6[5]?.netto >= 0 ? '+' : ''}€${(months6[5]?.netto ?? 0).toFixed(0)}`, sub: 'netto ' + MESI[_now.getMonth()], accent: '#2fa87a' },
+      { id: 'budget'      as FinanceTab, Icon: Target,        label: 'Budget',      metric: bgtTotalTarget > 0 ? `${Math.round(bgtRingPct)}%` : String(recurring.length), sub: bgtTotalTarget > 0 ? 'budget usato' : 'spese fisse rilevate', accent: C },
+      { id: 'prestiti'    as FinanceTab, Icon: ArrowLeftRight, label: 'Prestiti',   metric: `€${(totalDebt + totalCredit).toFixed(0)}`, sub: `${debtEntries.length + creditEntries.length} registrazioni`, accent: '#b89630' },
+      { id: 'patrimonio'  as FinanceTab, Icon: Landmark,      label: 'Patrimonio',  metric: `${currentNetWorth >= 0 ? '+' : ''}€${Math.abs(currentNetWorth).toFixed(0)}`, sub: 'saldo accumulato', accent: '#8b72d0' },
+      { id: 'analisi'     as FinanceTab, Icon: BarChart2,     label: 'Analisi',     metric: topDay >= 0 && maxDaySpend > 0 ? DAYS_IT[topDay] : '—', sub: 'giorno top spese', accent: '#c96f6f' },
     ];
 
     return (
@@ -295,21 +304,21 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
         }}>
           <div style={labelStyle}>Saldo mensile</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 24, marginBottom: 18 }}>
-            <div style={{ fontSize: 44, fontWeight: 100, color: balance >= 0 ? '#4ade80' : '#f87171', letterSpacing: '-0.04em', lineHeight: 1 }}>
+            <div style={{ fontSize: 46, fontWeight: 200, color: balance >= 0 ? '#3aad80' : '#c96f6f', letterSpacing: '-0.05em', lineHeight: 1, fontFamily: "'Space Mono', monospace" }}>
               {balance >= 0 ? '+' : '-'}€{Math.abs(balance).toFixed(0)}
             </div>
             {savings != null && (
               <div style={{ paddingBottom: 4 }}>
                 <div style={{ ...labelStyle, marginBottom: 4 }}>Risparmio</div>
-                <div style={{ fontSize: 22, fontWeight: 100, color: '#f0c040' }}>{savings}%</div>
+                <div style={{ fontSize: 20, fontWeight: 200, color: '#b89630', fontFamily: "'Space Mono', monospace" }}>{savings}%</div>
               </div>
             )}
           </div>
           <div style={{ display: 'flex', borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: 14 }}>
             {[
-              { label: 'Entrate',   value: `+€${totalIn.toFixed(0)}`,    clr: '#4ade80' },
-              { label: 'Uscite',    value: `-€${totalOut.toFixed(0)}`,   clr: '#f87171' },
-              { label: 'Burn rate', value: `€${burnRate.toFixed(0)}/m`,  clr: 'rgba(255,255,255,0.3)' },
+              { label: 'Entrate',   value: `+€${totalIn.toFixed(0)}`,    clr: '#3aad80' },
+              { label: 'Uscite',    value: `-€${totalOut.toFixed(0)}`,   clr: '#c96f6f' },
+              { label: 'Burn rate', value: `€${burnRate.toFixed(0)}/m`,  clr: 'rgba(255,255,255,0.35)' },
             ].map((item, i) => (
               <div key={item.label} style={{ flex: 1, paddingLeft: i > 0 ? 16 : 0, borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.04)' : 'none', marginLeft: i > 0 ? 16 : 0 }}>
                 <div style={labelStyle}>{item.label}</div>
@@ -338,19 +347,22 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
 
         {/* 6 card grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          {hubCards.map(s => (
-            <div
+          {hubCards.map((s, i) => (
+            <motion.div
               key={s.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
               onClick={() => setTab(s.id)}
-              style={{ padding: '1.25em 1.25em 1em', borderRadius: 16, cursor: 'pointer', background: 'rgba(255,255,255,0.022)', border: '1px solid rgba(255,255,255,0.06)', transition: 'all 0.2s ease' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = `${s.accent}09`; (e.currentTarget as HTMLElement).style.borderColor = `${s.accent}28`; (e.currentTarget as HTMLElement).style.transform = 'scale(1.02)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.022)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLElement).style.transform = 'scale(1)'; }}
+              whileHover={{ scale: 1.02, borderColor: `${s.accent}30`, backgroundColor: `${s.accent}08` }}
+              whileTap={{ scale: 0.96 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 28, delay: i * 0.05 }}
+              style={{ padding: '1.1em 1.15em 0.95em', borderRadius: 16, cursor: 'pointer', background: 'rgba(255,255,255,0.022)', border: '1px solid rgba(255,255,255,0.06)' }}
             >
-              <div style={{ fontSize: 18, marginBottom: 12, opacity: 0.7 }}>{s.icon}</div>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>{s.label}</div>
-              <div style={{ fontSize: 22, fontWeight: 100, color: s.accent, letterSpacing: '-0.02em', marginBottom: 4 }}>{s.metric}</div>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.2)' }}>{s.sub}</div>
-            </div>
+              <s.Icon size={13} style={{ color: s.accent, marginBottom: 10, opacity: 0.75 }} />
+              <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 7 }}>{s.label}</div>
+              <div style={{ fontSize: 20, fontWeight: 200, color: '#ffffff', letterSpacing: '-0.02em', marginBottom: 4, fontFamily: "'Space Mono', monospace" }}>{s.metric}</div>
+              <div style={{ fontSize: 8.5, color: 'rgba(255,255,255,0.2)', letterSpacing: '0.02em' }}>{s.sub}</div>
+            </motion.div>
           ))}
         </div>
 
@@ -403,22 +415,28 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 290, overflowY: 'auto' }}>
             {filtered.length === 0 && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.15)', textAlign: 'center', padding: 32 }}>Nessuna transazione</div>}
-            {filtered.map(e => {
+            {filtered.map((e, idx) => {
               const isIncome = e.data.type === 'income';
               const amt = (e.data.amount as number)?.toFixed(2) ?? '?';
               const lbl = (e.data.label as string) ?? '—';
-              const date = new Date(e.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
+              const date = new Date((e.data.date as string | undefined) || e.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
               return (
-                <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', borderBottom: '1px solid rgba(255,255,255,0.025)' }}>
-                  <div style={{ width: 3, height: 26, borderRadius: 2, background: isIncome ? '#4ade80' : '#f87171', flexShrink: 0 }} />
+                <motion.div
+                  key={e.id}
+                  initial={{ opacity: 0, x: -6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.2, delay: Math.min(idx * 0.025, 0.5), ease: [0.22, 1, 0.36, 1] }}
+                  whileHover={{ backgroundColor: 'rgba(255,255,255,0.018)' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', borderBottom: '1px solid rgba(255,255,255,0.025)', borderRadius: 6 }}>
+                  <div style={{ width: 2.5, height: 22, borderRadius: 2, background: isIncome ? '#5aac82' : '#c96f6f', flexShrink: 0, opacity: 0.85 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 11, fontWeight: 300, color: 'rgba(255,255,255,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lbl}</div>
                     <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.2)', marginTop: 2 }}>{date}</div>
                   </div>
-                  <div style={{ fontSize: 12, fontWeight: 200, color: isIncome ? '#4ade80' : '#f87171', flexShrink: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 300, color: isIncome ? '#5aac82' : '#c96f6f', flexShrink: 0, fontFamily: "'Space Mono', monospace" }}>
                     {isIncome ? '+' : '-'}€{amt}
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
@@ -431,19 +449,19 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
           <div style={{ display: 'flex', gap: 28, marginBottom: 24, paddingBottom: 20, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
             <div>
               <div style={labelStyle}>Saldo netto</div>
-              <div style={{ fontSize: 32, fontWeight: 100, color: balance >= 0 ? '#4ade80' : '#f87171', letterSpacing: '-0.03em' }}>
+              <div style={{ fontSize: 30, fontWeight: 200, color: balance >= 0 ? '#3aad80' : '#c96f6f', letterSpacing: '-0.03em', fontFamily: "'Space Mono', monospace" }}>
                 {balance >= 0 ? '+' : '-'}€{Math.abs(balance).toFixed(0)}
               </div>
             </div>
             {savings != null && (
               <div>
                 <div style={labelStyle}>Risparmio</div>
-                <div style={{ fontSize: 22, fontWeight: 100, color: '#f0c040' }}>{savings}%</div>
+                <div style={{ fontSize: 20, fontWeight: 200, color: '#b89630', fontFamily: "'Space Mono', monospace" }}>{savings}%</div>
               </div>
             )}
             <div style={{ marginLeft: 'auto' }}>
               <div style={labelStyle}>Burn rate</div>
-              <div style={{ fontSize: 22, fontWeight: 100, color: '#f87171' }}>€{burnRate.toFixed(0)}<span style={{ fontSize: 11, opacity: 0.4 }}>/m</span></div>
+              <div style={{ fontSize: 20, fontWeight: 200, color: 'rgba(255,255,255,0.5)', fontFamily: "'Space Mono', monospace" }}>€{burnRate.toFixed(0)}<span style={{ fontSize: 10, opacity: 0.5 }}>/m</span></div>
             </div>
           </div>
           <div style={labelStyle}>Entrate vs Uscite · 6 mesi</div>
@@ -452,8 +470,8 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
               <XAxis dataKey="label" tick={{ fill: 'rgba(255,255,255,0.22)', fontSize: 8.5 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: 'rgba(255,255,255,0.12)', fontSize: 8 }} axisLine={false} tickLine={false} width={32} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : String(v)} />
               <Tooltip contentStyle={{ background: 'rgba(5,5,12,0.97)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, fontSize: 9.5, padding: '8px 12px' }} labelStyle={{ color: 'rgba(255,255,255,0.35)' }} formatter={(v: number, n: string) => [`€${v.toFixed(0)}`, n === 'entrate' ? '↑ Entrate' : '↓ Uscite']} cursor={{ fill: 'rgba(255,255,255,0.015)' }} />
-              <Bar dataKey="entrate" fill="#4ade80" fillOpacity={0.5} radius={[3,3,0,0]} />
-              <Bar dataKey="uscite"  fill="#f87171" fillOpacity={0.5} radius={[3,3,0,0]} />
+              <Bar dataKey="entrate" fill="#5aac82" fillOpacity={0.42} radius={[3,3,0,0]} />
+              <Bar dataKey="uscite"  fill="#c96f6f" fillOpacity={0.42} radius={[3,3,0,0]} />
             </BarChart>
           </ResponsiveContainer>
           <div style={{ ...labelStyle, margin: '20px 0 8px' }}>Netto mensile</div>
@@ -472,10 +490,10 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
           </ResponsiveContainer>
           <div style={{ display: 'flex', gap: 4, marginTop: 16 }}>
             {months6.map(m => {
-              const c = m.netto >= 0 ? '#4ade80' : '#f87171';
+              const c = m.netto >= 0 ? '#3aad80' : '#c96f6f';
               return (
-                <div key={m.key} style={{ flex: 1, textAlign: 'center', padding: '7px 4px', borderRadius: 8, background: `${c}07`, border: `1px solid ${c}12` }}>
-                  <div style={{ fontSize: 9.5, fontWeight: 200, color: c }}>{m.netto >= 0 ? '+' : ''}{m.netto.toFixed(0)}</div>
+                <div key={m.key} style={{ flex: 1, textAlign: 'center', padding: '7px 4px', borderRadius: 8, background: `${c}07`, border: `1px solid ${c}10` }}>
+                  <div style={{ fontSize: 9, fontWeight: 200, color: c, fontFamily: "'Space Mono', monospace" }}>{m.netto >= 0 ? '+' : ''}{m.netto.toFixed(0)}</div>
                   <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.18)', marginTop: 2 }}>{m.label}</div>
                 </div>
               );
@@ -503,10 +521,10 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
                     <div style={{ flex: 1 }}>
                       <div style={labelStyle}>{bgtMonthLabel}</div>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
-                        <span style={{ fontSize: 26, fontWeight: 100, color: bgtRingOver ? '#f87171' : 'rgba(255,255,255,0.82)', letterSpacing: '-0.02em' }}>€{bgtTotalSpent.toFixed(0)}</span>
+                        <span style={{ fontSize: 24, fontWeight: 200, color: bgtRingOver ? '#c96f6f' : '#ffffff', letterSpacing: '-0.02em', fontFamily: "'Space Mono', monospace" }}>€{bgtTotalSpent.toFixed(0)}</span>
                         <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.22)' }}>/ €{bgtTotalTarget.toFixed(0)}</span>
                       </div>
-                      <div style={{ fontSize: 10, color: bgtRingOver ? '#f87171' : bgtRingWarn ? '#f59e0b' : '#4ade80' }}>
+                      <div style={{ fontSize: 10, color: bgtRingOver ? '#c96f6f' : bgtRingWarn ? '#b89630' : '#3aad80' }}>
                         {bgtRingOver ? `⚠ Superato di €${(bgtTotalSpent - bgtTotalTarget).toFixed(0)}` : `€${(bgtTotalTarget - bgtTotalSpent).toFixed(0)} rimanenti · ${(100 - bgtRingPct).toFixed(0)}%`}
                       </div>
                     </div>
@@ -514,13 +532,13 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
                       <svg viewBox="0 0 36 36" style={{ width: 64, height: 64 }}>
                         <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="2.8" />
                         <circle cx="18" cy="18" r="15.9" fill="none"
-                          stroke={bgtRingOver ? '#ef4444' : bgtRingWarn ? '#f59e0b' : '#4ade80'}
+                          stroke={bgtRingOver ? '#c96f6f' : bgtRingWarn ? '#b89630' : '#3aad80'}
                           strokeWidth="2.8" strokeLinecap="round"
                           strokeDasharray={`${bgtRingPct} ${100 - bgtRingPct}`} strokeDashoffset="25"
-                          style={{ transition: 'stroke-dasharray 0.6s ease', filter: `drop-shadow(0 0 4px ${bgtRingOver ? '#ef4444' : bgtRingWarn ? '#f59e0b' : '#4ade80'}60)` }}
+                          style={{ transition: 'stroke-dasharray 0.6s ease' }}
                         />
                       </svg>
-                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 300, color: bgtRingOver ? '#ef4444' : bgtRingWarn ? '#f59e0b' : 'rgba(255,255,255,0.6)' }}>
+                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 300, color: bgtRingOver ? '#c96f6f' : bgtRingWarn ? '#b89630' : 'rgba(255,255,255,0.55)', fontFamily: "'Space Mono', monospace" }}>
                         {Math.round(bgtRingPct)}%
                       </div>
                     </div>
@@ -539,7 +557,7 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
                   const pct    = has ? Math.min(100, (spent / budget) * 100) : 0;
                   const over   = has && spent > budget;
                   const warn   = has && pct >= 80 && !over;
-                  const c      = over ? '#ef4444' : warn ? '#f59e0b' : PIE_PALETTE[i % PIE_PALETTE.length];
+                  const c      = over ? '#c96f6f' : warn ? '#b89630' : PIE_PALETTE[i % PIE_PALETTE.length];
                   const isEdit = editBudgetLabel === lbl;
                   const saveBudget = () => {
                     const n = parseFloat(editBudgetVal);
@@ -587,7 +605,7 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
                       </div>
                       {has && !isEdit && (
                         <div style={{ height: 2, background: 'rgba(255,255,255,0.05)', borderRadius: 1 }}>
-                          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 1, background: c, boxShadow: `0 0 4px ${c}60`, transition: 'width 0.5s ease' }} />
+                          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 1, background: c, transition: 'width 0.5s ease' }} />
                         </div>
                       )}
                     </div>
@@ -611,21 +629,20 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
                   {recurring.map(([lbl, months], i) => {
                     const total = labelMap.get(lbl) ?? 0;
                     const avg   = months.size > 0 ? total / months.size : 0;
-                    const c     = PIE_PALETTE[i % PIE_PALETTE.length];
                     return (
-                      <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                        <div style={{ width: 3, height: 3, borderRadius: '50%', background: c, flexShrink: 0 }} />
+                      <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                        <div style={{ width: 2, height: 2, borderRadius: '50%', background: 'rgba(255,255,255,0.3)', flexShrink: 0 }} />
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 11, fontWeight: 300, color: 'rgba(255,255,255,0.62)' }}>{lbl}</div>
-                          <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.2)', marginTop: 2 }}>{months.size} mesi rilevati</div>
+                          <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.18)', marginTop: 2 }}>{months.size} mesi</div>
                         </div>
-                        <div style={{ fontSize: 13, fontWeight: 200, color: c }}>€{avg.toFixed(0)}<span style={{ fontSize: 8.5, opacity: 0.5 }}>/m</span></div>
+                        <div style={{ fontSize: 11, fontWeight: 200, color: 'rgba(255,255,255,0.7)', fontFamily: "'Space Mono', monospace" }}>€{avg.toFixed(0)}<span style={{ fontSize: 8, opacity: 0.45 }}>/m</span></div>
                       </div>
                     );
                   })}
                   <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '14px 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                     <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.22)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Impegni fissi/mese</span>
-                    <span style={{ fontSize: 18, fontWeight: 100, color: '#f5c842' }}>€{recurring.reduce((s, [lbl]) => s + (labelMap.get(lbl) ?? 0) / (labelMonths.get(lbl)?.size ?? 1), 0).toFixed(0)}</span>
+                    <span style={{ fontSize: 18, fontWeight: 200, color: '#b89630', fontFamily: "'Space Mono', monospace" }}>€{recurring.reduce((s, [lbl]) => s + (labelMap.get(lbl) ?? 0) / (labelMonths.get(lbl)?.size ?? 1), 0).toFixed(0)}</span>
                   </div>
                 </>
               )}
@@ -643,21 +660,21 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
         const fmtDate = (iso: string) =>
           new Date(iso).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: '2-digit' });
         const TIPO_CFG = {
-          dato:     { icon: '🤝', color: '#34d399', badge: 'Credito' },
-          ricevuto: { icon: '💸', color: '#f87171', badge: 'Debito'  },
+          dato:     { color: '#3aad80', badge: 'Credito' },
+          ricevuto: { color: '#c96f6f', badge: 'Debito'  },
         };
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* KPI row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
               {[
-                { label: 'Da riscuotere', value: totalCredit, color: '#34d399', bg: 'rgba(52,211,153,0.06)', border: 'rgba(52,211,153,0.15)' },
-                { label: 'Da restituire', value: totalDebt,   color: '#f87171', bg: 'rgba(248,113,113,0.06)', border: 'rgba(248,113,113,0.15)' },
-                { label: 'Saldo netto',   value: saldoNetto,  color: saldoNetto >= 0 ? '#f59e0b' : '#f87171', bg: 'rgba(245,158,11,0.06)', border: 'rgba(245,158,11,0.15)' },
+                { label: 'Da riscuotere', value: totalCredit, color: '#3aad80' },
+                { label: 'Da restituire', value: totalDebt,   color: '#c96f6f' },
+                { label: 'Saldo netto',   value: saldoNetto,  color: saldoNetto >= 0 ? '#b89630' : '#c96f6f' },
               ].map(k => (
-                <div key={k.label} style={{ padding: '14px 12px', borderRadius: 12, background: k.bg, border: `1px solid ${k.border}` }}>
+                <div key={k.label} style={{ padding: '14px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)' }}>
                   <div style={labelStyle}>{k.label}</div>
-                  <div style={{ fontSize: 18, fontWeight: 600, color: k.color, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+                  <div style={{ fontSize: 18, fontWeight: 200, color: '#ffffff', letterSpacing: '-0.02em', fontFamily: "'Space Mono', monospace" }}>
                     {k.value >= 0 ? '' : '-'}€{Math.abs(k.value).toFixed(0)}
                   </div>
                 </div>
@@ -705,42 +722,41 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
                       transition={{ duration: 0.18 }}
                       style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.022)', border: '1px solid rgba(255,255,255,0.045)', transition: 'background 0.15s' }}
                     >
-                      <div style={{ width: 4, height: 36, borderRadius: 2, background: cfg.color, flexShrink: 0 }} />
+                      <div style={{ width: 2, height: 36, borderRadius: 1, background: cfg.color, flexShrink: 0, opacity: 0.7 }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: 14 }}>{cfg.icon}</span>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{persona}</span>
-                          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: cfg.color, opacity: 0.9 }}>{cfg.badge}</span>
+                          <span style={{ fontSize: 12, fontWeight: 300, color: 'rgba(255,255,255,0.82)' }}>{persona}</span>
+                          <span style={{ fontSize: 8, fontWeight: 400, letterSpacing: '0.08em', textTransform: 'uppercase', color: cfg.color, opacity: 0.75 }}>{cfg.badge}</span>
                         </div>
                         {note && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{note}</div>}
                         <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 1 }}>{dateStr}</div>
                       </div>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: cfg.color, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-                        {p._tipo === 'ricevuto' ? '-' : '+'}€{importo.toFixed(2)}
+                      <span style={{ fontSize: 12, fontWeight: 200, color: 'rgba(255,255,255,0.82)', fontFamily: "'Space Mono', monospace", flexShrink: 0 }}>
+                        {p._tipo === 'ricevuto' ? '-' : '+'}€{importo.toFixed(0)}
                       </span>
                       <button
                         onClick={() => handleToggleSaldato(p.id, saldato)}
                         disabled={togglingId === p.id}
                         title={saldato ? 'Riapri' : 'Segna saldato'}
                         style={{
-                          width: 26, height: 26, borderRadius: '50%', flexShrink: 0, cursor: 'pointer',
+                          width: 24, height: 24, borderRadius: '50%', flexShrink: 0, cursor: 'pointer',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          border: `1.5px solid ${saldato ? '#34d399' : 'rgba(255,255,255,0.15)'}`,
-                          background: saldato ? 'rgba(52,211,153,0.15)' : 'transparent',
-                          color: saldato ? '#34d399' : 'rgba(255,255,255,0.3)',
+                          border: `1px solid ${saldato ? '#3aad80' : 'rgba(255,255,255,0.12)'}`,
+                          background: saldato ? 'rgba(58,173,128,0.12)' : 'transparent',
+                          color: saldato ? '#3aad80' : 'rgba(255,255,255,0.25)',
                           transition: 'all 0.15s',
                         }}
                       >
-                        <Check size={12} />
+                        <Check size={11} />
                       </button>
                       <button
                         onClick={() => handleDeletePrestito(p.id)}
                         disabled={removingId === p.id}
                         style={{
-                          width: 26, height: 26, borderRadius: 6, flexShrink: 0, cursor: 'pointer',
+                          width: 24, height: 24, borderRadius: 6, flexShrink: 0, cursor: 'pointer',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          border: '1px solid rgba(248,113,113,0.2)', background: 'transparent',
-                          color: 'rgba(248,113,113,0.5)', transition: 'all 0.15s',
+                          border: '1px solid rgba(255,255,255,0.08)', background: 'transparent',
+                          color: 'rgba(255,255,255,0.22)', transition: 'all 0.15s',
                         }}
                       >
                         <Trash2 size={11} />
@@ -765,8 +781,8 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
                         onChange={e => setPrestTipo(e.target.value as 'dato' | 'ricevuto')}
                         style={{ ...inputBase, flex: '0 0 130px' }}
                       >
-                        <option value="dato">🤝 Prestato</option>
-                        <option value="ricevuto">💸 Ricevuto</option>
+                        <option value="dato">Prestato</option>
+                        <option value="ricevuto">Ricevuto</option>
                       </select>
                       <input style={inputBase} placeholder="Persona" value={prestPersona} onChange={e => setPrestPersona(e.target.value)} />
                     </div>
@@ -779,7 +795,7 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button
                         onClick={handleAddPrestito} disabled={prestSubmitting || !prestPersona || !prestImporto}
-                        style={{ flex: 1, padding: '10px', borderRadius: 9, background: 'rgba(96,165,250,0.15)', border: '1px solid rgba(96,165,250,0.3)', color: '#60a5fa', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}
+                        style={{ flex: 1, padding: '10px', borderRadius: 9, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 300, cursor: 'pointer', transition: 'all 0.15s' }}
                       >
                         {prestSubmitting ? '…' : '+ Aggiungi'}
                       </button>
@@ -810,15 +826,15 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
       {/* ── PATRIMONIO ── */}
       {currentTab === 'patrimonio' && (
         <div>
-          <div style={{ padding: '22px 20px 18px', borderRadius: 16, marginBottom: 20, background: 'linear-gradient(145deg, rgba(167,139,250,0.06) 0%, rgba(0,0,0,0) 70%)', border: '1px solid rgba(167,139,250,0.14)' }}>
+          <div style={{ padding: '22px 20px 18px', borderRadius: 16, marginBottom: 20, background: 'rgba(255,255,255,0.015)', border: '1px solid rgba(255,255,255,0.06)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
             <div style={labelStyle}>Patrimonio netto</div>
-            <div style={{ fontSize: 42, fontWeight: 100, color: currentNetWorth >= 0 ? '#a78bfa' : '#f87171', letterSpacing: '-0.04em', marginBottom: 16 }}>
+            <div style={{ fontSize: 40, fontWeight: 200, color: currentNetWorth >= 0 ? '#8b72d0' : '#c96f6f', letterSpacing: '-0.04em', marginBottom: 16, fontFamily: "'Space Mono', monospace" }}>
               {currentNetWorth >= 0 ? '+' : '-'}€{Math.abs(currentNetWorth).toFixed(0)}
             </div>
             <div style={{ display: 'flex', borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: 14 }}>
               {[
-                { label: 'Entrate totali', value: `+€${totalIn.toFixed(0)}`, clr: '#4ade80' },
-                { label: 'Uscite totali',  value: `-€${totalOut.toFixed(0)}`, clr: '#f87171' },
+                { label: 'Entrate totali', value: `+€${totalIn.toFixed(0)}`, clr: '#3aad80' },
+                { label: 'Uscite totali',  value: `-€${totalOut.toFixed(0)}`, clr: '#c96f6f' },
               ].map((item, i) => (
                 <div key={item.label} style={{ flex: 1, paddingLeft: i > 0 ? 16 : 0, borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.04)' : 'none', marginLeft: i > 0 ? 16 : 0 }}>
                   <div style={labelStyle}>{item.label}</div>
@@ -835,13 +851,13 @@ export default function FinanceRenderer({ entries, color, initialTab }: { entrie
                 <AreaChart data={nwByMonth} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
                   <defs>
                     <linearGradient id="nwGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#a78bfa" stopOpacity={0.22} />
-                      <stop offset="95%" stopColor="#a78bfa" stopOpacity={0} />
+                      <stop offset="5%"  stopColor="#8b72d0" stopOpacity={0.18} />
+                      <stop offset="95%" stopColor="#8b72d0" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <XAxis dataKey="month" tick={{ fill: 'rgba(255,255,255,0.18)', fontSize: 8 }} axisLine={false} tickLine={false} />
                   <Tooltip contentStyle={{ background: 'rgba(5,5,12,0.97)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, fontSize: 9, padding: '6px 10px' }} formatter={(v: number) => [`€${v.toFixed(0)}`, 'Patrimonio']} cursor={{ stroke: 'rgba(255,255,255,0.06)', strokeWidth: 1 }} />
-                  <Area type="monotone" dataKey="value" stroke="#a78bfa" strokeWidth={1.5} fill="url(#nwGrad)" dot={{ fill: '#a78bfa', r: 2.5, strokeWidth: 0 }} activeDot={{ r: 4, strokeWidth: 0 }} />
+                  <Area type="monotone" dataKey="value" stroke="#8b72d0" strokeWidth={1.5} fill="url(#nwGrad)" dot={{ fill: '#8b72d0', r: 2.5, strokeWidth: 0 }} activeDot={{ r: 4, strokeWidth: 0 }} />
                 </AreaChart>
               </ResponsiveContainer>
             </>

@@ -3,7 +3,7 @@
 ## Stack
 React 18 + Vite + TS · Supabase · Zustand · Framer Motion · Recharts
 `cd client && npm run dev`
-Env: `VITE_SUPABASE_URL` · `VITE_SUPABASE_ANON_KEY` · `VITE_DEEPSEEK_API_KEY`
+Env: `VITE_SUPABASE_URL` · `VITE_SUPABASE_ANON_KEY` · `VITE_GEMINI_API_KEY`
 
 ---
 

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAlterStore } from '../../store/alterStore';
 import type { Theme } from '../../types';
-import { getCategorySummaries, deleteCategory, deleteAllUserData, restoreCategory, getDeletedCategories, purgeCategory } from '../../vault/vaultService';
+import { getCategorySummaries, deleteCategory, deleteAllUserData, restoreCategory, getDeletedCategories, purgeCategory, restoreAllDeleted, purgeAllDeleted } from '../../vault/vaultService';
 import { updateDisplayName } from '../../social/nexusService';
 import type { CategorySummary, DeletedCategorySummary } from '../../vault/vaultService';
 import { buildStar, getCategoryMeta } from '../starfield/StarfieldView';
@@ -223,6 +223,8 @@ function DataSection({ userId }: { userId: string | null }) {
   const [restoredCat,    setRestoredCat]    = useState<string | null>(null);
   const [confirmPurge,   setConfirmPurge]   = useState<string | null>(null);
   const [purgingCat,     setPurgingCat]     = useState<string | null>(null);
+  const [bulkBusy,       setBulkBusy]       = useState<'restore' | 'purge' | null>(null);
+  const [confirmBulkPurge, setConfirmBulkPurge] = useState(false);
   const { upsertStar } = useAlterStore();
 
   useEffect(() => {
@@ -278,6 +280,23 @@ function DataSection({ userId }: { userId: string | null }) {
       setTimeout(() => setRestoredCat(null), 2500);
     }
     setRestoringCat(null);
+  }
+
+  async function handleRestoreAll() {
+    if (!userId) return;
+    setBulkBusy('restore');
+    await restoreAllDeleted(userId);
+    setDeletedCats([]);
+    setBulkBusy(null);
+  }
+
+  async function handlePurgeAll() {
+    if (!userId) return;
+    setBulkBusy('purge');
+    await purgeAllDeleted(userId);
+    setDeletedCats([]);
+    setConfirmBulkPurge(false);
+    setBulkBusy(null);
   }
 
   if (!userId) return null;
@@ -407,7 +426,65 @@ function DataSection({ userId }: { userId: string | null }) {
                     Il cestino è vuoto.
                   </div>
                 ) : (
-                  deletedCats.map(d => {
+                  <>
+                    {/* Bulk actions */}
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
+                      <button
+                        disabled={!!bulkBusy}
+                        onClick={handleRestoreAll}
+                        style={{
+                          flex: 1, background: 'rgba(80,200,120,0.08)',
+                          border: '1px solid rgba(80,200,120,0.3)',
+                          borderRadius: 8, padding: '6px 0', fontSize: 10.5, fontWeight: 600,
+                          color: '#4ecb71', cursor: bulkBusy ? 'wait' : 'pointer',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        {bulkBusy === 'restore' ? '...' : '↩ Ripristina tutti'}
+                      </button>
+                      {confirmBulkPurge ? (
+                        <>
+                          <button
+                            disabled={bulkBusy === 'purge'}
+                            onClick={handlePurgeAll}
+                            style={{
+                              flex: 1, background: 'rgba(240,80,80,0.15)',
+                              border: '1px solid rgba(240,80,80,0.4)',
+                              borderRadius: 8, padding: '6px 0', fontSize: 10.5, fontWeight: 600,
+                              color: '#f08080', cursor: bulkBusy ? 'wait' : 'pointer',
+                              transition: 'all 0.2s',
+                            }}
+                          >
+                            {bulkBusy === 'purge' ? '...' : 'Conferma'}
+                          </button>
+                          <button
+                            onClick={() => setConfirmBulkPurge(false)}
+                            style={{
+                              background: 'none', border: '1px solid var(--border)',
+                              borderRadius: 8, padding: '6px 10px', fontSize: 10.5,
+                              color: 'var(--text-dim)', cursor: 'pointer',
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          disabled={!!bulkBusy}
+                          onClick={() => setConfirmBulkPurge(true)}
+                          style={{
+                            flex: 1, background: 'none',
+                            border: '1px solid rgba(240,80,80,0.3)',
+                            borderRadius: 8, padding: '6px 0', fontSize: 10.5, fontWeight: 600,
+                            color: 'rgba(240,80,80,0.8)', cursor: 'pointer',
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          🗑 Elimina tutti
+                        </button>
+                      )}
+                    </div>
+                  {deletedCats.map(d => {
                     const meta = getCategoryMeta(d.category);
                     const daysAgo = Math.floor((Date.now() - new Date(d.deletedAt).getTime()) / 86400000);
                     const daysLeft = 7 - daysAgo;
@@ -491,7 +568,8 @@ function DataSection({ userId }: { userId: string | null }) {
                         </AnimatePresence>
                       </div>
                     );
-                  })
+                  })}
+                  </>
                 )}
               </div>
             </motion.div>

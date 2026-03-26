@@ -1,5 +1,5 @@
 import { supabase } from '../config/supabase';
-import type { VaultEntry, SemanticLink } from '../types';
+import type { VaultEntry, SemanticLink, UserCalibration, CorrectionRule } from '../types';
 import { generateVec, cosineSim } from '../core/semanticVec';
 
 // ─── Write ───────────────────────────────────────────────────
@@ -359,8 +359,8 @@ export async function getAdminStats(): Promise<AdminStats> {
   const aiCalls     = parseInt(localStorage.getItem('_alter_ai_calls')     ?? '0', 10);
   const aiTokensIn  = parseInt(localStorage.getItem('_alter_ai_tokens_in')  ?? '0', 10);
   const aiTokensOut = parseInt(localStorage.getItem('_alter_ai_tokens_out') ?? '0', 10);
-  // DeepSeek-chat pricing: $0.14/M input, $0.28/M output
-  const estimatedCostUSD = (aiTokensIn / 1_000_000) * 0.14 + (aiTokensOut / 1_000_000) * 0.28;
+  // Gemini 1.5 Flash pricing: $0.075/M input, $0.30/M output
+  const estimatedCostUSD = (aiTokensIn / 1_000_000) * 0.075 + (aiTokensOut / 1_000_000) * 0.30;
   const totalSizeMB = totalBytes / (1024 * 1024);
   return { totalEntries: data.length, byCategory, aiCalls, aiTokensIn, aiTokensOut, estimatedCostUSD, totalSizeMB };
 }
@@ -378,7 +378,95 @@ export async function deleteAllUserData(userId: string): Promise<boolean> {
     .from('vault')
     .update({ deleted_at: new Date().toISOString() })
     .eq('user_id', userId)
+    .neq('category', 'ai_profile')
     .is('deleted_at', null);
+  return !error;
+}
+
+// ─── AI Profile: calibration ─────────────────────────────────
+export async function saveCalibration(userId: string, cal: Omit<UserCalibration, 'updatedAt'>): Promise<void> {
+  // Soft-delete existing calibration entries for this user
+  await supabase
+    .from('vault')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('category', 'ai_profile')
+    .eq('data->>type', 'calibration')
+    .is('deleted_at', null);
+
+  const data: UserCalibration & { type: string } = { type: 'calibration', ...cal, updatedAt: new Date().toISOString() };
+  await supabase.from('vault').insert({ user_id: userId, category: 'ai_profile', data });
+}
+
+export async function getCalibration(userId: string): Promise<UserCalibration | null> {
+  const { data, error } = await supabase
+    .from('vault')
+    .select('data')
+    .eq('user_id', userId)
+    .eq('category', 'ai_profile')
+    .eq('data->>type', 'calibration')
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+  if (error || !data) return null;
+  const d = data.data as Record<string, unknown>;
+  return {
+    empathy:    typeof d.empathy    === 'number' ? d.empathy    : 5,
+    directness: typeof d.directness === 'number' ? d.directness : 5,
+    humor:      typeof d.humor      === 'number' ? d.humor      : 5,
+    logic:      typeof d.logic      === 'number' ? d.logic      : 5,
+    updatedAt:  typeof d.updatedAt  === 'string' ? d.updatedAt  : new Date().toISOString(),
+  };
+}
+
+// ─── AI Profile: correction rules ────────────────────────────
+export async function saveCorrection(userId: string, rule: string, trigger?: string): Promise<void> {
+  const data = { type: 'correction', rule, trigger: trigger ?? null, createdAt: new Date().toISOString() };
+  await supabase.from('vault').insert({ user_id: userId, category: 'ai_profile', data });
+}
+
+export async function getCorrections(userId: string): Promise<CorrectionRule[]> {
+  const { data, error } = await supabase
+    .from('vault')
+    .select('data')
+    .eq('user_id', userId)
+    .eq('category', 'ai_profile')
+    .eq('data->>type', 'correction')
+    .is('deleted_at', null)
+    .order('created_at', { ascending: true });
+  if (error || !data) return [];
+  return data.map(r => {
+    const d = r.data as Record<string, unknown>;
+    return {
+      rule:       typeof d.rule      === 'string' ? d.rule       : '',
+      trigger:    typeof d.trigger   === 'string' ? d.trigger    : undefined,
+      createdAt:  typeof d.createdAt === 'string' ? d.createdAt  : new Date().toISOString(),
+    };
+  }).filter(r => r.rule);
+}
+
+// ─── Bulk Restore: ripristina tutte le categorie nel cestino ─
+export async function restoreAllDeleted(userId: string): Promise<boolean> {
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { error } = await supabase
+    .from('vault')
+    .update({ deleted_at: null })
+    .eq('user_id', userId)
+    .not('deleted_at', 'is', null)
+    .gte('deleted_at', cutoff);
+  return !error;
+}
+
+// ─── Bulk Purge: elimina definitivamente tutte le voci nel cestino ─
+export async function purgeAllDeleted(userId: string): Promise<boolean> {
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { error } = await supabase
+    .from('vault')
+    .delete()
+    .eq('user_id', userId)
+    .not('deleted_at', 'is', null)
+    .gte('deleted_at', cutoff);
   return !error;
 }
 

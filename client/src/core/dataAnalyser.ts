@@ -19,7 +19,7 @@ export interface AnalysisResult {
   summary: string;
 }
 
-// ─── Format entries as compact context for DeepSeek ──────────
+// ─── Format entries as compact context for Gemini ─────────────
 function formatEntries(entries: VaultEntry[]): string {
   return entries
     .slice(0, 60)
@@ -66,28 +66,34 @@ Analisi per categoria:
 
 Genera max 3 grafici per query standard, 1-2 per query specifiche.`;
 
-async function deepseekChat(messages: { role: string; content: string }[], maxTokens = 1500): Promise<string | null> {
-  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
+async function geminiChat(messages: { role: string; content: string }[], maxTokens = 1500): Promise<string | null> {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
   if (!apiKey) return null;
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12000);
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages,
-        response_format: { type: 'json_object' },
-        temperature: 0.3,
-        max_tokens: maxTokens,
-      }),
-      signal: controller.signal,
-    });
+    const system = messages.find(m => m.role === 'system')?.content ?? '';
+    const turns = messages.filter(m => m.role !== 'system');
+    const contents = turns.map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    }));
+    if (system && contents.length > 0) {
+      contents[0].parts[0].text = `${system}\n\n${contents[0].parts[0].text}`;
+    }
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: maxTokens, temperature: 0.3 } }),
+        signal: controller.signal,
+      }
+    );
     clearTimeout(timeout);
-    if (!res.ok) throw new Error(`DeepSeek ${res.status}`);
+    if (!res.ok) throw new Error(`Gemini ${res.status}`);
     const json = await res.json();
-    return json.choices[0].message.content as string;
+    return (json.candidates?.[0]?.content?.parts?.[0]?.text as string) ?? null;
   } catch (e) {
     console.error('[dataAnalyser]', e);
     return null;
@@ -107,7 +113,7 @@ export async function analyseData(
     ? `Dati principali:\n${context || '(nessun dato)'}\n${crossContext ? `\nDati correlati:\n${crossContext}` : ''}\n\nQuery specifica: ${query}`
     : `Dati:\n${context || '(nessun dato)'}\n\nAnalizza questi dati e genera i grafici più utili e informativi.`;
 
-  const raw = await deepseekChat([
+  const raw = await geminiChat([
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: userMessage },
   ]);

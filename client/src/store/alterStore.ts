@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Star, WidgetData, ChatMessage, AlterUser, NexusBeam, SemanticLink, Theme } from '../types';
+import type { Star, WidgetData, ChatMessage, AlterUser, NexusBeam, SemanticLink, Theme, UserCalibration, CorrectionRule } from '../types';
 
 interface AlterStore {
   // ── Auth ────────────────────────────────────────────────
@@ -89,6 +89,14 @@ interface AlterStore {
   // ── Streaming output ──────────────────────────────────────────
   streamingMessage: string | null;
   setStreamingMessage: (msg: string | null) => void;
+
+  // ── AI Calibration ────────────────────────────────────────────
+  calibration: UserCalibration | null;
+  setCalibration: (c: UserCalibration | null) => void;
+  correctionRules: CorrectionRule[];
+  addCorrectionRule: (r: CorrectionRule) => void;
+  showCalibration: boolean;
+  setShowCalibration: (v: boolean) => void;
 }
 
 export const useAlterStore = create<AlterStore>((set) => ({
@@ -179,4 +187,11 @@ export const useAlterStore = create<AlterStore>((set) => ({
 
   streamingMessage: null,
   setStreamingMessage: (streamingMessage) => set({ streamingMessage }),
+
+  calibration: null,
+  setCalibration: (calibration) => set({ calibration }),
+  correctionRules: [],
+  addCorrectionRule: (r) => set((s) => ({ correctionRules: [...s.correctionRules, r] })),
+  showCalibration: false,
+  setShowCalibration: (showCalibration) => set({ showCalibration }),
 }));

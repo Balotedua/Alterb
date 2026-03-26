@@ -7,8 +7,8 @@ import { parseBankCsv, importBankCsv, importBankXlsx } from '../../import/bankCs
 import type { BankTransaction } from '../../import/bankCsvImport';
 import { extractDocument, isDocumentFile } from '../../import/documentOcr';
 import { quickConnect } from '../../core/insightEngine';
-import { saveEntry, getByCategory, queryCalendarByDate, getRecentAll, deleteCategory, deleteByCategoryAndDateRange, deleteAllUserData, saveChatSession, updateChatSession } from '../../vault/vaultService';
-import { aiQuery, aiChat, aiChatAndExtract, aiNexusNarrative, aiCapability, aiChatStream, aiChatAndExtractStream } from '../../core/aiParser';
+import { saveEntry, getByCategory, queryCalendarByDate, getRecentAll, deleteCategory, deleteByCategoryAndDateRange, deleteAllUserData, saveChatSession, updateChatSession, saveCorrection } from '../../vault/vaultService';
+import { aiQuery, aiChat, aiChatAndExtract, aiNexusNarrative, aiCapability, aiChatStream, aiChatAndExtractStream, aiCorrection, aiExtractCorrectionRule } from '../../core/aiParser';
 import { validateEntry } from '../../core/l3Validator';
 import { buildStar, getCategoryMeta, starPosition } from '../starfield/StarfieldView';
 import { useAlterStore } from '../../store/alterStore';
@@ -46,6 +46,7 @@ export default function NebulaCore() {
   const [evolveSuggestion, setEvolveSuggestion] = useState<string | null>(null);
   const [pendingCsv,       setPendingCsv]       = useState<{ transactions: BankTransaction[]; text: string } | null>(null);
   const [csvImporting,     setCsvImporting]     = useState(false);
+  const [csvElapsed,       setCsvElapsed]       = useState(0);
   const [pendingOcr,       setPendingOcr]       = useState<{ file: File; text: string; filename: string; pageCount?: number; confidence?: number } | null>(null);
   const [ocrLoading,       setOcrLoading]       = useState(false);
   const [ocrElapsed,       setOcrElapsed]       = useState(0);
@@ -76,19 +77,10 @@ export default function NebulaCore() {
     viewMode, addTimer, messages,
     pendingGreeting, setPendingGreeting,
     setStreamingMessage,
+    calibration, correctionRules, setShowCalibration,
+    addCorrectionRule,
   } = useAlterStore();
 
-  // ── Proactive greeting: show as standalone message on mount ──
-  useEffect(() => {
-    if (!pendingGreeting) return;
-    // Small delay to let the chat view render first
-    const t = setTimeout(() => {
-      addMessage('nebula', pendingGreeting);
-      setPendingGreeting(null);
-    }, 600);
-    return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingGreeting]);
 
   // ── Ghost star → pre-fill input ───────────────────────────
   useEffect(() => {
@@ -105,6 +97,13 @@ export default function NebulaCore() {
     const t = setInterval(() => setOcrElapsed(s => s + 1), 1000);
     return () => clearInterval(t);
   }, [ocrLoading]);
+
+  // ── CSV import elapsed timer ───────────────────────────────
+  useEffect(() => {
+    if (!csvImporting) { setCsvElapsed(0); return; }
+    const t = setInterval(() => setCsvElapsed(s => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [csvImporting]);
 
   // ── Rotate hints ──────────────────────────────────────────
   useEffect(() => {
@@ -302,6 +301,7 @@ export default function NebulaCore() {
     setIsActive(false);
     inputRef.current?.blur();
     addMessage('user', text);
+    if (pendingGreeting) { addMessage('nebula', pendingGreeting); setPendingGreeting(null); }
     setProcessing(true);
     setLastReply(null);
 
@@ -451,7 +451,7 @@ export default function NebulaCore() {
         const vaultContext = starsSnapshot.length > 0
           ? starsSnapshot.map(s => `${s.icon} ${s.label}: ${s.entryCount} voci, ultima: ${s.lastEntry ? new Date(s.lastEntry).toLocaleDateString('it-IT') : 'n/d'}`).join('\n')
           : hasData ? '(dati presenti nel vault, stelle ancora in caricamento)' : undefined;
-        const reply = await aiChatStream(text, (chunk) => setStreamingMessage(chunk), messages, vaultContext);
+        const reply = await aiChatStream(text, (chunk) => setStreamingMessage(chunk), messages, vaultContext, undefined, calibration, correctionRules);
         setStreamingMessage(null);
         setLastReply(reply.length > 120 ? reply.slice(0, 117) + '…' : reply);
         addMessage('nebula', reply);
@@ -489,6 +489,7 @@ export default function NebulaCore() {
             },
           });
         } else if (category && user) {
+          if (category === 'ai_profile') return; // black box — invisible to user
           // Delete entire category (star) — ask confirmation first
           addMessage('nebula', `⚠️ Stai per eliminare tutta la categoria "${category}" e i suoi dati. L'azione è irreversibile. Confermi?`);
           setPendingDelete({
@@ -525,7 +526,7 @@ export default function NebulaCore() {
           setRay({ angle: Math.atan2(dy, dx) * 180 / Math.PI, length: Math.sqrt(dx*dx+dy*dy), color: meta.color });
           setTimeout(() => setRay(null), 900);
         }
-        const reply = await aiQuery(text, entries);
+        const reply = await aiQuery(text, entries, calibration, correctionRules);
         setLastReply(reply.length > 80 ? reply.slice(0, 77) + '…' : reply);
         addMessage('nebula', reply);
         if (category) {
@@ -700,6 +701,8 @@ export default function NebulaCore() {
           messages,
           undefined,
           webContext ?? undefined,
+          calibration,
+          correctionRules,
         );
         setStreamingMessage(null);
         setLastReply(reply.length > 80 ? reply.slice(0, 77) + '…' : reply);
@@ -745,13 +748,46 @@ export default function NebulaCore() {
           : `📖 ${chronicles.length} capitol${chronicles.length === 1 ? 'o' : 'i'} scritti. Il nostro viaggio continua.`;
         setLastReply(reply); addMessage('nebula', reply);
 
+      } else if (action.type === 'correction') {
+        // User flagged something wrong — Nebula apologizes proactively + saves a correction rule
+        const reply = await aiCorrection(text, (chunk) => setStreamingMessage(chunk), correctionRules, calibration);
+        setStreamingMessage(null);
+        setLastReply(reply.length > 120 ? reply.slice(0, 117) + '…' : reply);
+        addMessage('nebula', reply);
+
+        // Extract and persist the correction rule (fire and forget)
+        if (user) {
+          aiExtractCorrectionRule(text).then(rule => {
+            saveCorrection(user.id, rule, text);
+            addCorrectionRule({ rule, trigger: text, createdAt: new Date().toISOString() });
+          });
+        }
+
+      } else if (action.type === 'calibrate') {
+        setShowCalibration(true);
+        const msg = 'Dimmi come preferisci che mi esprima — aggiusta i cursori e salvo il profilo 🌌';
+        addMessage('nebula', msg);
+        setLastReply(msg);
+
       } else {
+        // Auto-trigger calibration after 10th message if never calibrated, or every 50 messages
+        const msgCount = messages.length;
+        if (!calibration && msgCount >= 10 && msgCount % 50 !== 0) {
+          // First-time trigger: show after processing
+        }
+        if (msgCount > 0 && msgCount % 50 === 0) {
+          setTimeout(() => {
+            setShowCalibration(true);
+            addMessage('nebula', 'Ogni tanto mi piace chiederti — sto parlando come preferisci? 🌌 Puoi regolare il mio tono con i cursori qui sotto.');
+          }, 1500);
+        }
+
         // Chatbot-first: AI replies and optionally extracts data in one call (streaming)
         const starsForFallback = useAlterStore.getState().stars;
         const fallbackVaultContext = starsForFallback.length > 0
           ? starsForFallback.map(s => `${s.icon} ${s.label}: ${s.entryCount} voci, ultima: ${s.lastEntry ? new Date(s.lastEntry).toLocaleDateString('it-IT') : 'n/d'}`).join('\n')
           : undefined;
-        const result = await aiChatAndExtractStream(text, (chunk) => setStreamingMessage(chunk), messages, fallbackVaultContext);
+        const result = await aiChatAndExtractStream(text, (chunk) => setStreamingMessage(chunk), messages, fallbackVaultContext, calibration, correctionRules);
         setStreamingMessage(null);
         const display = result.reply.length > 80 ? result.reply.slice(0, 77) + '…' : result.reply;
         setLastReply(display);
@@ -853,7 +889,7 @@ export default function NebulaCore() {
       <input
         ref={fileRef}
         type="file"
-        accept=".csv,.txt,.md,.pdf,image/*"
+        accept="application/pdf,text/csv,text/plain,text/markdown,.csv,.txt,.md,.pdf,image/*"
         style={{ display: 'none' }}
         onChange={e => { if (e.target.files?.[0]) { handleFileUpload(e.target.files[0]); e.target.value = ''; } }}
       />
@@ -1127,6 +1163,42 @@ export default function NebulaCore() {
                 >
                   ✕
                 </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* CSV importing indicator */}
+        <AnimatePresence>
+          {csvImporting && (
+            <motion.div
+              key="csv-loading"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              style={{
+                padding: '12px 14px',
+                background: 'rgba(240,192,64,0.05)',
+                border: '1px solid rgba(240,192,64,0.18)',
+                borderRadius: 14,
+                width: '100%',
+                boxSizing: 'border-box',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 }}>
+                <div style={{ fontSize: 10, color: 'rgba(240,192,64,0.75)', letterSpacing: '0.08em' }}>
+                  {lastReply || 'Importazione in corso…'}
+                </div>
+                <div style={{ fontSize: 9, color: 'rgba(240,192,64,0.4)', letterSpacing: '0.04em' }}>
+                  {csvElapsed}s
+                </div>
+              </div>
+              <div style={{ height: 3, borderRadius: 3, background: 'rgba(240,192,64,0.10)', overflow: 'hidden', position: 'relative' }}>
+                <motion.div
+                  animate={{ x: ['-80%', '180%'] }}
+                  transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                  style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '55%', borderRadius: 3, background: 'linear-gradient(90deg, transparent, rgba(240,192,64,0.7), transparent)' }}
+                />
               </div>
             </motion.div>
           )}

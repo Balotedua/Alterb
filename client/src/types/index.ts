@@ -74,6 +74,21 @@ export interface SemanticLink {
   similarity: number; // 0..1 cosine similarity between category centroids
 }
 
+// ─── AI Calibration ──────────────────────────────────────────
+export interface UserCalibration {
+  empathy: number;    // 1-10: freddo ↔ caloroso
+  directness: number; // 1-10: elaborato ↔ diretto
+  humor: number;      // 1-10: serio ↔ giocoso
+  logic: number;      // 1-10: intuitivo ↔ analitico
+  updatedAt: string;
+}
+
+export interface CorrectionRule {
+  rule: string;
+  trigger?: string;
+  createdAt: string;
+}
+
 // ─── Auth ────────────────────────────────────────────────────
 export interface AlterUser {
   id: string;

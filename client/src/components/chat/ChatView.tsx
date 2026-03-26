@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAlterStore } from '../../store/alterStore';
 import ChatReportModal from './ChatReportModal';
+import CalibrationForm from './CalibrationForm';
 
 // Minimal markdown renderer: bold, italic, headers, bullet lists, line breaks
 function renderMarkdown(text: string): React.ReactNode[] {
@@ -51,7 +52,7 @@ function StreamingCursor() {
 }
 
 export default function ChatView() {
-  const { messages, streamingMessage } = useAlterStore();
+  const { messages, streamingMessage, showCalibration } = useAlterStore();
   const bottomRef = useRef<HTMLDivElement>(null);
   const [copiedIdx, setCopiedIdx]     = useState<number | null>(null);
   const [hoveredIdx, setHoveredIdx]   = useState<number | null>(null);
@@ -80,7 +81,7 @@ export default function ChatView() {
         background: 'var(--bg)',
         overflowY: 'auto',
         paddingBottom: 'calc(56px + 80px + env(safe-area-inset-bottom, 0px))',
-        paddingTop: 24,
+        paddingTop: 'calc(52px + env(safe-area-inset-top, 0px))',
       }}
     >
       <div style={{
@@ -305,6 +306,10 @@ export default function ChatView() {
         <style>{`@keyframes blink-cursor { 0%,100% { opacity: 1 } 50% { opacity: 0 } }`}</style>
         <div ref={bottomRef} />
       </div>
+
+      <AnimatePresence>
+        {showCalibration && <CalibrationForm />}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showReport && <ChatReportModal onClose={() => setShowReport(false)} />}

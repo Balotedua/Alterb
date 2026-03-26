@@ -198,7 +198,16 @@ export default function AdminPopup({ onClose }: { onClose: () => void }) {
   function copyBug(id: string) {
     const src = approvedBugs.find(b => b.id === id);
     if (!src) return;
-    navigator.clipboard.writeText(src.user_description);
+    let text = src.user_description;
+    if (src.interaction_history && src.interaction_history.length > 0) {
+      text += '\n\n--- CRONOLOGIA CHAT ---\n';
+      text += src.interaction_history.map(e => {
+        const prefix = e.type === 'msg_user' ? '[Utente]' : e.type === 'msg_ai' ? '[AI]' : '[◦]';
+        const ts = e.timestamp ? ` (${new Date(e.timestamp).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })})` : '';
+        return `${prefix}${ts} ${e.content}`;
+      }).join('\n');
+    }
+    navigator.clipboard.writeText(text);
   }
 
   async function deleteResolved() {
@@ -730,7 +739,7 @@ function TicketRow({ bug, onUpdate, onDelete, onCopy }: {
                   <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.3)', marginBottom: 6 }}>
                     CRONOLOGIA
                   </div>
-                  <div style={{ marginBottom: 12 }}>
+                  <div style={{ marginBottom: 12, userSelect: 'text' }}>
                     {bug.interaction_history.map((entry, i) => (
                       <div key={i} style={{
                         display: 'flex', gap: 6, padding: '3px 0',
@@ -869,7 +878,7 @@ function DbTab({ stats, dbStats }: { stats: AdminStats | null; dbStats: DbStat[]
     <div>
       {/* ── AI Calls ── */}
       <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.14em', color: 'rgba(64,224,208,0.7)', marginBottom: 10 }}>
-        DEEPSEEK L2
+        GEMINI L2
       </div>
       <div style={{
         background: 'rgba(64,224,208,0.05)', border: '1px solid rgba(64,224,208,0.18)',

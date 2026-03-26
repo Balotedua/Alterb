@@ -9,7 +9,7 @@ export async function generateDailyGreeting(userId: string): Promise<string | nu
   const last = localStorage.getItem(GREETING_KEY);
   if (last && Date.now() - parseInt(last, 10) < GREETING_COOLDOWN) return null;
 
-  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
   if (!apiKey) return null;
 
   const entries = (await getRecentAll(userId, 30)).filter(
@@ -25,29 +25,25 @@ export async function generateDailyGreeting(userId: string): Promise<string | nu
   const momento = hour < 12 ? 'mattina' : hour < 18 ? 'pomeriggio' : 'sera';
 
   try {
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          {
-            role: 'system',
-            content: `Sei Nebula, il compagno digitale di Alter OS. L'utente ha appena riaperto l'app di ${momento}. Genera UN messaggio di benvenuto personalizzato (max 2 frasi) che:
+    const systemPrompt = `Sei Nebula, il compagno digitale di Alter OS. L'utente ha appena riaperto l'app di ${momento}. Genera UN messaggio di benvenuto personalizzato (max 2 frasi) che:
 - Cita qualcosa di specifico dai suoi ultimi dati (un numero, un'attività, uno stato d'animo, una data)
 - Offre un piccolo insight o una domanda curiosa basata su pattern nei dati
 - È caldo e autentico, non generico né da bot
-Rispondi SOLO con il testo del messaggio, senza formattazioni.`,
-          },
-          { role: 'user', content: `Dati recenti:\n${context}` },
-        ],
-        temperature: 0.72,
-        max_tokens: 120,
-      }),
-    });
+Rispondi SOLO con il testo del messaggio, senza formattazioni.`;
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nDati recenti:\n${context}` }] }],
+          generationConfig: { maxOutputTokens: 120, temperature: 0.72 },
+        }),
+      }
+    );
     if (!res.ok) return null;
     const json = await res.json();
-    const text = json.choices[0]?.message?.content as string | undefined;
+    const text = json.candidates?.[0]?.content?.parts?.[0]?.text as string | undefined;
     if (!text?.trim()) return null;
     localStorage.setItem(GREETING_KEY, Date.now().toString());
     return text.trim();
@@ -75,7 +71,7 @@ export interface CoherenceReport {
 }
 
 export async function generateCoherenceAudit(userId: string): Promise<CoherenceReport | null> {
-  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined;
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
   if (!apiKey) return null;
 
   const entries = (await getRecentAll(userId, 90)).filter(
@@ -98,16 +94,7 @@ export async function generateCoherenceAudit(userId: string): Promise<CoherenceR
     })
     .join('\n\n');
 
-  try {
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          {
-            role: 'system',
-            content: `Sei Nebula, il compagno digitale di Alter OS — un amico sincero e premuroso che conosce profondamente l'utente attraverso i suoi dati. Il tuo compito è generare un "Report di Coerenza": confronta ciò che l'utente dichiara di volere (obiettivi nei documenti, note, carriera) con come si comporta realmente (spese, salute, umore, routine).
+  const systemPrompt = `Sei Nebula, il compagno digitale di Alter OS — un amico sincero e premuroso che conosce profondamente l'utente attraverso i suoi dati. Il tuo compito è generare un "Report di Coerenza": confronta ciò che l'utente dichiara di volere (obiettivi nei documenti, note, carriera) con come si comporta realmente (spese, salute, umore, routine).
 
 Tono: diretto e onesto come un amico che ti vuole bene, mai giudicante né freddo. Parla in seconda persona all'utente ("hai", "stai", "noto che"). Usa i dati reali (numeri, date, importi) per rendere l'analisi specifica e non generica.
 
@@ -127,18 +114,24 @@ Rispondi SOLO con JSON valido (nessun markdown, nessuna spiegazione), con questo
   ]
 }
 
-Se non ci sono contraddizioni significative, score sarà alto (>75) e findings avrà 1-2 osservazioni positive. Massimo 4 findings.`,
-          },
-          { role: 'user', content: `Dati vault degli ultimi 90 giorni:\n\n${context}` },
-        ],
-        temperature: 0.6,
-        max_tokens: 900,
-      }),
-    });
+Se non ci sono contraddizioni significative, score sarà alto (>75) e findings avrà 1-2 osservazioni positive. Massimo 4 findings.`;
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nDati vault degli ultimi 90 giorni:\n\n${context}` }] }],
+          generationConfig: { maxOutputTokens: 900, temperature: 0.6 },
+        }),
+      }
+    );
 
     if (!res.ok) return null;
     const json = await res.json();
-    const raw = json.choices[0]?.message?.content as string | undefined;
+    const raw = json.candidates?.[0]?.content?.parts?.[0]?.text as string | undefined;
     if (!raw?.trim()) return null;
 
     const clean = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');

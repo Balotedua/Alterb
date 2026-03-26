@@ -3,7 +3,7 @@ import type { User } from '@supabase/supabase-js';
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from './config/supabase';
-import { getCategorySummaries, getUpcomingEvents, purgeExpiredDeleted } from './vault/vaultService';
+import { getCategorySummaries, getUpcomingEvents, purgeExpiredDeleted, getCalibration, getCorrections } from './vault/vaultService';
 import { buildStar, getCategoryMeta, starPosition } from './components/starfield/StarfieldView';
 import { generateDailyGreeting } from './core/insightEngine';
 import { handleGoogleFitCallback, syncGoogleFit } from './core/wearableSync';
@@ -22,12 +22,17 @@ import SettingsPanel from './components/settings/SettingsPanel';
 import BugReportPanel from './components/panels/BugReportPanel';
 import DynamicIslandTimer from './components/timer/DynamicIslandTimer';
 import PWAInstallPrompt from './components/pwa/PWAInstallPrompt';
+import BigBangIntro from './components/intro/BigBangIntro';
 
 export default function App() {
   const [authUser, setAuthUser] = useState<User | null | undefined>(undefined);
+  const [showIntro, setShowIntro] = useState(() => {
+    if (sessionStorage.getItem('alter_intro_done')) return false;
+    return true;
+  });
   const [authError, setAuthError] = useState<string | null>(null);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
-  const { setUser, setStars, upsertStar, removeStar, addKnownCategory, setAlertEvent, alertEvent, activeWidget, viewMode, theme, activeDataCategory, setShowBugReport, setShowChatSidebar, setPendingGreeting } = useAlterStore();
+  const { setUser, setStars, upsertStar, removeStar, addKnownCategory, setAlertEvent, alertEvent, activeWidget, viewMode, theme, activeDataCategory, setShowBugReport, setShowChatSidebar, setPendingGreeting, setCalibration, addCorrectionRule } = useAlterStore();
 
   // Apply theme to document root
   useEffect(() => {
@@ -79,6 +84,10 @@ export default function App() {
     // Purge entries soft-deleted more than 7 days ago (fire-and-forget)
     purgeExpiredDeleted(authUser.id);
 
+    // Load AI calibration profile + correction rules
+    getCalibration(authUser.id).then(cal => { if (cal) setCalibration(cal); });
+    getCorrections(authUser.id).then(rules => { rules.forEach(r => addCorrectionRule(r)); });
+
     // Load existing category stars
     getCategorySummaries(authUser.id).then((summaries) => {
       const now = Date.now();
@@ -93,7 +102,7 @@ export default function App() {
       });
 
       summaries.forEach(({ category, count, lastEntry }) => {
-        if (category === 'chat') return; // skip chat sessions — not a star
+        if (category === 'chat' || category === 'ai_profile') return; // skip non-star categories
         const star = buildStar(category, count, lastEntry);
         upsertStar(star);
         addKnownCategory(category);
@@ -159,7 +168,7 @@ export default function App() {
         filter: `user_id=eq.${authUser.id}`,
       }, (payload) => {
         const { category, created_at } = payload.new as { category: string; created_at: string };
-        if (category === 'chat') return; // skip chat sessions — not a star
+        if (category === 'chat' || category === 'ai_profile') return; // skip non-star categories
         const existing = useAlterStore.getState().stars.find(s => s.id === category);
         const star = buildStar(category, (existing?.entryCount ?? 0) + 1, created_at);
         upsertStar({ ...star, isNew: !existing });
@@ -230,6 +239,13 @@ export default function App() {
       <TabBar />
       <BugReportPanel />
       <PWAInstallPrompt />
+
+      {showIntro && (
+        <BigBangIntro onComplete={() => {
+          sessionStorage.setItem('alter_intro_done', '1');
+          setShowIntro(false);
+        }} />
+      )}
 
       {/* ── Ghost Action: Reminder Alert (chat + dashboard only; galaxy has its own) ── */}
       <AnimatePresence>
