@@ -73,7 +73,10 @@ export default function NexusView() {
     const profile = await getOrCreateProfile(user!.id, user!.email, username || undefined);
     if (profile) {
       setMyProfile(profile);
-      await updatePublicStats(user!.id, stats);
+      const quizKeys = Object.fromEntries(
+        Object.entries(profile.public_stats ?? {}).filter(([k]) => k.startsWith('quiz_'))
+      );
+      await updatePublicStats(user!.id, { ...stats, ...quizKeys });
     }
     const [f, p] = await Promise.all([getFriends(user!.id), getPendingRequests(user!.id)]);
     setFriends(f);

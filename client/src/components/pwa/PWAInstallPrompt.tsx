@@ -132,16 +132,6 @@ export default function PWAInstallPrompt() {
               Ho capito
             </button>
 
-            <button
-              onClick={dismiss}
-              style={{
-                background: 'none', border: 'none',
-                color: 'rgba(255,255,255,0.22)', fontSize: 13,
-                cursor: 'pointer',
-              }}
-            >
-              Non mostrare per 2 giorni
-            </button>
           </div>
         </motion.div>
       )}

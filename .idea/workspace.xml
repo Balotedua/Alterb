@@ -6,29 +6,42 @@
   <component name="ChangeListManager">
     <list default="true" id="5af61f9e-4029-4067-8d2c-bf5c696222da" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.claude/settings.local.json" beforeDir="false" afterPath="$PROJECT_DIR$/.claude/settings.local.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/client/.env" beforeDir="false" afterPath="$PROJECT_DIR$/client/.env" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/dist/assets/index-Bqw4CRBq.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/dist/assets/index-D8InCn3-.css" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/dist/assets/vendor-ui-CMLPW1Z-.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/dist/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/client/dist/index.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/App.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/admin/AdminPopup.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/admin/AdminPopup.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/client/src/components/chat/ChatView.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/chat/ChatView.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/components/chat/ChatHistorySidebar.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/chat/ChatHistorySidebar.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/dashboard/DataAnalyticsView.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/dashboard/DataAnalyticsView.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/components/layout/TabBar.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/layout/TabBar.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/nebula/NebulaChatInput.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/nebula/NebulaChatInput.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/components/pwa/PWAInstallPrompt.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/pwa/PWAInstallPrompt.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/settings/SettingsPanel.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/settings/SettingsPanel.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/components/social/FriendDetail.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/social/FriendDetail.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/components/social/NexusView.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/social/NexusView.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/starfield/StarfieldView.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/starfield/StarfieldView.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/widget/PolymorphicWidget.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/widget/PolymorphicWidget.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/widget/renderers/FinanceRenderer.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/widget/renderers/FinanceRenderer.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/components/widget/renderers/MoodRenderer.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/widget/renderers/MoodRenderer.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/components/widget/renderers/VoidRenderer.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/widget/renderers/VoidRenderer.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/components/widget/renderers/WorkoutRenderer.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/widget/renderers/WorkoutRenderer.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/components/widget/renderers/shared.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/components/widget/renderers/shared.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/core/aiParser.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/core/aiParser.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/core/dataAnalyser.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/core/dataAnalyser.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/core/insightEngine.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/core/insightEngine.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/core/localParser.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/core/localParser.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/core/orchestrator.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/core/orchestrator.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/client/src/import/documentOcr.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/import/documentOcr.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/index.css" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/index.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/social/nexusService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/social/nexusService.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/store/alterStore.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/store/alterStore.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/types/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/types/index.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/vault/vaultService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/vault/vaultService.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/client/src/vite-env.d.ts" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/vite-env.d.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/context.md" beforeDir="false" afterPath="$PROJECT_DIR$/context.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/tsconfig.tsbuildinfo" beforeDir="false" afterPath="$PROJECT_DIR$/client/tsconfig.tsbuildinfo" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -46,15 +59,16 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Python.main.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;last_opened_file_path&quot;: &quot;C:/Users/danie/Desktop/vercelesercizio/client/src/pages&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Python.main.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "main",
+    "last_opened_file_path": "C:/Users/danie/Desktop/vercelesercizio/client/src/pages",
+    "settings.editor.selected.configurable": "project.propVCSSupport.DirectoryMappings"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="C:\Users\danie\Desktop\vercelesercizio\client\src\pages" />

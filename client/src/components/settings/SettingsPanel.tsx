@@ -7,8 +7,8 @@ import { updateDisplayName } from '../../social/nexusService';
 import type { CategorySummary, DeletedCategorySummary } from '../../vault/vaultService';
 import { buildStar, getCategoryMeta } from '../starfield/StarfieldView';
 import AdminPopup from '../admin/AdminPopup';
+import GuideModal from './GuideModal';
 import { supabase } from '../../config/supabase';
-import { isGoogleFitConnected, connectGoogleFit, disconnectGoogleFit } from '../../core/wearableSync';
 
 const THEMES: { id: Theme; label: string; desc: string; preview: string[] }[] = [
   {
@@ -41,6 +41,7 @@ export default function SettingsPanel() {
   const { showSettings, setShowSettings, theme, setTheme, username, setUsername, user } = useAlterStore();
   const [nameInput, setNameInput] = useState(username);
   const [nameSaved, setNameSaved] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   const saveUsername = async () => {
     const trimmed = nameInput.trim();
@@ -198,12 +199,53 @@ export default function SettingsPanel() {
             {/* Data management section */}
             <DataSection userId={user?.id ?? null} />
 
-            {/* Wearables section */}
-            <WearableSection />
+            {/* Guide section */}
+            <Section label="GUIDA">
+              <button
+                onClick={() => setShowGuide(true)}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  background: 'rgba(200,168,75,0.07)',
+                  border: '1px solid rgba(200,168,75,0.2)',
+                  borderRadius: 12,
+                  padding: '12px 14px',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'border-color 0.2s, background 0.2s',
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(200,168,75,0.45)';
+                  (e.currentTarget as HTMLButtonElement).style.background = 'rgba(200,168,75,0.13)';
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(200,168,75,0.2)';
+                  (e.currentTarget as HTMLButtonElement).style.background = 'rgba(200,168,75,0.07)';
+                }}
+              >
+                <span style={{ fontSize: 18, lineHeight: 1 }}>📖</span>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#C8A84B', letterSpacing: '0.03em' }}>
+                    Cosa può fare Alter
+                  </div>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>
+                    Manuale completo · tutte le funzionalità
+                  </div>
+                </div>
+                <span style={{ marginLeft: 'auto', fontSize: 14, color: 'rgba(200,168,75,0.5)' }}>→</span>
+              </button>
+            </Section>
 
             {/* Admin section */}
             <AdminSection />
           </motion.div>
+
+          {/* Guide Modal */}
+          <AnimatePresence>
+            {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}
+          </AnimatePresence>
         </>
       )}
     </AnimatePresence>
@@ -335,7 +377,7 @@ function DataSection({ userId }: { userId: string | null }) {
         <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Nessun dato nel vault.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {summaries.map(s => (
+          {summaries.filter(s => s.category !== 'quiz_tokens').map(s => (
             <div key={s.category} style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)',
@@ -743,67 +785,6 @@ function ThemeCard({ theme, active, onSelect }: {
         {theme.desc}
       </div>
     </button>
-  );
-}
-
-function WearableSection() {
-  const [connected, setConnected] = useState(isGoogleFitConnected());
-  const hasClientId = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
-  function handleConnect() {
-    connectGoogleFit();
-  }
-
-  function handleDisconnect() {
-    disconnectGoogleFit();
-    setConnected(false);
-  }
-
-  return (
-    <Section label="WEARABLES">
-      <div style={{
-        background: 'rgba(255,255,255,0.03)',
-        border: '1px solid var(--border)',
-        borderRadius: 12,
-        padding: '12px 14px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 18 }}>🏃</span>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>
-              Google Fit
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>
-              {connected ? 'Connesso · sync ogni 6h' : hasClientId ? 'Passi, sonno, peso' : 'Configura VITE_GOOGLE_CLIENT_ID'}
-            </div>
-          </div>
-        </div>
-        {hasClientId && (
-          <button
-            onClick={connected ? handleDisconnect : handleConnect}
-            style={{
-              background: connected ? 'rgba(239,68,68,0.12)' : 'rgba(52,211,153,0.12)',
-              border: `1px solid ${connected ? 'rgba(239,68,68,0.3)' : 'rgba(52,211,153,0.3)'}`,
-              borderRadius: 8,
-              padding: '6px 12px',
-              cursor: 'pointer',
-              color: connected ? '#f87171' : '#34d399',
-              fontSize: 11,
-              fontWeight: 600,
-              letterSpacing: '0.06em',
-              whiteSpace: 'nowrap',
-              transition: 'opacity 0.2s',
-            }}
-          >
-            {connected ? 'Disconnetti' : 'Connetti'}
-          </button>
-        )}
-      </div>
-    </Section>
   );
 }
 

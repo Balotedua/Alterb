@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAlterStore } from '../../store/alterStore';
-import { getByCategory, getSemanticLinks, getRecentAll } from '../../vault/vaultService';
+import { getByCategory, getByDateRange, getSemanticLinks, getRecentAll } from '../../vault/vaultService';
 import { inferRenderType } from '../widget/PolymorphicWidget';
 import type { Star } from '../../types';
 import { nebulaCameraRef } from '../nebula/nebulaCamera';
@@ -20,6 +20,7 @@ export const CATEGORY_META: Record<string, { label: string; color: string; icon:
   badges:       { label: 'Badge',            color: '#C8A84B', icon: '🏆' },
   documents:    { label: 'Documenti',        color: '#5AA8CC', icon: '📄' },
   chronicle:    { label: 'Il Codex',         color: '#A870C4', icon: '📖' },
+  quiz:         { label: 'Quiz',             color: '#a855f7', icon: '🧩' },
 };
 
 export function getCategoryMeta(cat: string) {
@@ -47,7 +48,7 @@ export const SUBCATEGORY_MAP: Record<string, Array<{ id: string; label: string; 
 };
 
 // ─── Stars absorbed into other planets (not rendered as planets) ──
-const HIDDEN_STARS = new Set(['calendar']);
+const HIDDEN_STARS = new Set(['calendar', 'quiz_tokens']);
 
 // ─── Sub-star data overrides: click loads a different category ─
 const SUBSTAR_OVERRIDES: Record<string, { category: string; subTab?: string }> = {
@@ -68,6 +69,7 @@ const FIXED_STAR_POSITIONS: Record<string, { x: number; y: number }> = {
   psychology:   { x: 0.86, y: 0.70 },
   mental_health:{ x: 0.86, y: 0.70 },
   chronicle:    { x: 0.50, y: 0.46 },
+  quiz:         { x: 0.28, y: 0.62 },
 };
 
 // ─── Deterministic star position ─────────────────────────────
@@ -104,6 +106,9 @@ function substarPos(parentX: number, parentY: number, subId: string, idx: number
 // layer 0 = distant/slow, layer 1 = mid, layer 2 = near/fast
 interface Particle { x: number; y: number; r: number; a: number; da: number; layer: 0 | 1 | 2; sparkle?: boolean; }
 
+// Short-lived burst particles (ASMR pop on data save)
+interface Particle2 { x: number; y: number; vx: number; vy: number; life: number; decay: number; r: number; color: string; }
+
 // Parallax factors per layer (applied to panX/panY)
 const LAYER_PARALLAX = [0.12, 0.38, 0.78] as const;
 const LAYER_RADIUS   = [[0.12, 0.35], [0.28, 0.72], [0.45, 1.3]] as const;
@@ -132,6 +137,9 @@ function hexToRgb(hex: string): [number, number, number] {
 // ─── Camera + canvas state ────────────────────────────────────
 interface CanvasState {
   particles: Particle[];
+  particles2: Particle2[];          // ASMR burst particles
+  lastInteractionAt: number;        // Date.now() of last user interaction
+  idleDriftPhase: number;           // accumulator for idle star oscillation
   raf: number;
   hovered: string | null;
   t: number;
@@ -154,6 +162,9 @@ interface CanvasState {
   constellationAlpha: number; // 0..0.12, fades in when idle
   touchStartX: number;
   touchStartY: number;
+  // Time travel gesture state
+  timeSwipeActive: boolean;
+  timeSwipeDeltaDays: number;
 }
 
 // ─── StarfieldView ────────────────────────────────────────────
@@ -163,20 +174,20 @@ export default function StarfieldView() {
 
   const stateRef = useRef<CanvasState>({
     particles: initParticles(isMobile ? 26 : 48),
+    particles2: [], lastInteractionAt: Date.now(), idleDriftPhase: 0,
     raf: 0, hovered: null, t: 0,
     panX: 0, panY: 0, velX: 0, velY: 0, scale: 1, targetScale: 1, zoomAnchorCx: 0, zoomAnchorCy: 0,
     dragging: false, dragX: 0, dragY: 0, didDrag: false,
     pinchDist: -1, pinchMidX: 0, pinchMidY: 0, pinching: false,
     touchStartX: 0, touchStartY: 0,
     constellationAlpha: 0,
+    timeSwipeActive: false, timeSwipeDeltaDays: 0,
   });
 
-  const { stars, focusMode, setActiveWidget, user, markStarSeen, highlightedStarId, alertEvent, setSemanticLinks, setGhostStarPrompt } = useAlterStore();
+  const { stars, focusMode, setActiveWidget, user, markStarSeen, highlightedStarId, alertEvent, setSemanticLinks, setGhostStarPrompt, timelineDate, isTimelineMode, setTimelineDate, setTimelineMode } = useAlterStore();
 
   // Subtle ripple at click position
   const [clickRipple, setClickRipple] = useState<{ x: number; y: number; color: string } | null>(null);
-  const [nexusScanning, setNexusScanning] = useState(false);
-
   // Load semantic links whenever the star count changes
   useEffect(() => {
     if (!user) return;
@@ -206,6 +217,10 @@ export default function StarfieldView() {
     const W = canvas.width, H = canvas.height;
     const state = stateRef.current;
     state.t += 0.007;
+
+    // Idle drift accumulator
+    const idleMs = Date.now() - state.lastInteractionAt;
+    if (idleMs > 6000) state.idleDriftPhase += 0.0008;
 
     // Smooth zoom: snap during pinch (no lag), lerp otherwise
     // Apply pan anchor correction incrementally as scale lerps (fixes wheel zoom jitter)
@@ -248,6 +263,52 @@ export default function StarfieldView() {
     bg.addColorStop(1,   bgC2);
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
+
+    // Time travel: blue-shift tint overlay
+    if (useAlterStore.getState().isTimelineMode) {
+      ctx.fillStyle = `rgba(40,60,120,${0.08 + Math.sin(state.t * 0.4) * 0.02})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // "Needs attention" vignette when idle >4h
+    if (idleMs > 14400000) {
+      const attentionPulse = (Math.sin(state.t * 1.2) * 0.5 + 0.5) * 0.04;
+      const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.8);
+      vg.addColorStop(0, `rgba(0,0,0,0)`);
+      vg.addColorStop(1, `rgba(80,120,255,${attentionPulse})`);
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // Particle burst spawn (ASMR pop)
+    const burst = useAlterStore.getState().particleBurst;
+    if (burst) {
+      for (let i = 0; i < 22; i++) {
+        const angle = (i / 22) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+        const speed = 1.5 + Math.random() * 3.5;
+        state.particles2.push({
+          x: burst.x, y: burst.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 1.2,
+          life: 1, decay: 0.028 + Math.random() * 0.018,
+          r: 1.2 + Math.random() * 2.8,
+          color: burst.color,
+        });
+      }
+      useAlterStore.getState().setParticleBurst(null);
+    }
+
+    // Draw + update burst particles (before stars so they appear behind)
+    state.particles2 = state.particles2.filter(p => p.life > 0);
+    for (const p of state.particles2) {
+      p.x += p.vx; p.y += p.vy;
+      p.vy += 0.08; p.vx *= 0.97;
+      p.life -= p.decay;
+      const [pr, pg, pb] = hexToRgb(p.color);
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${pr},${pg},${pb},${p.life * 0.85})`;
+      ctx.fill();
+    }
 
     // Subtle nebula wisps — tinted dust clouds for depth
     const NEBULA_TINTS: Record<string, [number,number,number]> = {
@@ -346,7 +407,11 @@ export default function StarfieldView() {
 
     // ── Category stars — minimal luminous dots ──
     starsNow.filter(s => !HIDDEN_STARS.has(s.id)).forEach((star) => {
-      const { sx: px, sy: py } = toScreen(star.x, star.y, W, H);
+      const { sx: pxBase, sy: pyBase } = toScreen(star.x, star.y, W, H);
+      // Idle drift: stars oscillate gently after 6s of inactivity
+      const driftAmp = Math.min(1, (idleMs - 6000) / 4000) * (idleMs > 6000 ? 1 : 0);
+      const px = pxBase + Math.sin(state.idleDriftPhase * 1.3 + star.x * 7.4) * 2.5 * driftAmp;
+      const py = pyBase + Math.cos(state.idleDriftPhase * 0.9 + star.y * 5.1) * 1.8 * driftAmp;
       if (px < -80 || px > W + 80 || py < -80 || py > H + 80) return;
 
       const isHov     = hov === star.id;
@@ -356,7 +421,8 @@ export default function StarfieldView() {
       const { intensity } = star;
       const isEphemeral = star.ephemeral ?? false;
       // Wither: 1=full color, 0=fully gray after ~18 days inactivity
-      const wf = star.witherFactor ?? 1;
+      // In timeline mode, apply extra aging to reinforce "past" feeling
+      const wf = (star.witherFactor ?? 1) * (useAlterStore.getState().isTimelineMode ? 0.7 : 1);
       const WITHER_GRAY = 115; // neutral gray target
       const wr = Math.round(r * wf + WITHER_GRAY * (1 - wf));
       const wg = Math.round(g * wf + WITHER_GRAY * (1 - wf));
@@ -663,6 +729,7 @@ export default function StarfieldView() {
   // ── Mouse: hover + drag ────────────────────────────────────
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const state  = stateRef.current;
+    state.lastInteractionAt = Date.now();
     const canvas = canvasRef.current;
     if (!canvas) return;
     const W = canvas.width, H = canvas.height;
@@ -714,6 +781,7 @@ export default function StarfieldView() {
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const state = stateRef.current;
+    state.lastInteractionAt = Date.now();
     state.dragging = true;
     state.dragX    = e.clientX;
     state.dragY    = e.clientY;
@@ -728,7 +796,16 @@ export default function StarfieldView() {
 
   const openWidget = useCallback(async (star: { id: string; label: string; color: string }, subTab?: string) => {
     if (!user) return;
-    const entries = await getByCategory(user.id, star.id);
+    const store = useAlterStore.getState();
+    let entries;
+    if (store.isTimelineMode && store.timelineDate) {
+      const to = store.timelineDate;
+      const from = new Date(to);
+      from.setDate(from.getDate() - 30);
+      entries = await getByDateRange(user.id, star.id, from, to);
+    } else {
+      entries = await getByCategory(user.id, star.id);
+    }
     const renderType = inferRenderType(entries, star.id);
     setActiveWidget({ category: star.id, label: star.label, color: star.color, entries, renderType, subTab });
     markStarSeen(star.id);
@@ -799,6 +876,7 @@ export default function StarfieldView() {
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     const state = stateRef.current;
+    state.lastInteractionAt = Date.now();
     if (e.touches.length === 1) {
       state.dragging    = true;
       state.dragX       = e.touches[0].clientX;
@@ -815,6 +893,9 @@ export default function StarfieldView() {
       state.pinchMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
       state.dragging  = false;
       state.pinching  = true;
+      // Time travel gesture init
+      state.timeSwipeActive = false;
+      state.timeSwipeDeltaDays = 0;
     }
   }, []);
 
@@ -840,15 +921,44 @@ export default function StarfieldView() {
       const dx      = e.touches[0].clientX - e.touches[1].clientX;
       const dy      = e.touches[0].clientY - e.touches[1].clientY;
       const newDist = Math.hypot(dx, dy);
-      const factor  = newDist / state.pinchDist;
-      const newScale = Math.max(0.25, Math.min(5, state.targetScale * factor));
       const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
       const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      const midDeltaX = midX - state.pinchMidX;
+      const midDeltaY = midY - state.pinchMidY;
+      const pinchRatio = newDist / state.pinchDist;
+
+      // Gesture disambiguation: horizontal 2-finger swipe = time travel
+      const isHorizontalSwipe = Math.abs(midDeltaX) > Math.abs(midDeltaY) * 1.8
+        && pinchRatio > 0.92 && pinchRatio < 1.08;
+
+      if (isHorizontalSwipe) {
+        state.timeSwipeActive = true;
+        state.timeSwipeDeltaDays += -midDeltaX * 0.15;
+        if (Math.abs(state.timeSwipeDeltaDays) >= 1) {
+          const days = Math.round(state.timeSwipeDeltaDays);
+          state.timeSwipeDeltaDays = 0;
+          const store = useAlterStore.getState();
+          const base = store.timelineDate ?? new Date();
+          const next = new Date(base);
+          next.setDate(next.getDate() + days);
+          if (next <= new Date()) {
+            store.setTimelineDate(next);
+            if (!store.isTimelineMode) store.setTimelineMode(true);
+          }
+        }
+        // Skip pinch zoom — do NOT update pinchDist
+        state.pinchMidX = midX;
+        state.pinchMidY = midY;
+        return;
+      }
+
+      const factor  = newDist / state.pinchDist;
+      const newScale = Math.max(0.25, Math.min(5, state.targetScale * factor));
       const cx = midX - W / 2, cy = midY - H / 2;
       state.panX = cx + (state.panX - cx) * (newScale / state.targetScale);
       state.panY = cy + (state.panY - cy) * (newScale / state.targetScale);
-      state.panX += midX - state.pinchMidX;
-      state.panY += midY - state.pinchMidY;
+      state.panX += midDeltaX;
+      state.panY += midDeltaY;
       state.targetScale = newScale;
       state.pinchDist = newDist;
       state.pinchMidX = midX;
@@ -1043,52 +1153,54 @@ export default function StarfieldView() {
         )}
       </AnimatePresence>
 
-      {/* Nexus scan button */}
-      {stars.length >= 2 && (
-        <motion.button
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          onClick={async () => {
-            if (!user || nexusScanning) return;
-            setNexusScanning(true);
-            try {
-              const entries = await getRecentAll(user.id, 80);
-              const { aiNexusNarrative } = await import('../../core/aiParser');
-              const narrative = await aiNexusNarrative('Analizza le correlazioni tra tutte le mie categorie e dimmi cosa noti di interessante.', entries);
-              setActiveWidget({
-                category: 'nexus', label: '✦ Scansione Nexus', color: '#a78bfa',
-                entries: [{ id: 'nexus-scan', user_id: user.id, category: 'nexus',
-                  data: { insight: narrative }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }],
-                renderType: 'list',
-              });
-            } finally {
-              setNexusScanning(false);
-            }
-          }}
-          style={{
-            position: 'absolute',
-            bottom: 90, left: '50%', transform: 'translateX(-50%)', margin: 0,
-            zIndex: 40,
-            background: nexusScanning ? 'rgba(155,127,212,0.12)' : 'rgba(5,7,18,0.82)',
-            border: '1px solid rgba(155,127,212,0.28)',
-            borderRadius: 24,
-            padding: '8px 20px',
-            display: 'flex', alignItems: 'center', gap: 8,
-            cursor: nexusScanning ? 'wait' : 'pointer',
-            color: '#9B7FD4',
-            fontSize: 11, fontWeight: 500, letterSpacing: '0.08em',
-            backdropFilter: 'blur(16px)',
-            boxShadow: '0 0 24px rgba(155,127,212,0.10)',
-            transition: 'all 0.25s',
-          }}
-        >
-          <span style={{ fontSize: 14, animation: nexusScanning ? 'spin 1.2s linear infinite' : 'none' }}>
-            {nexusScanning ? '◌' : '✦'}
-          </span>
-          {nexusScanning ? 'Nexus in analisi...' : 'Scansione Nexus'}
-        </motion.button>
-      )}
+      {/* Timeline HUD */}
+      <AnimatePresence>
+        {isTimelineMode && timelineDate && (
+          <motion.div
+            key="timeline-hud"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            style={{
+              position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
+              zIndex: 45, pointerEvents: 'none',
+              background: 'rgba(5,7,18,0.82)',
+              border: '1px solid rgba(100,140,255,0.25)',
+              borderRadius: 20, padding: '6px 18px',
+              fontSize: 11, fontWeight: 400,
+              color: 'rgba(140,180,255,0.9)', letterSpacing: '0.1em',
+              backdropFilter: 'blur(16px)', whiteSpace: 'nowrap',
+            }}
+          >
+            ← {timelineDate.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
+          </motion.div>
+        )}
+        {isTimelineMode && (
+          <motion.button
+            key="timeline-return"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ duration: 0.2 }}
+            whileTap={{ scale: 0.92 }}
+            onClick={() => { setTimelineDate(null); setTimelineMode(false); }}
+            style={{
+              position: 'absolute', bottom: 90, left: '50%', transform: 'translateX(-50%)',
+              zIndex: 45,
+              background: 'rgba(5,7,18,0.88)',
+              border: '1px solid rgba(100,140,255,0.3)',
+              borderRadius: 20, padding: '8px 20px',
+              fontSize: 11, fontWeight: 400, color: 'rgba(140,180,255,0.9)',
+              letterSpacing: '0.1em', cursor: 'pointer',
+              backdropFilter: 'blur(16px)',
+            }}
+          >
+            ↑ Ora
+          </motion.button>
+        )}
+      </AnimatePresence>
+
 
 
       {/* Subtle click ripple */}

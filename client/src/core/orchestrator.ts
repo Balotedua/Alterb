@@ -66,6 +66,9 @@ const WEB_SEARCH_PATTERN = new RegExp([
   String.raw`\b(trump|putin|biden|zelensky|meloni|musk)\b.{1,50}\b(iran|russia|ucraina|cina|usa|israele|palestina)\b`,
   String.raw`cosa\s+(è\s+successo|succede)\s+(con|in|a)\b.{0,30}\b(trump|putin|biden|iran|russia|ucraina|cina|usa|israele)\b`,
 ].join('|'), 'i');
+const QUIZ_PATTERN = /\b(quiz|test\s+cognitiv[io]|cognitive\s+battery|brain\s+test|test\s+mente|allenamento\s+mentale|test\s+cognitivit[àa])\b/i;
+const PRIVACY_PATTERN = /\b(ghost\s+protocol|impronta\s+digitale|chi\s+sono\s+online|dati\s+online|identit[àa]\s+digitale|ombra\s+digitale|shadow\s+mode|profilo\s+digitale|privacy\s+report|mostra\s+privacy|cosa\s+sanno\s+di\s+me|tracker|tracciamento\s+online|cancella\s+dati\s+online|account\s+online|mia\s+privacy)\b/i;
+
 const COHERENCE_PATTERN = /\b(audit|coerenza|chi\s+son[oa]\s+diventato|chi\s+sei\s+diventato|report\s+di\s+coerenza|specchio\s+della\s+realt[àa]|contraddizioni|contraddico|coerente\s+con|sto\s+vivendo\s+come|allineato\s+con\s+i\s+miei\s+obiettivi|obiettivi\s+vs\s+azioni|quello\s+che\s+voglio\s+vs|analisi\s+della\s+coerenza)\b/i;
 const NEXUS_PATTERN    = /dipende\s+(da|dal|dalle?)|correlazione\s+(tra|umore|spes|peso|salute)|incrocio\s+tra|relazione\s+tra|nexus|perch[eé]\s+(sono|mi\s+sento|sto\s+(cos[iì]|male|bene)|sono\s+sempre)|cosa\s+(causa|influenza|c[''è]\s+dietro|mi\s+fa)/i;
 const CODEX_PATTERN    = /\b(chi\s+son[oa]|il\s+mio\s+(libro|codex|diario\s+galattico|cammino|viaggio\s+galattico)|apri\s+(il\s+)?(libro|codex)|mostrami\s+(il\s+)?(mio\s+)?(libro|codex)|la\s+mia\s+(storia|biografia)|codex\s+galattico|diario\s+galattico)\b/i;
@@ -245,6 +248,8 @@ export type OrchestratorAction =
   | { type: 'web_search';   raw: string; query: string }
   | { type: 'codex' }
   | { type: 'coherence_audit' }
+  | { type: 'quiz' }
+  | { type: 'privacy' }
   | { type: 'correction';   raw: string }
   | { type: 'calibrate' }
   | { type: 'unknown';      raw: string };
@@ -296,6 +301,12 @@ export function orchestrate(
     // Fallback: "cancella stella [nome]"
     return { type: 'delete', raw: trimmed, category: extractDeleteCategory(trimmed), dateRange: null, all: false };
   }
+
+  if (QUIZ_PATTERN.test(lower))
+    return { type: 'quiz' };
+
+  if (PRIVACY_PATTERN.test(lower))
+    return { type: 'privacy' };
 
   if (COHERENCE_PATTERN.test(lower))
     return { type: 'coherence_audit' };

@@ -41,7 +41,18 @@ export interface Star {
 }
 
 // ─── Widget ──────────────────────────────────────────────────
-export type RenderType = 'chart' | 'list' | 'diary' | 'stats' | 'mood' | 'timeline' | 'nexus' | 'activity' | 'numeric' | 'pie' | 'doc_download' | 'finance' | 'workout' | 'codex' | 'coherence' | 'void';
+export type RenderType = 'chart' | 'list' | 'diary' | 'stats' | 'mood' | 'timeline' | 'nexus' | 'activity' | 'numeric' | 'pie' | 'doc_download' | 'finance' | 'workout' | 'codex' | 'coherence' | 'void' | 'predictive' | 'quiz' | 'privacy';
+
+// ─── Proactive Insights ──────────────────────────────────────
+export interface ProactiveInsight {
+  type: 'correlation' | 'projection';
+  catA: string;
+  catB?: string;
+  r?: number;       // Pearson -1..1
+  n?: number;       // days with data
+  text: string;     // human-readable insight
+  renderData?: Record<string, unknown>;
+}
 
 export interface NexusBeam {
   catA: string;

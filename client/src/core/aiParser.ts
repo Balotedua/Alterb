@@ -1,10 +1,10 @@
 import type { CategoryMeta, ParsedIntent, VaultEntry, UserCalibration, CorrectionRule } from '../types';
 
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite';
+const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY as string;
 
 // ─── Gemini Flash (non-streaming) ─────────────────────────────
 async function geminiChat(messages: { role: string; content: string }[], maxTokens = 256): Promise<string | null> {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
-  if (!apiKey) return null;
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
@@ -17,15 +17,12 @@ async function geminiChat(messages: { role: string; content: string }[], maxToke
     if (system && contents.length > 0) {
       contents[0].parts[0].text = `${system}\n\n${contents[0].parts[0].text}`;
     }
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: maxTokens, temperature: 0.4 } }),
-        signal: controller.signal,
-      }
-    );
+    const res = await fetch(`${GEMINI_BASE}:generateContent?key=${GEMINI_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: maxTokens, temperature: 0.4 } }),
+      signal: controller.signal,
+    });
     clearTimeout(timeout);
     if (!res.ok) {
       const err = await res.text().catch(() => '');
@@ -46,8 +43,6 @@ async function geminiChatStream(
   onChunk: (accumulated: string) => void,
   maxTokens = 700
 ): Promise<string | null> {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
-  if (!apiKey) return null;
   try {
     const system = messages.find(m => m.role === 'system')?.content ?? '';
     const turns = messages.filter(m => m.role !== 'system');
@@ -58,14 +53,11 @@ async function geminiChatStream(
     if (system && contents.length > 0) {
       contents[0].parts[0].text = `${system}\n\n${contents[0].parts[0].text}`;
     }
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?key=${apiKey}&alt=sse`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: maxTokens, temperature: 0.4 } }),
-      }
-    );
+    const res = await fetch(`${GEMINI_BASE}:streamGenerateContent?key=${GEMINI_KEY}&alt=sse`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: maxTokens, temperature: 0.4 } }),
+    });
     if (!res.ok || !res.body) {
       const errText = await res.text().catch(() => '');
       console.error('[geminiChatStream] HTTP', res.status, errText);
@@ -179,7 +171,8 @@ export async function aiChatStream(
   vaultContext?: string,
   webContext?: string,
   calibration?: UserCalibration | null,
-  correctionRules?: CorrectionRule[]
+  correctionRules?: CorrectionRule[],
+  hasDetailedData?: boolean
 ): Promise<string> {
   const systemBase = `Sei Nebula, il compagno digitale di Alter OS. Hai la personalità di un amico autentico: curioso, caldo, diretto. Mai banale, mai formale.
 
@@ -194,7 +187,9 @@ Regole:
 - Se l'utente fa una domanda su sé stesso e hai il contesto vault — usalo subito, cita dati reali (conteggi, categorie, date), non restare vago`;
 
   let systemContent = vaultContext
-    ? `${systemBase}\n\nIMPORTANTE: Sei un amico di lunga data, non al primo incontro. Mai frasi come "benvenuto", "sono Nebula". Conosci già questa persona.\n\nSe ti chiede qualcosa su di sé in modo generico, DEVI usare il contesto sotto per rispondere in modo personale e specifico — cita categorie reali, date, conteggi. Non essere vago quando hai informazioni.\n\n⛔ ANTI-ALLUCINAZIONE (ASSOLUTA): Il contesto mostra SOLO categorie, conteggi e date — NON il contenuto delle singole voci. VIETATO inventare o elencare importi specifici, nomi di negozi/persone, date di transazioni, note o qualsiasi dato dettagliato. Se l'utente vuole i dettagli, di' SOLO: 'Digita "mostrami [categoria]" per vedere i dati reali.' Non fare esempi, non simulare, non usare cifre inventate.\n\n📊 Galassia personale (solo conteggi e date):\n${vaultContext}`
+    ? hasDetailedData
+      ? `${systemBase}\n\nIMPORTANTE: Sei un amico di lunga data, conosci già questa persona.\n\n✅ HAI I DATI REALI dell'utente nel contesto qui sotto — usali per rispondere in modo concreto e diretto. Cita importi, date e descrizioni reali presenti nel contesto. NON inventare dati non presenti, ma quelli nel contesto usali senza esitazione.\n\n📊 Contesto vault:\n${vaultContext}`
+      : `${systemBase}\n\nIMPORTANTE: Sei un amico di lunga data, non al primo incontro. Mai frasi come "benvenuto", "sono Nebula". Conosci già questa persona.\n\nSe ti chiede qualcosa su di sé in modo generico, DEVI usare il contesto sotto per rispondere in modo personale e specifico — cita categorie reali, date, conteggi. Non essere vago quando hai informazioni.\n\n⛔ ANTI-ALLUCINAZIONE (ASSOLUTA): Il contesto mostra SOLO categorie, conteggi e date — NON il contenuto delle singole voci. VIETATO inventare o elencare importi specifici, nomi di negozi/persone, date di transazioni, note o qualsiasi dato dettagliato. Se l'utente vuole i dettagli, di' SOLO: 'Digita "mostrami [categoria]" per vedere i dati reali.' Non fare esempi, non simulare, non usare cifre inventate.\n\n📊 Galassia personale (solo conteggi e date):\n${vaultContext}`
     : systemBase;
 
   if (webContext) {
@@ -218,11 +213,14 @@ export async function aiChatAndExtractStream(
   history: ChatHistoryEntry[] = [],
   vaultContext?: string,
   calibration?: UserCalibration | null,
-  correctionRules?: CorrectionRule[]
+  correctionRules?: CorrectionRule[],
+  hasDetailedData?: boolean
 ): Promise<ChatAndExtractResult> {
   const fallback = (): ChatAndExtractResult => ({ reply: 'Sono qui. Dimmi pure.', extractions: [] });
   let systemContent = vaultContext
-    ? `${SYSTEM_COMBINED}\n\n⛔ ANTI-ALLUCINAZIONE (ASSOLUTA): Hai SOLO conteggi e date per categoria — NON il contenuto delle singole voci. VIETATO inventare note, importi, nomi, idee specifiche. Se l'utente chiede il contenuto dettagliato, rispondi SOLO: 'Digita "mostrami [categoria]" per vedere i dati reali.'\n\n📊 Galassia personale (solo conteggi e date):\n${vaultContext}`
+    ? hasDetailedData
+      ? `${SYSTEM_COMBINED}\n\n✅ HAI I DATI REALI dell'utente nel contesto qui sotto — usali per rispondere concretamente. Cita importi, date e descrizioni reali presenti nel contesto. NON inventare dati non presenti.\n\n📊 Contesto vault:\n${vaultContext}`
+      : `${SYSTEM_COMBINED}\n\n⛔ ANTI-ALLUCINAZIONE (ASSOLUTA): Hai SOLO conteggi e date per categoria — NON il contenuto delle singole voci. VIETATO inventare note, importi, nomi, idee specifiche. Se l'utente chiede il contenuto dettagliato, rispondi SOLO: 'Digita "mostrami [categoria]" per vedere i dati reali.'\n\n📊 Galassia personale (solo conteggi e date):\n${vaultContext}`
     : SYSTEM_COMBINED;
   systemContent += calibrationBlock(calibration, correctionRules);
   const msgs = [{ role: 'system', content: systemContent }, ...buildHistory(history), { role: 'user', content: text }];
@@ -233,7 +231,8 @@ export async function aiChatAndExtractStream(
     (acc) => {
       rawFull = acc;
       const replyText = extractReplyFromPartialJson(acc);
-      if (replyText) onReplyChunk(replyText);
+      // If no JSON structure found yet, treat the whole accumulated text as the reply preview
+      onReplyChunk(replyText || (acc.startsWith('{') ? '' : acc));
     },
     900
   );
@@ -242,13 +241,21 @@ export async function aiChatAndExtractStream(
   if (!full) return fallback();
   try {
     const jsonMatch = full.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return fallback();
+    if (!jsonMatch) {
+      // Model returned plain text instead of JSON — use it directly as reply
+      const trimmed = full.trim();
+      return { reply: trimmed || fallback().reply, extractions: [] };
+    }
     const parsed = JSON.parse(jsonMatch[0]);
     return {
       reply: typeof parsed.reply === 'string' ? parsed.reply : 'Compreso.',
       extractions: Array.isArray(parsed.extractions) ? parsed.extractions : [],
     };
-  } catch { return fallback(); }
+  } catch {
+    // JSON malformed but we have raw text — use it
+    const trimmed = full.trim();
+    return { reply: trimmed || fallback().reply, extractions: [] };
+  }
 }
 
 // ─── Universal document classifier ───────────────────────────
@@ -304,9 +311,6 @@ export async function classifyDocument(text: string): Promise<DocumentClassifica
     }
     return { docType, docTypeLabel, main_subject: issuerMatch?.[1] ?? null, doc_date: null, expiry_date, value, summary: docTypeLabel, tags: [docType] };
   };
-
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
-  if (!apiKey) return fallback();
 
   const raw = await geminiChat([
     {
@@ -563,14 +567,14 @@ export async function aiChatAndExtract(text: string, history: ChatHistoryEntry[]
   if (!raw) return fallback();
   try {
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return fallback();
+    if (!jsonMatch) return { reply: raw.trim() || fallback().reply, extractions: [] };
     const parsed = JSON.parse(jsonMatch[0]);
     return {
       reply:       typeof parsed.reply === 'string' ? parsed.reply : 'Compreso.',
       extractions: Array.isArray(parsed.extractions) ? parsed.extractions : [],
     };
   } catch {
-    return fallback();
+    return { reply: raw.trim() || fallback().reply, extractions: [] };
   }
 }
 

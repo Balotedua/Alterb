@@ -2,13 +2,56 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import type { VaultEntry } from '../../../types';
 import { EntryRow } from './shared';
 
+const DAYS_IT = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+
 export function MoodChart({ entries, color }: { entries: VaultEntry[]; color: string }) {
+  const scores = entries.map(e => (e.data.score as number) ?? 5);
+  const avg = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : '—';
+  const best = scores.length ? Math.max(...scores) : null;
+  const worst = scores.length ? Math.min(...scores) : null;
+  const streak7 = [...entries].reverse().slice(-7).filter(e => ((e.data.score as number) ?? 0) >= 6).length;
+
+  // Top day of week
+  const dayTotals = Array(7).fill(0) as number[];
+  const dayCounts = Array(7).fill(0) as number[];
+  for (const e of entries) {
+    const d = new Date(e.created_at).getDay();
+    dayTotals[d] += (e.data.score as number) ?? 5;
+    dayCounts[d]++;
+  }
+  const dayAvgs = dayTotals.map((t, i) => dayCounts[i] ? t / dayCounts[i] : 0);
+  const bestDay = dayAvgs.indexOf(Math.max(...dayAvgs));
+
   const chartData = [...entries].reverse().slice(-14).map((e) => ({
     date: new Date(e.created_at).toLocaleDateString('it-IT', { month: '2-digit', day: '2-digit' }),
     score: (e.data.score as number) ?? 5,
   }));
+
   return (
     <div>
+      {/* KPI chips row */}
+      {scores.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          {[
+            { label: 'Media', value: `${avg}/10`, accent: color },
+            { label: 'Best', value: `${best}/10`, accent: '#3aad80' },
+            { label: 'Worst', value: `${worst}/10`, accent: '#c96f6f' },
+            { label: 'Buoni 7g', value: `${streak7}`, accent: color },
+            ...(dayCounts[bestDay] > 0 ? [{ label: 'Giorno top', value: DAYS_IT[bestDay], accent: '#b89630' }] : []),
+          ].map(k => (
+            <div key={k.label} style={{
+              flex: '1 1 60px',
+              padding: '8px 10px', borderRadius: 10,
+              background: `${k.accent}10`,
+              border: `1px solid ${k.accent}20`,
+            }}>
+              <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 4 }}>{k.label}</div>
+              <div style={{ fontSize: 15, fontWeight: 200, color: k.accent, fontFamily: "'Space Mono', monospace", letterSpacing: '-0.01em' }}>{k.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <ResponsiveContainer width="100%" height={130}>
         <BarChart data={chartData} barSize={8}>
           <XAxis dataKey="date" tick={{ fill: '#3a3f52', fontSize: 9 }} axisLine={false} tickLine={false} />

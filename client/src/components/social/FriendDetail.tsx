@@ -11,6 +11,14 @@ import { Avatar, getCatColor } from './NexusView';
 
 type Tab = 'chat' | 'sfide' | 'confronto';
 
+const QUIZ_LABELS: Record<string, string> = {
+  rt: 'Tempo di Reazione', wm: 'Working Memory', pr: 'Pattern Recognition',
+  tp: 'Time Production', dp: 'Dot-Probe', gng: 'Go/No-Go',
+  tap: 'Tapping Test', dtap: 'Psychomotor Speed', stroop: 'Test di Stroop',
+  vigilance: 'Target Finder', sternberg: 'Sternberg Search',
+  corsi: 'Corsi Block', nback: 'N-Back Spaziale', ab: 'Attentional Blink',
+};
+
 interface Props {
   friendId: string;
   friendProfile: UserProfile;
@@ -532,6 +540,14 @@ export default function FriendDetail({ friendId, friendProfile, myProfile, onBac
                 <SummaryCard rows={compRows} myName={myName} friendName={friendName} />
               </>
             )}
+
+            {/* ── Quiz comparison ─────────────────────────── */}
+            <QuizCompare
+              myStats={myStats}
+              theirStats={theirStats}
+              myName={myName}
+              friendName={friendName}
+            />
           </div>
         )}
       </div>
@@ -617,6 +633,101 @@ function SummaryCard({ rows, myName, friendName }: {
         {topMyCat && <><br />La tua punta di forza: <span style={{ color: getCatColor(topMyCat.cat) }}>{topMyCat.cat}</span> ({topMyCat.me} vs {topMyCat.them}).</>}
         {topTheirCat && <><br />Quella di {friendName}: <span style={{ color: getCatColor(topTheirCat.cat) }}>{topTheirCat.cat}</span> ({topTheirCat.them} vs {topTheirCat.me}).</>}
       </div>
+    </div>
+  );
+}
+
+function QuizCompare({ myStats, theirStats, myName, friendName }: {
+  myStats: Record<string, number>;
+  theirStats: Record<string, number>;
+  myName: string;
+  friendName: string;
+}) {
+  const allKeys = Array.from(new Set([
+    ...Object.keys(myStats).filter(k => k.startsWith('quiz_')),
+    ...Object.keys(theirStats).filter(k => k.startsWith('quiz_')),
+  ]));
+  if (allKeys.length === 0) return null;
+
+  const rows = allKeys.map(key => {
+    const testId = key.replace('quiz_', '');
+    return {
+      testId,
+      label: QUIZ_LABELS[testId] ?? testId,
+      me: myStats[key] ?? -1,
+      them: theirStats[key] ?? -1,
+    };
+  }).filter(r => r.me >= 0 || r.them >= 0)
+    .sort((a, b) => Math.max(b.me, b.them) - Math.max(a.me, a.them));
+
+  const myWins = rows.filter(r => r.me >= 0 && r.them >= 0 && r.me > r.them).length;
+  const theirWins = rows.filter(r => r.me >= 0 && r.them >= 0 && r.them > r.me).length;
+
+  return (
+    <div style={{ marginTop: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+        <span style={{ fontSize: 14 }}>🧠</span>
+        <span style={{ fontSize: 10, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.35)', fontWeight: 600 }}>
+          QUIZ COGNITIVI
+        </span>
+        {myWins + theirWins > 0 && (
+          <span style={{
+            marginLeft: 'auto', fontSize: 11,
+            color: myWins > theirWins ? 'var(--accent, #f0c040)' : myWins < theirWins ? '#60a5fa' : 'rgba(255,255,255,0.3)',
+          }}>
+            {myWins > theirWins ? `${myName.slice(0,8)} +${myWins - theirWins}` : myWins < theirWins ? `${friendName.slice(0,8)} +${theirWins - myWins}` : 'Pari'}
+          </span>
+        )}
+      </div>
+
+      {rows.map(r => {
+        const bothPlayed = r.me >= 0 && r.them >= 0;
+        const iWin = bothPlayed && r.me > r.them;
+        const theyWin = bothPlayed && r.them > r.me;
+        const maxVal = Math.max(r.me, r.them, 1);
+        return (
+          <div key={r.testId} style={{
+            marginBottom: 12,
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px solid rgba(255,255,255,0.05)',
+            borderRadius: 10, padding: '10px 12px',
+          }}>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>{r.label}</div>
+            {r.me >= 0 && (
+              <div style={{ marginBottom: r.them >= 0 ? 5 : 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                  <span style={{ fontSize: 10, color: iWin ? 'var(--accent, #f0c040)' : 'rgba(255,255,255,0.4)' }}>
+                    {myName.slice(0, 10)} {iWin ? '👑' : ''}
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: iWin ? 'var(--accent, #f0c040)' : 'rgba(255,255,255,0.55)' }}>{r.me}</span>
+                </div>
+                <div style={{ height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.06)' }}>
+                  <div style={{ height: '100%', borderRadius: 2, background: 'rgba(240,192,64,0.6)', width: `${(r.me / maxVal) * 100}%`, transition: 'width 0.6s ease' }} />
+                </div>
+              </div>
+            )}
+            {r.them >= 0 && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                  <span style={{ fontSize: 10, color: theyWin ? '#60a5fa' : 'rgba(255,255,255,0.4)' }}>
+                    {friendName.slice(0, 10)} {theyWin ? '👑' : ''}
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: theyWin ? '#60a5fa' : 'rgba(255,255,255,0.55)' }}>{r.them}</span>
+                </div>
+                <div style={{ height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.06)' }}>
+                  <div style={{ height: '100%', borderRadius: 2, background: 'rgba(96,165,250,0.5)', width: `${(r.them / maxVal) * 100}%`, transition: 'width 0.6s ease' }} />
+                </div>
+              </div>
+            )}
+            {r.me < 0 && (
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 2 }}>Tu non hai ancora fatto questo test</div>
+            )}
+            {r.them < 0 && (
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 2 }}>{friendName.slice(0,10)} non ha ancora fatto questo test</div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

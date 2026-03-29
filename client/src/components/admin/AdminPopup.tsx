@@ -34,7 +34,7 @@ interface DbStat {
 
 /* ─── Config ────────────────────────────────────────────────────────────── */
 
-const ADMIN_PASSWORD = 'provaqwerty';
+const ADMIN_PASSWORD = 'qwertyas';
 
 type BugStatus    = 'pending_review' | 'open' | 'in_progress' | 'resolved' | 'wont_fix';
 type BugPriority  = 'high' | 'medium' | 'low';

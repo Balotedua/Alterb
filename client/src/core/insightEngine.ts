@@ -1,5 +1,20 @@
 import { getRecentAll } from '../vault/vaultService';
 import type { Star } from '../types';
+import { supabase } from '../config/supabase';
+
+const PROXY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gemini-proxy`;
+
+async function getFreshToken(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return null;
+  const expiresAt = session.expires_at ?? 0;
+  if (expiresAt - Math.floor(Date.now() / 1000) < 60) {
+    const { data: { session: fresh }, error } = await supabase.auth.refreshSession();
+    if (error || !fresh) return null;
+    return fresh.access_token;
+  }
+  return session.access_token;
+}
 
 // ── Daily greeting (spontaneous reflection) ──────────────────
 const GREETING_KEY = 'alter_last_greeting';
@@ -9,8 +24,8 @@ export async function generateDailyGreeting(userId: string): Promise<string | nu
   const last = localStorage.getItem(GREETING_KEY);
   if (last && Date.now() - parseInt(last, 10) < GREETING_COOLDOWN) return null;
 
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
-  if (!apiKey) return null;
+  const token = await getFreshToken();
+  if (!token) return null;
 
   const entries = (await getRecentAll(userId, 30)).filter(
     e => e.category !== 'insight' && e.category !== 'chat'
@@ -30,17 +45,14 @@ export async function generateDailyGreeting(userId: string): Promise<string | nu
 - Offre un piccolo insight o una domanda curiosa basata su pattern nei dati
 - È caldo e autentico, non generico né da bot
 Rispondi SOLO con il testo del messaggio, senza formattazioni.`;
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nDati recenti:\n${context}` }] }],
-          generationConfig: { maxOutputTokens: 120, temperature: 0.72 },
-        }),
-      }
-    );
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nDati recenti:\n${context}` }] }],
+        generationConfig: { maxOutputTokens: 120, temperature: 0.72 },
+      }),
+    });
     if (!res.ok) return null;
     const json = await res.json();
     const text = json.candidates?.[0]?.content?.parts?.[0]?.text as string | undefined;
@@ -71,8 +83,8 @@ export interface CoherenceReport {
 }
 
 export async function generateCoherenceAudit(userId: string): Promise<CoherenceReport | null> {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
-  if (!apiKey) return null;
+  const token = await getFreshToken();
+  if (!token) return null;
 
   const entries = (await getRecentAll(userId, 90)).filter(
     e => e.category !== 'chat' && e.category !== 'insight'
@@ -117,17 +129,14 @@ Rispondi SOLO con JSON valido (nessun markdown, nessuna spiegazione), con questo
 Se non ci sono contraddizioni significative, score sarà alto (>75) e findings avrà 1-2 osservazioni positive. Massimo 4 findings.`;
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nDati vault degli ultimi 90 giorni:\n\n${context}` }] }],
-          generationConfig: { maxOutputTokens: 900, temperature: 0.6 },
-        }),
-      }
-    );
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nDati vault degli ultimi 90 giorni:\n\n${context}` }] }],
+        generationConfig: { maxOutputTokens: 900, temperature: 0.6 },
+      }),
+    });
 
     if (!res.ok) return null;
     const json = await res.json();

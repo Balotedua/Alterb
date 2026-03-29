@@ -38,7 +38,7 @@ export default function ChatHistorySidebar() {
   } = useAlterStore();
 
   const [sessions,    setSessions]   = useState<VaultEntry[]>([]);
-  const [loading,     setLoading]    = useState(false);
+  const [loading,     setLoading]    = useState(true);
   const [deletingId,  setDeletingId] = useState<string | null>(null);
   const [menuOpenId,  setMenuOpenId] = useState<string | null>(null);
   const [renamingId,  setRenamingId] = useState<string | null>(null);
@@ -129,10 +129,11 @@ export default function ChatHistorySidebar() {
             initial={{ x: '-100%' }}
             animate={{ x: 0 }}
             exit={{ x: '-100%' }}
-            transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+            transition={{ type: 'tween', duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
             style={{
               position: 'fixed', left: 0, top: 0, bottom: 0,
               width: 272, zIndex: 511,
+              willChange: 'transform',
               background: 'rgba(6,6,14,0.98)',
               backdropFilter: 'blur(24px)',
               WebkitBackdropFilter: 'blur(24px)',

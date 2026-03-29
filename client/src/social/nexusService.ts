@@ -212,3 +212,21 @@ export async function completeChallenge(challengeId: string): Promise<boolean> {
     .eq('id', challengeId);
   return !error;
 }
+
+// ─── Quiz scores (public) ─────────────────────────────────────
+// Stores best score per test in public_stats as quiz_{testId}: score
+export async function mergeQuizScores(userId: string, testId: string, score: number): Promise<void> {
+  const { data } = await supabase
+    .from('user_profiles')
+    .select('public_stats')
+    .eq('user_id', userId)
+    .single();
+  const current = (data?.public_stats ?? {}) as Record<string, number>;
+  const key = `quiz_${testId}`;
+  if (!current[key] || score > (current[key] as number)) {
+    await supabase
+      .from('user_profiles')
+      .update({ public_stats: { ...current, [key]: score } })
+      .eq('user_id', userId);
+  }
+}

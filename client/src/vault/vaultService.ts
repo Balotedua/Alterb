@@ -20,6 +20,29 @@ export async function saveEntry(
   return row as VaultEntry;
 }
 
+// ─── Read: finance entries ordered by actual transaction date ─
+// Uses data->>'date' (the real transaction date), NOT created_at (import time)
+export async function getFinanceByTransactionDate(
+  userId: string,
+  from?: Date,
+  to?: Date,
+  limit = 200
+): Promise<VaultEntry[]> {
+  let q = supabase
+    .from('vault')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('category', 'finance')
+    .is('deleted_at', null)
+    .order('data->>date', { ascending: false })
+    .limit(limit);
+  if (from) q = q.gte('data->>date', from.toISOString());
+  if (to)   q = q.lte('data->>date', to.toISOString());
+  const { data, error } = await q;
+  if (error) { console.error('[vault getFinanceByTransactionDate]', error); return []; }
+  return (data ?? []) as VaultEntry[];
+}
+
 // ─── Read: all entries for a category ────────────────────────
 export async function getByCategory(
   userId: string,
@@ -35,6 +58,28 @@ export async function getByCategory(
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) { console.error('[vault getByCategory]', error); return []; }
+  return (data ?? []) as VaultEntry[];
+}
+
+// ─── Read: entries for a category within a date range ────────
+export async function getByDateRange(
+  userId: string,
+  category: string,
+  from: Date,
+  to: Date,
+  limit = 60
+): Promise<VaultEntry[]> {
+  const { data, error } = await supabase
+    .from('vault')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('category', category)
+    .is('deleted_at', null)
+    .gte('created_at', from.toISOString())
+    .lte('created_at', to.toISOString())
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) { console.error('[vault getByDateRange]', error); return []; }
   return (data ?? []) as VaultEntry[];
 }
 
@@ -408,7 +453,7 @@ export async function getCalibration(userId: string): Promise<UserCalibration | 
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
   if (error || !data) return null;
   const d = data.data as Record<string, unknown>;
   return {

@@ -6,6 +6,7 @@ import { supabase } from './config/supabase';
 import { getCategorySummaries, getUpcomingEvents, purgeExpiredDeleted, getCalibration, getCorrections } from './vault/vaultService';
 import { buildStar, getCategoryMeta, starPosition } from './components/starfield/StarfieldView';
 import { generateDailyGreeting } from './core/insightEngine';
+import { computeProactiveInsights } from './core/correlationEngine';
 import { handleGoogleFitCallback, syncGoogleFit } from './core/wearableSync';
 import { useAlterStore } from './store/alterStore';
 import LoginScreen from './components/auth/LoginScreen';
@@ -32,12 +33,18 @@ export default function App() {
   });
   const [authError, setAuthError] = useState<string | null>(null);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
-  const { setUser, setStars, upsertStar, removeStar, addKnownCategory, setAlertEvent, alertEvent, activeWidget, viewMode, theme, activeDataCategory, setShowBugReport, setShowChatSidebar, setPendingGreeting, setCalibration, addCorrectionRule } = useAlterStore();
+  const { setUser, setStars, upsertStar, removeStar, addKnownCategory, setAlertEvent, alertEvent, activeWidget, viewMode, theme, activeDataCategory, setShowBugReport, setShowChatSidebar, setPendingGreeting, setCalibration, addCorrectionRule, setProactiveInsights, glitchActive } = useAlterStore();
 
   // Apply theme to document root
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
+
+  // Apply glitch class on body when triggered
+  useEffect(() => {
+    if (glitchActive) document.body.classList.add('alter-glitch');
+    else document.body.classList.remove('alter-glitch');
+  }, [glitchActive]);
 
   // ── Google Fit OAuth callback ─────────────────────────────
   useEffect(() => {
@@ -120,6 +127,24 @@ export default function App() {
       // Daily greeting — held silently, prepended to first nebula reply
       generateDailyGreeting(authUser.id).then((greeting) => {
         if (greeting) setPendingGreeting(greeting);
+      });
+
+      // Proactive correlation insights — scanned once every 6h, zero AI tokens
+      computeProactiveInsights(authUser.id).then((insights) => {
+        if (insights.length === 0) return;
+        setProactiveInsights(insights);
+        // Surface top insight as nebula message + beam after 3s
+        const top = insights[0];
+        setTimeout(() => {
+          const store = useAlterStore.getState();
+          store.addMessage('nebula', `✦ ${top.text}`);
+          if (top.type === 'correlation' && top.catB && top.r != null && Math.abs(top.r) >= 0.45) {
+            const metaA = getCategoryMeta(top.catA);
+            const metaB = getCategoryMeta(top.catB);
+            store.setNexusBeam({ catA: top.catA, catB: top.catB, colorA: metaA.color, colorB: metaB.color, correlation: top.r });
+            setTimeout(() => store.setNexusBeam(null), 9000);
+          }
+        }, 3000);
       });
 
       // Google Fit sync — merged into pending greeting, not a separate message

@@ -14,6 +14,9 @@ import DocumentRenderer, { DocDownloadList, GenericList } from './renderers/DocR
 import CodexRenderer from './renderers/CodexRenderer';
 import CoherenceRenderer from './renderers/CoherenceRenderer';
 import VoidRenderer from './renderers/VoidRenderer';
+import PredictiveRenderer from './renderers/PredictiveRenderer';
+import CognitiveRenderer from './renderers/CognitiveRenderer';
+import PrivacyRenderer from './renderers/PrivacyRenderer';
 
 // ─── Render type inference ────────────────────────────────────
 export function inferRenderType(entries: VaultEntry[], category?: string): RenderType {
@@ -21,6 +24,7 @@ export function inferRenderType(entries: VaultEntry[], category?: string): Rende
   if (category === 'documents') return 'doc_download';
   if (category === 'chronicle') return 'codex';
   if (category === 'notes') return 'void';
+  if (category === 'privacy') return 'privacy';
   if (!entries.length) {
     if (category === 'finance') return 'finance';
     if (category === 'health') return 'chart';
@@ -135,8 +139,11 @@ export default function PolymorphicWidget() {
             {activeWidget.renderType === 'doc_download'
             ? <DocumentRenderer  entries={activeWidget.entries} color={activeWidget.color} />
             : activeWidget.renderType === 'codex'        ? <CodexRenderer     entries={activeWidget.entries} color={activeWidget.color} />
-            : activeWidget.renderType === 'coherence'    ? <CoherenceRenderer entries={activeWidget.entries} color={activeWidget.color} />
-            : activeWidget.renderType === 'void'         ? <VoidRenderer      entries={activeWidget.entries} color={activeWidget.color} />
+            : activeWidget.renderType === 'coherence'    ? <CoherenceRenderer  entries={activeWidget.entries} color={activeWidget.color} />
+            : activeWidget.renderType === 'predictive'   ? <PredictiveRenderer entries={activeWidget.entries} color={activeWidget.color} />
+            : activeWidget.renderType === 'quiz'          ? <CognitiveRenderer  entries={activeWidget.entries} color={activeWidget.color} />
+            : activeWidget.renderType === 'void'         ? <VoidRenderer       entries={activeWidget.entries} color={activeWidget.color} />
+            : activeWidget.renderType === 'privacy'      ? <PrivacyRenderer    entries={activeWidget.entries} color={activeWidget.color} />
             : activeWidget.entries.length === 0 ? (
               <p style={{ color: 'rgba(255,255,255,0.22)', fontSize: 12, textAlign: 'center', padding: '24px 0', letterSpacing: '0.05em' }}>
                 Nessun dato ancora.

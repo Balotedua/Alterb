@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Star, WidgetData, ChatMessage, AlterUser, NexusBeam, SemanticLink, Theme, UserCalibration, CorrectionRule } from '../types';
+import type { Star, WidgetData, ChatMessage, AlterUser, NexusBeam, SemanticLink, Theme, UserCalibration, CorrectionRule, ProactiveInsight } from '../types';
 
 interface AlterStore {
   // ── Auth ────────────────────────────────────────────────
@@ -97,6 +97,24 @@ interface AlterStore {
   addCorrectionRule: (r: CorrectionRule) => void;
   showCalibration: boolean;
   setShowCalibration: (v: boolean) => void;
+
+  // ── Proactive insights ────────────────────────────────────────
+  proactiveInsights: ProactiveInsight[];
+  setProactiveInsights: (i: ProactiveInsight[]) => void;
+
+  // ── Particle burst (canvas pop on data save) ──────────────────
+  particleBurst: { x: number; y: number; color: string } | null;
+  setParticleBurst: (b: { x: number; y: number; color: string } | null) => void;
+
+  // ── Time travel ───────────────────────────────────────────────
+  timelineDate: Date | null;
+  isTimelineMode: boolean;
+  setTimelineDate: (d: Date | null) => void;
+  setTimelineMode: (v: boolean) => void;
+
+  // ── Quiz glitch (triggered on low score) ──────────────────────
+  glitchActive: boolean;
+  triggerGlitch: () => void;
 }
 
 export const useAlterStore = create<AlterStore>((set) => ({
@@ -194,4 +212,21 @@ export const useAlterStore = create<AlterStore>((set) => ({
   addCorrectionRule: (r) => set((s) => ({ correctionRules: [...s.correctionRules, r] })),
   showCalibration: false,
   setShowCalibration: (showCalibration) => set({ showCalibration }),
+
+  proactiveInsights: [],
+  setProactiveInsights: (proactiveInsights) => set({ proactiveInsights }),
+
+  particleBurst: null,
+  setParticleBurst: (particleBurst) => set({ particleBurst }),
+
+  timelineDate: null,
+  isTimelineMode: false,
+  setTimelineDate: (timelineDate) => set({ timelineDate }),
+  setTimelineMode: (isTimelineMode) => set({ isTimelineMode }),
+
+  glitchActive: false,
+  triggerGlitch: () => {
+    set({ glitchActive: true });
+    setTimeout(() => set({ glitchActive: false }), 950);
+  },
 }));

@@ -2,12 +2,12 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { nebulaCameraRef } from './nebulaCamera';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, ArrowUp, Menu, Paperclip } from 'lucide-react';
-import { orchestrate } from '../../core/orchestrator';
+import { orchestrate, inferQueryCategory, inferQueryDateRange } from '../../core/orchestrator';
 import { parseBankCsv, importBankCsv, importBankXlsx } from '../../import/bankCsvImport';
 import type { BankTransaction } from '../../import/bankCsvImport';
 import { extractDocument, isDocumentFile } from '../../import/documentOcr';
 import { quickConnect } from '../../core/insightEngine';
-import { saveEntry, getByCategory, queryCalendarByDate, getRecentAll, deleteCategory, deleteByCategoryAndDateRange, deleteAllUserData, saveChatSession, updateChatSession, saveCorrection } from '../../vault/vaultService';
+import { saveEntry, getByCategory, queryCalendarByDate, getRecentAll, getFinanceByTransactionDate, deleteCategory, deleteByCategoryAndDateRange, deleteAllUserData, saveChatSession, updateChatSession, saveCorrection } from '../../vault/vaultService';
 import { aiQuery, aiChat, aiChatAndExtract, aiNexusNarrative, aiCapability, aiChatStream, aiChatAndExtractStream, aiCorrection, aiExtractCorrectionRule } from '../../core/aiParser';
 import { validateEntry } from '../../core/l3Validator';
 import { buildStar, getCategoryMeta, starPosition } from '../starfield/StarfieldView';
@@ -28,7 +28,10 @@ const HINTS = [
   'Ricordami tra 10 minuti di chiamare Marco...',
   'Perché sono sempre stanco?',
   'Audit di coerenza...',
+  'Quiz cognitivo...',
   'Ricordami tra 1 ora di prendere le medicine...',
+  'Ghost protocol...',
+  'Ho un account su Instagram con email@mail.com...',
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -47,6 +50,7 @@ export default function NebulaCore() {
   const [pendingCsv,       setPendingCsv]       = useState<{ transactions: BankTransaction[]; text: string } | null>(null);
   const [csvImporting,     setCsvImporting]     = useState(false);
   const [csvElapsed,       setCsvElapsed]       = useState(0);
+  const [csvProgress,      setCsvProgress]      = useState<{ done: number; total: number } | null>(null);
   const [pendingOcr,       setPendingOcr]       = useState<{ file: File; text: string; filename: string; pageCount?: number; confidence?: number } | null>(null);
   const [ocrLoading,       setOcrLoading]       = useState(false);
   const [ocrElapsed,       setOcrElapsed]       = useState(0);
@@ -197,16 +201,14 @@ export default function NebulaCore() {
     const { text, transactions } = pendingCsv;
     setPendingCsv(null);
     setCsvImporting(true);
+    setCsvProgress({ done: 0, total: transactions.length });
     addMessage('user', `Importa CSV · ${transactions.length} transazioni`);
-    setLastReply('Categorizzazione AI...');
+    setLastReply('Categorizzazione in corso…');
     setProcessing(true);
     try {
-      let lastDone = 0;
       const result = await importBankCsv(text, user.id, (done, total) => {
-        if (done - lastDone >= 5 || done === total) {
-          lastDone = done;
-          setLastReply(`Importazione ${done}/${total}...`);
-        }
+        setCsvProgress({ done, total });
+        setLastReply(`${done}/${total} transazioni…`);
       });
       const dupNote = result.duplicates.length > 0 ? ` · ⚠ ${result.duplicates.length} doppioni saltati` : '';
       const reply = `🏦 ${result.imported} transazioni importate nel vault${dupNote}`;
@@ -223,6 +225,7 @@ export default function NebulaCore() {
       setLastReply(msg); addMessage('nebula', msg);
     } finally {
       setCsvImporting(false);
+      setCsvProgress(null);
       setProcessing(false);
     }
   }, [pendingCsv, user, csvImporting, addMessage, setProcessing, upsertStar, addKnownCategory]);
@@ -296,6 +299,7 @@ export default function NebulaCore() {
   const handleSubmit = useCallback(async (overrideText?: string) => {
     const text = (overrideText !== undefined ? overrideText : input).trim();
     if (!text || isProcessing || !user) return;
+    if (navigator.vibrate) navigator.vibrate([8, 4, 12]);
 
     setInput('');
     setIsActive(false);
@@ -362,6 +366,8 @@ export default function NebulaCore() {
           const meta = getCategoryMeta(intent.category);
           setRay({ angle: Math.atan2(dy, dx) * 180 / Math.PI, length: Math.sqrt(dx*dx+dy*dy), color: meta.color });
           setTimeout(() => setRay(null), 900);
+          // ASMR particle burst at the star position
+          useAlterStore.getState().setParticleBurst({ x: pos.x * window.innerWidth, y: pos.y * window.innerHeight, color: meta.color });
           const confirmTag = `${meta.icon} ${meta.label}`;
 
           // ── Dynamic Island timer: near-future calendar reminders ──
@@ -448,10 +454,24 @@ export default function NebulaCore() {
         // Build a compact vault snapshot from current stars so Alter can connect the dots
         const starsSnapshot = useAlterStore.getState().stars;
         const hasData = starsSnapshot.length > 0 || knownCategories.filter(c => !['finance','health','psychology','calendar'].includes(c)).length > 0;
-        const vaultContext = starsSnapshot.length > 0
+        let vaultContext: string | undefined = starsSnapshot.length > 0
           ? starsSnapshot.map(s => `${s.icon} ${s.label}: ${s.entryCount} voci, ultima: ${s.lastEntry ? new Date(s.lastEntry).toLocaleDateString('it-IT') : 'n/d'}`).join('\n')
           : hasData ? '(dati presenti nel vault, stelle ancora in caricamento)' : undefined;
-        const reply = await aiChatStream(text, (chunk) => setStreamingMessage(chunk), messages, vaultContext, undefined, calibration, correctionRules);
+        // If the chat message hints at finances, inject real transaction data
+        let chatHasDetailedData = false;
+        if (user && inferQueryCategory(text) === 'finance') {
+          const detectedRange = inferQueryDateRange(text);
+          const finEntries = await getFinanceByTransactionDate(user.id, detectedRange?.[0], detectedRange?.[1], 100);
+          if (finEntries.length > 0) {
+            const txLines = finEntries.slice(0, 60).map(e => {
+              const d = e.data as Record<string, unknown>;
+              return `[${String(d.date ?? e.created_at).slice(0, 10)}] ${d.type === 'income' ? '+' : '-'}${Math.abs(Number(d.amount ?? 0)).toFixed(2)}€ ${String(d.description ?? '')}`;
+            }).join('\n');
+            vaultContext = (vaultContext ? vaultContext + '\n\n' : '') + `Transazioni finance:\n${txLines}`;
+            chatHasDetailedData = true;
+          }
+        }
+        const reply = await aiChatStream(text, (chunk) => setStreamingMessage(chunk), messages, vaultContext, undefined, calibration, correctionRules, chatHasDetailedData);
         setStreamingMessage(null);
         setLastReply(reply.length > 120 ? reply.slice(0, 117) + '…' : reply);
         addMessage('nebula', reply);
@@ -511,8 +531,16 @@ export default function NebulaCore() {
         let entries = [];
         if (category === 'calendar' && dateRange) {
           entries = await queryCalendarByDate(user.id, dateRange[0], dateRange[1]);
+        } else if (category === 'finance') {
+          // Use actual transaction date (data->>'date'), not import time (created_at)
+          entries = await getFinanceByTransactionDate(
+            user.id,
+            dateRange ? dateRange[0] : undefined,
+            dateRange ? dateRange[1] : undefined,
+            200
+          );
         } else if (category) {
-          entries = await getByCategory(user.id, category, 20);
+          entries = await getByCategory(user.id, category, 50);
         } else {
           entries = await getRecentAll(user.id, 20);
         }
@@ -732,6 +760,23 @@ export default function NebulaCore() {
           setLastReply(intro); addMessage('nebula', intro);
         }
 
+      } else if (action.type === 'quiz') {
+        const quizEntries = await getByCategory(user.id, 'quiz', 50);
+        const quizMeta = getCategoryMeta('quiz');
+        setActiveWidget({ category: 'quiz', label: 'Quiz Cognitivi', color: quizMeta.color, entries: quizEntries, renderType: 'quiz' });
+        const reply = quizEntries.length === 0
+          ? '🧩 Cognitive Battery pronta — testa reazione, memoria di lavoro e riconoscimento dei pattern!'
+          : `🧩 ${quizEntries.length} session${quizEntries.length === 1 ? 'e' : 'i'} completata${quizEntries.length === 1 ? '' : 'e'}. Pronto per una nuova sfida?`;
+        setLastReply(reply); addMessage('nebula', reply);
+
+      } else if (action.type === 'privacy') {
+        const privacyEntries = await getByCategory(user.id, 'privacy', 200);
+        setActiveWidget({ category: 'privacy', label: 'Ghost Protocol', color: '#7c3aed', entries: privacyEntries, renderType: 'privacy' });
+        const reply = privacyEntries.length > 0
+          ? `👁 Ombra digitale attivata. ${privacyEntries.length} account tracciato${privacyEntries.length > 1 ? 'i' : ''}.`
+          : '👁 Ghost Protocol attivo. Dimmi "ho un account su Facebook con email@mail.com" per iniziare a tracciare la tua impronta digitale.';
+        setLastReply(reply); addMessage('nebula', reply);
+
       } else if (action.type === 'codex') {
         const { getChronicles } = await import('../../vault/vaultService');
         const chronicles = await getChronicles(user.id);
@@ -784,10 +829,31 @@ export default function NebulaCore() {
 
         // Chatbot-first: AI replies and optionally extracts data in one call (streaming)
         const starsForFallback = useAlterStore.getState().stars;
-        const fallbackVaultContext = starsForFallback.length > 0
+        let fallbackVaultContext: string | undefined = starsForFallback.length > 0
           ? starsForFallback.map(s => `${s.icon} ${s.label}: ${s.entryCount} voci, ultima: ${s.lastEntry ? new Date(s.lastEntry).toLocaleDateString('it-IT') : 'n/d'}`).join('\n')
           : undefined;
-        const result = await aiChatAndExtractStream(text, (chunk) => setStreamingMessage(chunk), messages, fallbackVaultContext, calibration, correctionRules);
+
+        // If the query is finance-related, inject real transaction data so the AI can actually answer
+        let fallbackHasDetailedData = false;
+        if (user && inferQueryCategory(text) === 'finance') {
+          const detectedRange = inferQueryDateRange(text);
+          const finEntries = await getFinanceByTransactionDate(
+            user.id,
+            detectedRange?.[0],
+            detectedRange?.[1],
+            100
+          );
+          if (finEntries.length > 0) {
+            const txLines = finEntries.slice(0, 60).map(e => {
+              const d = e.data as Record<string, unknown>;
+              return `[${String(d.date ?? e.created_at).slice(0, 10)}] ${d.type === 'income' ? '+' : '-'}${Math.abs(Number(d.amount ?? 0)).toFixed(2)}€ ${String(d.description ?? '')}`;
+            }).join('\n');
+            fallbackVaultContext = (fallbackVaultContext ? fallbackVaultContext + '\n\n' : '') + `Transazioni finance:\n${txLines}`;
+            fallbackHasDetailedData = true;
+          }
+        }
+
+        const result = await aiChatAndExtractStream(text, (chunk) => setStreamingMessage(chunk), messages, fallbackVaultContext, calibration, correctionRules, fallbackHasDetailedData);
         setStreamingMessage(null);
         const display = result.reply.length > 80 ? result.reply.slice(0, 77) + '…' : result.reply;
         setLastReply(display);
@@ -1178,27 +1244,44 @@ export default function NebulaCore() {
               exit={{ opacity: 0 }}
               style={{
                 padding: '12px 14px',
-                background: 'rgba(240,192,64,0.05)',
-                border: '1px solid rgba(240,192,64,0.18)',
+                background: 'rgba(240,192,64,0.07)',
+                border: '1px solid rgba(240,192,64,0.25)',
                 borderRadius: 14,
                 width: '100%',
                 boxSizing: 'border-box',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 }}>
-                <div style={{ fontSize: 10, color: 'rgba(240,192,64,0.75)', letterSpacing: '0.08em' }}>
-                  {lastReply || 'Importazione in corso…'}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ fontSize: 11, color: 'rgba(240,192,64,0.9)', letterSpacing: '0.06em', fontWeight: 500 }}>
+                  {csvProgress
+                    ? `${csvProgress.done} / ${csvProgress.total} transazioni`
+                    : 'Importazione in corso…'}
                 </div>
-                <div style={{ fontSize: 9, color: 'rgba(240,192,64,0.4)', letterSpacing: '0.04em' }}>
-                  {csvElapsed}s
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {csvProgress && csvProgress.total > 0 && (
+                    <div style={{ fontSize: 11, color: 'rgba(240,192,64,0.7)', fontWeight: 600 }}>
+                      {Math.round((csvProgress.done / csvProgress.total) * 100)}%
+                    </div>
+                  )}
+                  <div style={{ fontSize: 9, color: 'rgba(240,192,64,0.4)', letterSpacing: '0.04em' }}>
+                    {csvElapsed}s
+                  </div>
                 </div>
               </div>
-              <div style={{ height: 3, borderRadius: 3, background: 'rgba(240,192,64,0.10)', overflow: 'hidden', position: 'relative' }}>
-                <motion.div
-                  animate={{ x: ['-80%', '180%'] }}
-                  transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-                  style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '55%', borderRadius: 3, background: 'linear-gradient(90deg, transparent, rgba(240,192,64,0.7), transparent)' }}
-                />
+              <div style={{ height: 4, borderRadius: 4, background: 'rgba(240,192,64,0.12)', overflow: 'hidden', position: 'relative' }}>
+                {csvProgress && csvProgress.total > 0 ? (
+                  <motion.div
+                    animate={{ width: `${Math.round((csvProgress.done / csvProgress.total) * 100)}%` }}
+                    transition={{ duration: 0.3, ease: 'easeOut' }}
+                    style={{ position: 'absolute', top: 0, left: 0, height: '100%', borderRadius: 4, background: 'linear-gradient(90deg, rgba(240,192,64,0.5), rgba(240,192,64,0.9))' }}
+                  />
+                ) : (
+                  <motion.div
+                    animate={{ x: ['-80%', '180%'] }}
+                    transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                    style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '55%', borderRadius: 4, background: 'linear-gradient(90deg, transparent, rgba(240,192,64,0.7), transparent)' }}
+                  />
+                )}
               </div>
             </motion.div>
           )}
@@ -1375,9 +1458,11 @@ export default function NebulaCore() {
 
           {/* Send / Mic + Attach */}
           {input.length > 0 ? (
-            <button
+            <motion.button
               onMouseDown={e => { e.preventDefault(); handleSubmit(); }}
               onTouchStart={e => { e.preventDefault(); handleSubmit(); }}
+              whileTap={{ scale: 0.72 }}
+              transition={{ type: 'spring', stiffness: 700, damping: 15, mass: 0.8 }}
               style={{
                 background: 'rgba(240,192,64,0.1)',
                 border: '1px solid rgba(240,192,64,0.22)',
@@ -1391,7 +1476,7 @@ export default function NebulaCore() {
               }}
             >
               <ArrowUp size={14} />
-            </button>
+            </motion.button>
           ) : (
             <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
               <button

@@ -1,4 +1,19 @@
 import type { VaultEntry } from '../types';
+import { supabase } from '../config/supabase';
+
+const PROXY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gemini-proxy`;
+
+async function getFreshToken(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return null;
+  const expiresAt = session.expires_at ?? 0;
+  if (expiresAt - Math.floor(Date.now() / 1000) < 60) {
+    const { data: { session: fresh }, error } = await supabase.auth.refreshSession();
+    if (error || !fresh) return null;
+    return fresh.access_token;
+  }
+  return session.access_token;
+}
 
 // ─── Chart spec returned by the AI ───────────────────────────
 export interface ChartSpec {
@@ -67,8 +82,8 @@ Analisi per categoria:
 Genera max 3 grafici per query standard, 1-2 per query specifiche.`;
 
 async function geminiChat(messages: { role: string; content: string }[], maxTokens = 1500): Promise<string | null> {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
-  if (!apiKey) return null;
+  const token = await getFreshToken();
+  if (!token) return null;
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12000);
@@ -81,15 +96,12 @@ async function geminiChat(messages: { role: string; content: string }[], maxToke
     if (system && contents.length > 0) {
       contents[0].parts[0].text = `${system}\n\n${contents[0].parts[0].text}`;
     }
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: maxTokens, temperature: 0.3 } }),
-        signal: controller.signal,
-      }
-    );
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: maxTokens, temperature: 0.3 } }),
+      signal: controller.signal,
+    });
     clearTimeout(timeout);
     if (!res.ok) throw new Error(`Gemini ${res.status}`);
     const json = await res.json();

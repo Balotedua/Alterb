@@ -241,15 +241,12 @@ export default function DataAnalyticsView() {
 
       setResult(localAnalyse(data, category));
 
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
-      if (apiKey) {
-        setLoading(true);
-        try {
-          const aiResult = await analyseData(data);
-          if (aiResult) setResult(aiResult);
-        } finally {
-          setLoading(false);
-        }
+      setLoading(true);
+      try {
+        const aiResult = await analyseData(data);
+        if (aiResult) setResult(aiResult);
+      } finally {
+        setLoading(false);
       }
     }).catch(() => setLoading(false));
   }, [user, category]);

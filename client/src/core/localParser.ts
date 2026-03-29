@@ -12,6 +12,8 @@ const CALENDAR_KW  = ['appuntamento','riunione','meeting','promemoria','ricordam
 const RECURRING_KW    = ['ogni giorno','tutti i giorni','tutte le mattine','tutte le sere','ogni mattina','ogni sera','ogni settimana','ricordami ogni'];
 const ROUTINE_KW      = ['routine','imposta routine','orario giornaliero'];
 const CONSCIOUSNESS_KW = ['penso che','mi sono detto','oggi ho capito','riflessione','rifletto','ho realizzato','voglio ricordare','nota a me stesso','nota mentale','mi sono accorto','sto pensando','pensiero','nota: ','appunto: '];
+const PRIVACY_ACCOUNT_RE = /\b(?:ho\s+(?:un\s+)?account|sono\s+iscritto?|ho\s+(?:un\s+)?profilo|mi\s+sono\s+registrato?|registrato?|ho\s+dati)\s+(?:su|a|in)\s+([A-Za-z0-9_.\-]+)/i;
+const PRIVACY_EMAIL_RE   = /([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/;
 
 function extractNumber(text: string): number | null {
   const m = text.match(/(\d+([.,]\d+)?)/);
@@ -184,7 +186,18 @@ export function localParse(
     };
   }
 
-  // ── 10. Calendar event ─────────────────────────────────────
+  // ── 10. Privacy: account tracking ────────────────────────
+  const privacyMatch = PRIVACY_ACCOUNT_RE.exec(text);
+  if (privacyMatch) {
+    const site  = privacyMatch[1];
+    const emailM = PRIVACY_EMAIL_RE.exec(text);
+    return {
+      category: 'privacy',
+      data: { site, email: emailM ? emailM[1] : null, raw: text, renderType: 'privacy' },
+    };
+  }
+
+  // ── 11. Calendar event ─────────────────────────────────────
   if (CALENDAR_KW.some(k => lower.includes(k))) {
     const scheduledAt = extractScheduledDate(lower);
     const title = text.replace(/^(appuntamento|riunione|meeting|promemoria|ricordami|evento|visita|colloquio|call|conferenza|scadenza)\s*/i, '').trim() || text;

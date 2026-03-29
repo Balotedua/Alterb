@@ -150,3 +150,41 @@ input, button, textarea {
   98% { opacity: 0.4; }
   99% { opacity: 1; }
 }
+
+/* ── Quiz failure glitch ──────────────────────────────────── */
+@keyframes alter-glitch-root {
+  0%   { filter: none;                                          transform: none; }
+  5%   { filter: invert(1);                                     transform: translateX(-5px) skewX(-2deg); }
+  6%   { filter: none;                                          transform: none; }
+  13%  { filter: hue-rotate(180deg) saturate(4) brightness(1.6); transform: translateX(4px); }
+  14%  { filter: none;                                          transform: none; }
+  21%  { filter: invert(0.9) hue-rotate(270deg);               transform: translateX(-3px) skewX(1.5deg); }
+  22%  { filter: none;                                          transform: none; }
+  28%  { filter: none;                                          transform: translateX(3px); }
+  29%  { filter: none;                                          transform: none; }
+  100% { filter: none;                                          transform: none; }
+}
+
+@keyframes alter-glitch-overlay {
+  0%   { opacity: 0; background: transparent; }
+  5%   { opacity: 1; background: rgba(255, 0, 80, 0.14); }
+  6%   { opacity: 0; }
+  13%  { opacity: 1; background: rgba(0, 200, 255, 0.11); }
+  14%  { opacity: 0; }
+  21%  { opacity: 1; background: rgba(255, 230, 0, 0.09); }
+  22%  { opacity: 0; }
+  100% { opacity: 0; }
+}
+
+body.alter-glitch #root {
+  animation: alter-glitch-root 0.9s steps(1, end) forwards;
+}
+
+body.alter-glitch::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 99999;
+  animation: alter-glitch-overlay 0.9s steps(1, end) forwards;
+}
